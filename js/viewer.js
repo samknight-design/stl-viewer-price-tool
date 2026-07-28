@@ -201,8 +201,13 @@ export function generateThumbnail(triangles, size = 380) {
     const scene  = buildScene(theme);
     const camera = new THREE.PerspectiveCamera(36, 1, 0.001, 1e8);
 
-    // Decimate for thumbnail speed, but keep enough detail for a clear image
-    const positions = trianglesToPositions(triangles, 100_000);
+    // Match the interactive viewer's cap (400_000) — this is a single
+    // offscreen render, not a continuously-rendered scene, so it doesn't
+    // need a lower ceiling. A lower cap here previously caused visible
+    // holes on dense/supported models: STL facets aren't spatially
+    // ordered, so naive "keep every Nth triangle" decimation scatters
+    // gaps across the whole surface once the cap is exceeded.
+    const positions = trianglesToPositions(triangles, 400_000);
     const mesh      = buildMesh(positions, theme);
     scene.add(mesh);
     addGrid(scene, mesh, theme);
