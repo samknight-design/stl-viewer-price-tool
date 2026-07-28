@@ -352,20 +352,28 @@ function buildItemHTML(item, group) {
 
   if (item.status === 'loading') return `
     <div class="file-card" data-id="${item.id}">
-      <div class="card-thumb loading-thumb"><div class="spinner"></div><span>Analysing…</span></div>
+      <div class="card-header">
+        <div class="card-thumb loading-thumb"><div class="spinner"></div><span>Analysing…</span></div>
+        <div class="card-header-text">
+          <div class="card-filename">${esc(item.name)}</div>
+          <div class="card-meta">${formatBytes(item.size)}</div>
+        </div>
+      </div>
       <div class="card-body">
-        <div class="card-filename">${esc(item.name)}</div>
-        <div class="card-meta">${formatBytes(item.size)}</div>
         <div class="progress-bar"><div class="progress-fill animate"></div></div>
       </div>
     </div>`;
 
   if (item.status === 'error') return `
     <div class="file-card" data-id="${item.id}">
-      <div class="card-thumb error-thumb">⚠</div>
+      <div class="card-header">
+        <div class="card-thumb error-thumb">⚠</div>
+        <div class="card-header-text">
+          <div class="card-filename">${esc(item.name)}</div>
+          <div class="card-meta text-error">⚠️ ${esc(item.errorMsg || 'Could not read this file — is it a valid STL?')}</div>
+        </div>
+      </div>
       <div class="card-body">
-        <div class="card-filename">${esc(item.name)}</div>
-        <div class="card-meta text-error">⚠️ ${esc(item.errorMsg || 'Could not read this file — is it a valid STL?')}</div>
         <button class="btn btn-ghost btn-sm" data-action="remove-item" data-id="${item.id}">Remove</button>
       </div>
     </div>`;
@@ -417,22 +425,26 @@ function buildItemHTML(item, group) {
     <div class="file-card" data-id="${item.id}">
       <button class="card-remove-x" data-action="remove-item" data-id="${item.id}" title="Remove this file">✕</button>
 
-      <div class="card-thumb" data-action="view3d" data-id="${item.id}" title="Click to view in 3D">
-        ${thumbHTML}
-        <div class="thumb-overlay">🔍 View in 3D</div>
+      <div class="card-header">
+        <div class="card-thumb" data-action="view3d" data-id="${item.id}" title="Click to view in 3D">
+          ${thumbHTML}
+          <div class="thumb-overlay">🔍 View in 3D</div>
+        </div>
+        <div class="card-header-text">
+          <div class="card-filename" title="${esc(item.name)}">
+            ${esc(item.name)}
+            ${ps ? `<span class="presupported-badge">✅ Pre-Supported</span>` : ''}
+          </div>
+          <div class="card-meta">
+            <span>${formatBytes(item.size)}</span> ·
+            <span>${fmtMm(d.dimensions.x)} × ${fmtMm(d.dimensions.y)} × ${fmtMm(d.dimensions.z)}</span> ·
+            <span>${d.triangleCount.toLocaleString()} triangles</span>
+          </div>
+        </div>
       </div>
 
       <div class="card-body">
-        <div class="card-filename" title="${esc(item.name)}">
-          ${esc(item.name)}
-          ${ps ? `<span class="presupported-badge">✅ Pre-Supported</span>` : ''}
-        </div>
         ${item.warning ? `<div class="card-warning">${esc(item.warning)}</div>` : ''}
-        <div class="card-meta">
-          <span>${formatBytes(item.size)}</span> ·
-          <span>${fmtMm(d.dimensions.x)} × ${fmtMm(d.dimensions.y)} × ${fmtMm(d.dimensions.z)}</span> ·
-          <span>${d.triangleCount.toLocaleString()} triangles</span>
-        </div>
         ${c ? `<div class="card-dims">📐 Print size: <strong>${fmtMm(dims.x)} × ${fmtMm(dims.y)} × ${fmtMm(dims.z)}</strong> &nbsp;·&nbsp; <strong>${fmtMl(c.scaledVolumeMl)}</strong> resin</div>` : ''}
 
         <div class="card-controls">
