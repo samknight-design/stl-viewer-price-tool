@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin — 3D Print Calculator Settings</title>
+  <link rel="stylesheet" href="css/style.css?v=8">
+  <script type="importmap">
+  {
+    "imports": {
+      "three":         "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+
+<!-- ── Password gate ─────────────────────────────────────────────── -->
+<div class="auth-overlay" id="auth-overlay">
+  <div class="auth-panel" id="auth-panel">
+    <div style="font-size:2rem;margin-bottom:12px">🔐</div>
+    <h2>Admin Access</h2>
+    <p>Enter the admin password to manage pricing settings.</p>
+    <form id="auth-form">
+      <div class="form-field">
+        <input type="password" id="auth-password" placeholder="Password" autofocus>
+      </div>
+      <button class="btn btn-primary" style="width:100%" type="submit">Login</button>
+      <p class="auth-error" id="auth-error"></p>
+    </form>
+    <p style="margin-top:16px;font-size:.75rem;color:var(--text-dimmer)">
+      Locked out?
+      <button type="button" id="auth-reset-btn"
+              style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:inherit;text-decoration:underline;padding:0">
+        Reset to default password
+      </button>
+    </p>
+  </div>
+</div>
+
+<!-- ── Admin page body ───────────────────────────────────────────── -->
+<div class="admin-wrap">
+
+  <div class="admin-header">
+    <div>
+      <h1>⚙ Pricing Settings</h1>
+      <p>Configure resin costs, materials, and markup. Changes save to browser storage.</p>
+    </div>
+    <div class="flex gap-8">
+      <a href="index.html" class="btn btn-ghost btn-sm">← Calculator</a>
+    </div>
+  </div>
+
+  <form id="config-form" onsubmit="return false">
+
+    <!-- ── Core pricing ──────────────────────────────────────────── -->
+    <div class="section">
+      <div class="section-header">💰 Core Pricing</div>
+      <div class="section-body">
+        <div class="form-grid">
+
+          <div class="form-field-adm">
+            <label for="inp-resin-cost">Default resin cost (per mL)</label>
+            <div class="flex items-center gap-8">
+              <span class="text-dim" style="white-space:nowrap" id="lbl-currency-prefix">£</span>
+              <input type="number" id="inp-resin-cost" min="0" step="0.001" value="0.08">
+            </div>
+            <p class="field-hint">Base material cost. Overridden per material below.</p>
+          </div>
+
+          <div class="form-field-adm">
+            <label for="inp-support">Support material (%)</label>
+            <input type="number" id="inp-support" min="0" max="100" step="1" value="20">
+            <p class="field-hint">Extra volume added for support structures.</p>
+          </div>
+
+          <div class="form-field-adm">
+            <label for="inp-machine-hourly">Machine time cost (per hour)</label>
+            <input type="number" id="inp-machine-hourly" min="0" step="0.01" value="2.50">
+            <p class="field-hint">Electricity + machine depreciation per hour.</p>
+          </div>
+
+          <div class="form-field-adm">
+            <label for="inp-print-speed">Print speed (mL per hour)</label>
+            <input type="number" id="inp-print-speed" min="1" step="0.5" value="15">
+            <p class="field-hint">Average mL printed per hour (affects time cost).</p>
+          </div>
+
+          <div class="form-field-adm">
+            <label for="inp-markup">Profit markup (%)</label>
+            <input type="number" id="inp-markup" min="0" step="1" value="40">
+            <p class="field-hint">Applied to total base cost.</p>
+          </div>
+
+          <div class="form-field-adm">
+            <label for="inp-minimum">Minimum order total</label>
+            <input type="number" id="inp-minimum" min="0" step="0.01" value="5.00">
+            <p class="field-hint">If the whole order comes to less than this, it's bumped up to this amount. Individual items can be cheaper.</p>
+          </div>
+
+          <div class="form-field-adm">
+            <label for="inp-labour-base">Labour base fee (per model group)</label>
+            <input type="number" id="inp-labour-base" min="0" step="0.01" value="2.00">
+            <p class="field-hint">Flat labour charge added once per model group for handling &amp; finishing.</p>
+          </div>
+
+          <div class="form-field-adm">
+            <label for="inp-currency-symbol">Currency symbol</label>
+            <input type="text" id="inp-currency-symbol" maxlength="4" value="£" style="max-width:80px">
+            <p class="field-hint">e.g. £, €, $</p>
+          </div>
+
+        </div>
+
+        <div style="margin-top:16px">
+          <label class="flex items-center gap-8" style="cursor:pointer;font-size:.875rem">
+            <input type="checkbox" id="chk-show-breakdown" checked>
+            Show itemised cost breakdown to customers
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Assembly pricing ─────────────────────────────────────────── -->
+    <div class="section">
+      <div class="section-header">🔩 Assembly Pricing</div>
+      <div class="section-body">
+        <p style="font-size:.82rem;color:var(--text-dim);margin-bottom:18px">
+          Applied per model group when the customer requests assembly. Formula:
+          <code style="color:var(--accent-light)">base + (joints − 1) × perJoint</code>, capped at max.
+        </p>
+        <div class="form-grid">
+
+          <div class="form-field-adm">
+            <label for="inp-assembly-base">Base cost (2 parts)</label>
+            <input type="number" id="inp-assembly-base" min="0" step="0.01" value="5.00">
+            <p class="field-hint">Cost for joining 2 parts (first joint).</p>
+          </div>
+
+          <div class="form-field-adm">
+            <label for="inp-assembly-per-joint">Per extra joint</label>
+            <input type="number" id="inp-assembly-per-joint" min="0" step="0.01" value="3.50">
+            <p class="field-hint">Added for each joint beyond the first (3rd part, 4th, …).</p>
+          </div>
+
+          <div class="form-field-adm">
+            <label for="inp-assembly-max">Maximum assembly cost</label>
+            <input type="number" id="inp-assembly-max" min="0" step="0.50" value="40.00">
+            <p class="field-hint">Cap — large kits won't exceed this.</p>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Primer pricing ───────────────────────────────────────────── -->
+    <div class="section">
+      <div class="section-header">🎨 Primer Pricing</div>
+      <div class="section-body">
+        <p style="font-size:.82rem;color:var(--text-dim);margin-bottom:18px">
+          Applied when a primer colour is selected. Labour scales with model surface area
+          via <code style="color:var(--accent-light)">volume<sup>2/3</sup> × multiplier</code>,
+          clamped between min and max.
+        </p>
+        <div class="form-grid">
+
+          <div class="form-field-adm">
+            <label for="inp-primer-material">Primer material cost</label>
+            <input type="number" id="inp-primer-material" min="0" step="0.01" value="5.00">
+            <p class="field-hint">Flat cost per model group (any colour).</p>
+          </div>
+
+          <div class="form-field-adm">
+            <label for="inp-primer-multiplier">Labour multiplier</label>
+            <input type="number" id="inp-primer-multiplier" min="0" step="0.01" value="0.50">
+            <p class="field-hint">Multiplied by volume^(2/3) to get surface-area-based labour.</p>
+          </div>
+
+          <div class="form-field-adm">
+            <label for="inp-primer-labour-min">Minimum primer labour</label>
+            <input type="number" id="inp-primer-labour-min" min="0" step="0.01" value="1.50">
+            <p class="field-hint">Minimum labour charge for any primed model.</p>
+          </div>
+
+          <div class="form-field-adm">
+            <label for="inp-primer-labour-max">Maximum primer labour</label>
+            <input type="number" id="inp-primer-labour-max" min="0" step="0.50" value="12.00">
+            <p class="field-hint">Cap on primer labour for very large models.</p>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Materials ─────────────────────────────────────────────── -->
+    <div class="section">
+      <div class="section-header">
+        <span>🧪 Materials</span>
+        <button class="btn btn-secondary btn-sm" type="button" id="add-material">+ Add Material</button>
+      </div>
+      <div class="section-body">
+        <div style="display:grid;grid-template-columns:1fr 160px 42px 1fr 32px;gap:8px;font-size:.75rem;color:var(--text-dim);padding:0 0 6px">
+          <span>Name</span><span>Cost / mL</span><span>Colour</span><span>Description</span><span></span>
+        </div>
+        <div id="materials-list"></div>
+      </div>
+    </div>
+
+    <!-- ── Business info ─────────────────────────────────────────── -->
+    <div class="section">
+      <div class="section-header">🏪 Business Info</div>
+      <div class="section-body">
+        <div class="form-grid">
+          <div class="form-field-adm">
+            <label for="inp-biz-name">Business name</label>
+            <input type="text" id="inp-biz-name" value="3D Print Shop">
+          </div>
+          <div class="form-field-adm">
+            <label for="inp-biz-email">Contact email</label>
+            <input type="email" id="inp-biz-email" placeholder="orders@example.com">
+          </div>
+          <div class="form-field-adm">
+            <label for="inp-admin-pw">Admin password</label>
+            <input type="password" id="inp-admin-pw" value="admin123">
+            <p class="field-hint">Protects this admin page.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Actions ───────────────────────────────────────────────── -->
+    <div class="flex gap-8" style="flex-wrap:wrap">
+      <button class="btn btn-primary" type="button" id="save-btn">💾 Save Settings</button>
+      <button class="btn btn-secondary" type="button" id="export-btn">📤 Export JSON</button>
+      <button class="btn btn-ghost" type="button" id="reset-btn">↩ Reset to Defaults</button>
+    </div>
+
+  </form><!-- /#config-form -->
+
+  <!-- ── Live pricing preview ──────────────────────────────────── -->
+  <div class="section" style="margin-top:28px">
+    <div class="section-header">📊 Live Pricing Preview <small style="font-weight:400;color:var(--text-dim)">(updates as you type)</small></div>
+    <div class="section-body" style="overflow-x:auto">
+      <table class="preview-table">
+        <thead>
+          <tr>
+            <th>Sample</th>
+            <th>Volume</th>
+            <th>Resin</th>
+            <th>Print time</th>
+            <th>Machine</th>
+            <th>Base cost</th>
+            <th>Markup</th>
+            <th>Unit price</th>
+          </tr>
+        </thead>
+        <tbody id="preview-tbody">
+          <tr><td colspan="8" style="color:var(--text-dim);padding:20px">Save or change settings to preview…</td></tr>
+        </tbody>
+      </table>
+      <p style="font-size:.75rem;color:var(--text-dimmer);margin-top:10px">
+        Preview uses the first material in the list. Support material and markup included.
+      </p>
+    </div>
+  </div>
+
+</div><!-- /.admin-wrap -->
+
+<script type="module" src="js/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "stl-calc",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["server.py", "8744"],
+      "port": 8744
+    },
+    {
+      "name": "brochure-builder",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "C:/Users/samkn/brochure-builder", "run", "dev", "--", "--port", "5174"],
+      "port": 5174
+    }
+  ]
+}
