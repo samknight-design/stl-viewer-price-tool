@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import { OrbitControls }  from 'three/addons/controls/OrbitControls.js';
 import { mergeVertices }  from 'three/addons/utils/BufferGeometryUtils.js';
-import { trianglesToPositions } from './stl-parser.js?v=8';
+import { trianglesToPositions } from './stl-parser.js?v=9';
 
 // ---- Viewer Themes ---------------------------------------------------
 // Each theme drives background, model colour, specular response, and lighting.
@@ -146,21 +146,46 @@ function buildMesh(positions, theme) {
   return new THREE.Mesh(geo, mat);
 }
 
-/** Position camera so the whole model is visible and nicely framed. */
+/**
+ * Position camera so the whole model is visible and nicely framed.
+ *
+ * Uses the bounding SPHERE (not a single bounding-box axis) to compute
+ * distance — a model wide in two axes at once (a flat base, a disc) has
+ * a diagonal on-screen footprint from this oblique angle bigger than any
+ * single axis, so a single-axis heuristic under-frames it and clips the
+ * edges. Fitting the sphere guarantees full coverage regardless of the
+ * model's proportions or orientation.
+ */
 function fitCamera(camera, mesh, controls) {
-  const box  = new THREE.Box3().setFromObject(mesh);
-  const size = new THREE.Vector3(); box.getSize(size);
+  const box    = new THREE.Box3().setFromObject(mesh);
+  const size   = new THREE.Vector3(); box.getSize(size);
+  const sphere = new THREE.Sphere();  box.getBoundingSphere(sphere);
+  const radius = sphere.radius;
   const maxDim = Math.max(size.x, size.y, size.z);
-  const dist   = maxDim * 2.2;
 
-  camera.position.set(dist * 0.6, dist * 0.45, dist * 0.9);
-  camera.lookAt(0, size.y * 0.1, 0);
-  camera.near = maxDim * 0.001;
-  camera.far  = maxDim * 300;
+  const vFovRad = THREE.MathUtils.degToRad(camera.fov / 2);
+  const hFovRad = Math.atan(Math.tan(vFovRad) * camera.aspect);
+  const distV   = radius / Math.sin(vFovRad);
+  const distH   = radius / Math.sin(hFovRad);
+  const dist    = Math.max(distV, distH) * 1.15; // small margin so nothing touches the frame edge
+
+  // Aim at the SAME point the distance was fitted around (the bounding
+  // sphere's centre). Aiming anywhere else re-introduces asymmetric
+  // clipping: the frustum is sized exactly to the sphere from this
+  // look-at point, so any offset eats into that margin on one side.
+  const dir = new THREE.Vector3(0.6, 0.45, 0.9).normalize();
+  camera.position.set(
+    sphere.center.x + dir.x * dist,
+    sphere.center.y + dir.y * dist,
+    sphere.center.z + dir.z * dist,
+  );
+  camera.lookAt(sphere.center);
+  camera.near = Math.max(maxDim * 0.001, dist * 0.01);
+  camera.far  = dist + maxDim * 300;
   camera.updateProjectionMatrix();
 
   if (controls) {
-    controls.target.set(0, size.y * 0.1, 0);
+    controls.target.copy(sphere.center);
     controls.minDistance = maxDim * 0.2;
     controls.maxDistance = maxDim * 12;
     controls.update();
@@ -201,13 +226,14 @@ export function generateThumbnail(triangles, size = 380) {
     const scene  = buildScene(theme);
     const camera = new THREE.PerspectiveCamera(36, 1, 0.001, 1e8);
 
-    // Match the interactive viewer's cap (400_000) — this is a single
-    // offscreen render, not a continuously-rendered scene, so it doesn't
-    // need a lower ceiling. A lower cap here previously caused visible
-    // holes on dense/supported models: STL facets aren't spatially
-    // ordered, so naive "keep every Nth triangle" decimation scatters
-    // gaps across the whole surface once the cap is exceeded.
-    const positions = trianglesToPositions(triangles, 400_000);
+    // No decimation cap here at all: this is a single offscreen render,
+    // not a continuously-rendered scene, so triangle count doesn't cost
+    // per-frame like it does in the interactive viewer. Any cap here
+    // re-triggers the same bug at a higher threshold — STL facets aren't
+    // spatially ordered, so naive "keep every Nth triangle" decimation
+    // scatters holes across the whole surface once a model exceeds it
+    // (support-heavy and highly detailed prints routinely do).
+    const positions = trianglesToPositions(triangles, Infinity);
     const mesh      = buildMesh(positions, theme);
     scene.add(mesh);
     addGrid(scene, mesh, theme);

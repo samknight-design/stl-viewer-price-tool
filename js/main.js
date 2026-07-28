@@ -6,7 +6,7 @@
 
 import { getConfig } from './config.js?v=9';
 import { parseSTLFile } from './stl-parser.js?v=9';
-import { generateThumbnail, STLViewer } from './viewer.js?v=10';
+import { generateThumbnail, STLViewer } from './viewer.js?v=11';
 import {
   calcItemCost, calcGroupCost, calcOrderTotal,
   fmt, fmtMl, fmtMm, fmtHours,
