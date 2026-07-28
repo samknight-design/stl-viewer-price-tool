@@ -214,14 +214,17 @@ img { display: block; max-width: 100%; }
 @media (max-width: 640px) { .file-card { grid-template-columns: 1fr; } }
 
 .card-remove-x {
-  position: absolute; top: 10px; right: 12px;
+  position: absolute; top: 8px; right: 8px;
   background: rgba(220,38,38,.08); border: none; color: var(--red);
-  cursor: pointer; width: 28px; height: 28px; border-radius: 50%;
-  font-size: .8rem; display: flex; align-items: center; justify-content: center;
-  opacity: 0; transition: opacity var(--transition), background var(--transition); z-index: 2;
+  cursor: pointer; width: 32px; height: 32px; border-radius: 50%;
+  font-size: .85rem; display: flex; align-items: center; justify-content: center;
+  transition: background var(--transition); z-index: 2;
 }
-.file-card:hover .card-remove-x { opacity: 1; }
-.card-remove-x:hover { background: rgba(220,38,38,.2); }
+.card-remove-x:hover, .card-remove-x:focus-visible { background: rgba(220,38,38,.2); }
+
+@media (max-width: 767px) {
+  .card-remove-x { width: 44px; height: 44px; font-size: 1rem; }
+}
 
 .card-thumb {
   position: relative; background: var(--bg3); cursor: pointer;
@@ -247,7 +250,10 @@ img { display: block; max-width: 100%; }
 .card-body { padding: 16px 18px 14px; display: flex; flex-direction: column; gap: 10px; }
 .card-filename {
   font-size: .95rem; font-weight: 600; color: var(--text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 32px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 36px;
+}
+@media (max-width: 767px) {
+  .card-filename { padding-right: 52px; }
 }
 .card-meta { font-size: .75rem; color: var(--text-dim); display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .card-dims  { font-size: .79rem; color: var(--text-dim); }
