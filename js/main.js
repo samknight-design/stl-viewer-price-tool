@@ -35,6 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupFileInput();
   setupModal();
   setupOrderForm();
+  document.getElementById('mobile-summary-btn')?.addEventListener('click', openOrderForm);
   setupGroupList();   // Single delegated listener — no duplicates across re-renders
   document.addEventListener('add-group', () => { addGroup(); });
   renderAll();
@@ -753,15 +754,16 @@ function showOrderForm() {
 // ---- Order summary ---------------------------------------------------
 
 function renderOrderSummary() {
-  const panel = document.getElementById('order-summary');
-  if (!panel) return;
+  const panel     = document.getElementById('order-summary');
+  const mobileBar = document.getElementById('mobile-summary-bar');
   const sym = config.currencySymbol;
 
   const activeGroups = groups.filter(g => g.items.some(i => i.status === 'ready'));
 
   if (!activeGroups.length) {
-    panel.innerHTML = `<h2 class="summary-title">Order Summary</h2>
+    if (panel) panel.innerHTML = `<h2 class="summary-title">Order Summary</h2>
       <p class="summary-empty">Upload STL files to see pricing.</p>`;
+    mobileBar?.classList.add('empty');
     return;
   }
 
@@ -805,7 +807,7 @@ function renderOrderSummary() {
       </div>`;
   }).join('');
 
-  panel.innerHTML = `
+  if (panel) panel.innerHTML = `
     <h2 class="summary-title">Order Summary</h2>
     <div class="summary-groups">${groupLines}</div>
     ${minAdjust > 0 ? `
@@ -819,6 +821,16 @@ function renderOrderSummary() {
     <button class="btn btn-primary btn-lg" id="request-quote-btn">Request a Quote →</button>
   `;
   document.getElementById('request-quote-btn')?.addEventListener('click', openOrderForm);
+
+  if (mobileBar) {
+    mobileBar.classList.remove('empty');
+    const itemCount = activeGroups.reduce(
+      (n, g) => n + g.items.filter(i => i.status === 'ready').length, 0
+    );
+    document.getElementById('mobile-summary-count').textContent =
+      `${itemCount} item${itemCount === 1 ? '' : 's'}`;
+    document.getElementById('mobile-summary-total').textContent = fmt(grandTotal, sym);
+  }
 }
 
 // ---- Modal -----------------------------------------------------------
