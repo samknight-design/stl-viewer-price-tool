@@ -783,6 +783,17 @@ input.mat-color { padding: 2px; height: 32px; cursor: pointer; background: trans
   .viewer-themes { display: none; }
 }
 
+/* ---- Touch target sizing ------------------------------------------- */
+@media (max-width: 767px) {
+  .seg-btn { min-height: 44px; }
+  .btn-sm  { min-height: 36px; }
+  .scale-preset { min-height: 32px; padding: 6px 12px; }
+  input[type="number"], input[type="text"], input[type="email"], select {
+    min-height: 40px;
+  }
+  .modal-header .btn-sm, .order-panel-header .btn-sm { min-width: 44px; min-height: 36px; }
+}
+
 /* ---- Utilities ----------------------------------------------------- */
 .text-error  { color: var(--red); }
 .text-dim    { color: var(--text-dim); }
