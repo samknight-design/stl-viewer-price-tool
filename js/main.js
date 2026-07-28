@@ -4,13 +4,13 @@
 // Files belong to a group. Multiple groups = multiple models.
 // ============================================================
 
-import { getConfig } from './config.js?v=8';
-import { parseSTLFile } from './stl-parser.js?v=8';
-import { generateThumbnail, STLViewer } from './viewer.js?v=8';
+import { getConfig } from './config.js?v=9';
+import { parseSTLFile } from './stl-parser.js?v=9';
+import { generateThumbnail, STLViewer } from './viewer.js?v=9';
 import {
   calcItemCost, calcGroupCost, calcOrderTotal,
   fmt, fmtMl, fmtMm, fmtHours,
-} from './calculator.js?v=8';
+} from './calculator.js?v=9';
 
 // ---- State -----------------------------------------------------------
 let config      = getConfig();
