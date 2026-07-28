@@ -28,16 +28,21 @@
         <span class="app-tagline">Upload your STL files — get an instant quote</span>
       </div>
     </div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <button class="btn btn-ghost btn-sm" id="add-group-btn">+ New Model Group</button>
-      <a href="admin.html" class="btn btn-ghost btn-sm">⚙ Admin</a>
+    <div class="app-header-actions">
+      <button class="btn btn-ghost btn-sm" id="add-group-btn" aria-label="New Model Group">
+        <span aria-hidden="true">+</span><span class="btn-label">New Model Group</span>
+      </button>
+      <a href="admin.html" class="btn btn-ghost btn-sm" aria-label="Admin">
+        <span aria-hidden="true">⚙</span><span class="btn-label">Admin</span>
+      </a>
     </div>
   </header>
   <hr class="brand-divider">
 
   <div class="drop-zone" id="drop-zone" role="button" tabindex="0">
     <div class="drop-icon">📂</div>
-    <h3>Drop STL Files Here</h3>
+    <h3 class="drop-title-desktop">Drop STL Files Here</h3>
+    <h3 class="drop-title-touch">Tap to Browse Your Files</h3>
     <p>or click to browse your files</p>
     <p class="drop-hint">Supports binary &amp; ASCII .stl · Multiple files at once · .lys (Lychee Slicer) files detected — export as STL first</p>
   </div>
