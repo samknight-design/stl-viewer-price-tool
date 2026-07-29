@@ -22,7 +22,15 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
         # Keep the original access log
         super().log_message(fmt, *args)
 
-with socketserver.TCPServer(('', PORT), NoCacheHandler) as httpd:
-    httpd.allow_reuse_address = True
+class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    # A plain socketserver.TCPServer handles one connection at a time,
+    # blocking on it fully -- a single stalled/incomplete client request
+    # (or a lingering keep-alive connection) hangs the server for every
+    # other client. Threading each request in its own thread means one
+    # stuck connection can't take down the whole dev server.
+    daemon_threads = True
+    allow_reuse_address = True
+
+with ThreadingHTTPServer(('', PORT), NoCacheHandler) as httpd:
     print(f'No-cache dev server running at http://localhost:{PORT}')
     httpd.serve_forever()
