@@ -3,7 +3,7 @@
    v8 · Fjalla One · Green CTA · Modern UI
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Fjalla+One&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fjalla+One&family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
 
 :root {
   --bg:           #f5f4f1;
@@ -34,6 +34,7 @@
   --text-dimmer:  #b4afa9;
   --heading-font: 'Fjalla One', Impact, sans-serif;
   --body-font:    'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono-font:    'IBM Plex Mono', ui-monospace, 'SF Mono', Consolas, monospace;
 
   --radius:    10px;
   --radius-sm: 6px;
@@ -71,7 +72,9 @@ img { display: block; max-width: 100%; }
 .app-header {
   display: flex; flex-direction: column; align-items: flex-start; gap: 10px;
   padding: 12px 16px; margin: 0 -16px;
-  background: #1b2f3e;
+  background:
+    radial-gradient(ellipse 480px 140px at 10% 0%, rgba(232,102,10,.16), transparent 70%),
+    #1b2f3e;
   border-bottom: 3px solid var(--flame);
 }
 .app-header-left { display: flex; align-items: center; gap: 12px; width: 100%; }
@@ -144,6 +147,14 @@ img { display: block; max-width: 100%; }
 .btn-primary:hover {
   background: linear-gradient(135deg, var(--accent), #22836a);
   box-shadow: var(--glow); transform: translateY(-1px);
+  animation: btn-pulse 1.8s ease-in-out infinite;
+}
+@keyframes btn-pulse {
+  0%, 100% { box-shadow: 0 2px 10px rgba(28,109,87,.25), 0 0 0 rgba(28,109,87,0); }
+  50%      { box-shadow: 0 2px 10px rgba(28,109,87,.25), 0 0 20px rgba(28,109,87,.35); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-primary:hover { animation: none; }
 }
 .btn-primary:active { transform: none; }
 .btn-secondary { background: transparent; color: var(--accent); border-color: var(--accent); }
@@ -258,8 +269,13 @@ img { display: block; max-width: 100%; }
 @media (max-width: 767px) {
   .card-filename { padding-right: 52px; }
 }
-.card-meta { font-size: .75rem; color: var(--text-dim); display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.card-meta {
+  font-family: var(--mono-font); font-size: .68rem; letter-spacing: .01em;
+  color: var(--text-dim); display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
+}
 .card-dims  { font-size: .79rem; color: var(--text-dim); }
+.card-dims strong { font-family: var(--mono-font); font-size: .74rem; letter-spacing: .01em; color: var(--text); }
+.card-meta.text-error { font-family: var(--body-font); font-size: .75rem; letter-spacing: normal; }
 
 .card-controls { display: flex; flex-direction: column; gap: 8px; }
 .control-row { display: grid; grid-template-columns: 90px 1fr; align-items: center; gap: 8px; }
@@ -721,7 +737,25 @@ input.mat-color { padding: 2px; height: 32px; cursor: pointer; background: trans
   background: var(--bg3); border: 1px solid var(--card-border); border-radius: var(--radius-sm);
 }
 .review-ref-label { font-size: .76rem; color: var(--text-dim); }
-.review-ref-value { font-family: var(--heading-font); font-size: .9rem; color: var(--accent); letter-spacing: .04em; }
+
+/* ---- Quote stamp — hallmark/assay-mark treatment for the order reference ---- */
+.quote-stamp {
+  position: relative; display: inline-flex; align-items: center;
+  padding: 5px 14px; border: 1.5px solid var(--flame);
+  border-radius: 3px; background: rgba(232,102,10,.05);
+}
+.quote-stamp::before, .quote-stamp::after {
+  content: ''; position: absolute; width: 8px; height: 8px;
+  border: 1.5px solid var(--flame);
+}
+.quote-stamp::before { top: -3px; left: -3px; border-right: none; border-bottom: none; }
+.quote-stamp::after  { bottom: -3px; right: -3px; border-left: none; border-top: none; }
+.quote-stamp .quote-stamp-value {
+  font-family: var(--mono-font); font-weight: 600; font-size: .82rem;
+  letter-spacing: .08em; color: var(--flame-light);
+}
+.quote-stamp-lg { padding: 8px 20px; }
+.quote-stamp-lg .quote-stamp-value { font-size: 1rem; }
 
 .review-group { border: 1px solid var(--card-border); border-radius: var(--radius); overflow: hidden; margin-bottom: 14px; }
 .review-group-hdr {

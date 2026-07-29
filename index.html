@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>3D Print Price Calculator — Arcane Flame</title>
-  <link rel="stylesheet" href="css/style.css?v=11">
+  <link rel="stylesheet" href="css/style.css?v=12">
   <script type="importmap">
   {
     "imports": {
@@ -115,7 +115,7 @@
       <div id="order-review-wrap" style="display:none">
         <div class="review-ref-row">
           <span class="review-ref-label">Quote Reference</span>
-          <strong id="review-order-number" class="review-ref-value">—</strong>
+          <span class="quote-stamp"><strong id="review-order-number" class="quote-stamp-value">—</strong></span>
         </div>
         <div id="review-groups-container"><!-- populated by JS --></div>
         <div class="order-total-row">
@@ -181,9 +181,8 @@
         <h3>Quote Submitted!</h3>
         <p>We'll review your files and send a confirmation to<br>
            <strong id="order-success-email" style="color:var(--accent)"></strong></p>
-        <p class="success-ref">Your reference:
-          <strong id="order-success-number" style="color:var(--accent)">—</strong>
-        </p>
+        <p class="success-ref">Your reference</p>
+        <span class="quote-stamp quote-stamp-lg"><strong id="order-success-number" class="quote-stamp-value">—</strong></span>
         <p style="font-size:.8rem">Our team typically responds within 1 business day.</p>
         <button class="btn btn-secondary"
                 onclick="document.getElementById('order-overlay').classList.remove('open')">Close</button>
