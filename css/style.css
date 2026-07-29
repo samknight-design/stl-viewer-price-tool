@@ -92,7 +92,7 @@ img { display: block; max-width: 100%; }
   color: rgba(255,255,255,.85);
 }
 .app-title .app-tagline {
-  font-size: .7rem; color: rgba(255,255,255,.45);
+  font-size: .7rem; color: rgba(255,255,255,.6);
   display: block; margin-top: 1px; font-family: var(--body-font);
 }
 
@@ -186,7 +186,7 @@ img { display: block; max-width: 100%; }
   font-size: 1.3rem; letter-spacing: .04em; color: var(--text); margin-bottom: 6px;
 }
 .drop-zone p  { font-size: .85rem; color: var(--text-dim); }
-.drop-zone .drop-hint { margin-top: 10px; font-size: .76rem; color: var(--text-dimmer); }
+.drop-zone .drop-hint { margin-top: 10px; font-size: .76rem; color: var(--text-dim); }
 
 /* ---- Main grid ----------------------------------------------------- */
 .main-grid { display: grid; grid-template-columns: 1fr; gap: 20px; align-items: start; }
@@ -391,7 +391,7 @@ details[open] > summary::before { transform: rotate(90deg); }
 }
 .summary-total span:last-child { color: var(--accent); }
 .summary-note {
-  font-size: .74rem; color: var(--text-dimmer); margin-bottom: 18px; line-height: 1.5;
+  font-size: .74rem; color: var(--text-dim); margin-bottom: 18px; line-height: 1.5;
   padding: 8px 10px; border: 1px solid var(--card-border);
   border-radius: var(--radius-sm); background: var(--bg3);
 }
@@ -661,7 +661,7 @@ input.mat-color { padding: 2px; height: 32px; cursor: pointer; background: trans
 }
 .control-block {
   display: flex; flex-direction: column; gap: 6px; padding: 10px 12px;
-  background: var(--bg3); border: 1px solid var(--card-border); border-radius: var(--radius-sm);
+  background: var(--bg3); border-radius: var(--radius-sm);
 }
 .control-label { font-size: .8rem; font-weight: 700; color: var(--text); }
 .control-desc  { font-size: .74rem; color: var(--text-dim); line-height: 1.5; }
@@ -790,9 +790,9 @@ input.mat-color { padding: 2px; height: 32px; cursor: pointer; background: trans
 @media (max-width: 767px) {
   .seg-btn { min-height: 44px; }
   .btn-sm  { min-height: 36px; }
-  .scale-preset { min-height: 32px; padding: 6px 12px; }
+  .scale-preset { min-height: 44px; padding: 6px 12px; }
   input[type="number"], input[type="text"], input[type="email"], select {
-    min-height: 40px;
+    min-height: 44px;
   }
   .modal-header .btn-sm, .order-panel-header .btn-sm { min-width: 44px; min-height: 36px; }
 }
