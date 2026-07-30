@@ -1,9 +1,45 @@
 // ============================================================
 // calculator.js — Pricing engine
-// Per-file costs + per-group assembly / primer / labour
+// Fixed size-tier pricing for resin bodies/bases, flat extras,
+// unchanged assembly/primer add-ons.
 // ============================================================
 
-import { getMaterial } from './config.js?v=6';
+import { getMaterial } from './config.js?v=7';
+
+// ---- Build plate fit check --------------------------------------------
+
+/**
+ * Does a model (any orientation) fit the printer's build plate, after
+ * reducing the plate by supportMarginPct to leave room for supports?
+ * Sorts both the model's dims and the plate's dims ascending and compares
+ * pairwise, so rotation on the plate is accounted for.
+ */
+export function fitsBuildPlate(dims, buildPlate) {
+  const margin = 1 - (buildPlate.supportMarginPct ?? 0) / 100;
+  const usable = [buildPlate.x, buildPlate.y, buildPlate.z].map(v => v * margin).sort((a, b) => a - b);
+  const model  = [dims.x, dims.y, dims.z].sort((a, b) => a - b);
+  return model[0] <= usable[0] && model[1] <= usable[1] && model[2] <= usable[2];
+}
+
+// ---- Size tier lookup ---------------------------------------------------
+
+/**
+ * Decide a model's price tier from its largest scaled dimension.
+ * Returns null if it exceeds every defined tier AND doesn't fit the
+ * build plate even with the support margin — i.e. cannot be auto-priced.
+ */
+export function calcSizeTier(dims, config) {
+  const largest = Math.max(dims.x, dims.y, dims.z);
+  for (const tier of config.sizeTiers) {
+    if (largest <= tier.maxDimensionMm) {
+      return { name: tier.name, maxDimensionMm: tier.maxDimensionMm, price: tier.price };
+    }
+  }
+  if (fitsBuildPlate(dims, config.buildPlate)) {
+    return { name: 'Max Plate', maxDimensionMm: null, price: config.maxPlatePrice };
+  }
+  return null;
+}
 
 // ---- Per-file cost ---------------------------------------------------
 
@@ -11,55 +47,62 @@ export function calcItemCost(stlData, settings, config) {
   const { scale = 1.0, quantity = 1, materialId, presupported = false } = settings;
   const material = getMaterial(config, materialId);
 
-  const scaledVolumeMl      = stlData.volumeMl * Math.pow(scale, 3);
-  const effectiveSupportPct = presupported ? 0 : config.supportMaterial;
-  const totalVolumeMl       = scaledVolumeMl * (1 + effectiveSupportPct / 100);
+  const scaledDims = {
+    x: stlData.dimensions.x * scale,
+    y: stlData.dimensions.y * scale,
+    z: stlData.dimensions.z * scale,
+  };
+  const scaledVolumeMl = stlData.volumeMl * Math.pow(scale, 3);
 
-  const resinCost   = totalVolumeMl * material.costPerMl;
-  const printHours  = totalVolumeMl / config.printSpeedMlPerHour;
-  const machineCost = printHours * config.machineHourlyCost;
+  const tier = calcSizeTier(scaledDims, config);
+  const surchargePct = config.materialSurcharges?.[materialId] ?? 0;
 
-  const baseCost   = resinCost + machineCost;
-  const withMarkup = baseCost * (1 + config.markupPercentage / 100);
-  // No per-item minimum — minimum applies to the order total (see calcOrderTotal)
-  const unitCost   = withMarkup;
+  if (!tier) {
+    return {
+      scale, quantity,
+      materialName: material.name,
+      presupported,
+      scaledDims, scaledVolumeMl,
+      tier: null,
+      fitsBuildPlate: false,
+      surchargePct,
+      unitCost: 0,
+      totalCost: 0,
+    };
+  }
+
+  const surchargeAmount = tier.price * (surchargePct / 100);
+  const unitCost  = tier.price + surchargeAmount;
+  const totalCost = unitCost * quantity;
 
   return {
     scale, quantity,
-    materialName:       material.name,
+    materialName: material.name,
     presupported,
-    effectiveSupportPct,
-    scaledVolumeMl,
-    totalVolumeMl,
-    scaledDims: {
-      x: stlData.dimensions.x * scale,
-      y: stlData.dimensions.y * scale,
-      z: stlData.dimensions.z * scale,
-    },
-    resinCost, machineCost, baseCost,
-    markupAmount:       withMarkup - baseCost,
+    scaledDims, scaledVolumeMl,
+    tier,
+    fitsBuildPlate: true,
+    surchargePct,
+    surchargeAmount,
     unitCost,
-    totalCost:          unitCost * quantity,
-    printHours,
+    totalCost,
   };
 }
 
-// ---- Assembly cost ---------------------------------------------------
+// ---- Assembly cost (unchanged) ----------------------------------------
 // Joints = parts - 1. First joint costs assemblyBase, each extra costs assemblyPerJoint.
-// Assembly only shown/charged when group has ≥ 2 parts AND assembly is toggled on.
 
 export function calcAssemblyCost(partCount, config) {
   if (partCount <= 1) return 0;
-  const joints    = partCount - 1;
+  const joints     = partCount - 1;
   const firstJoint = config.assemblyBase;
   const extraJoints = Math.max(0, joints - 1) * config.assemblyPerJoint;
   return Math.min(firstJoint + extraJoints, config.assemblyMax);
 }
 
-// ---- Primer cost -----------------------------------------------------
-// Material: flat £5 per model group.
-// Labour: scales with surface area proxy → volume^(2/3), capped.
-// This reflects that a bigger model needs more smoothing / filling work.
+// ---- Primer cost (unchanged) ------------------------------------------
+// Material: flat fee per model group. Labour: scales with volume^(2/3)
+// as a surface-area proxy, capped.
 
 export function calcPrimerCost(totalVolumeMl, primerType, config) {
   if (!primerType || primerType === 'unprimed') {
@@ -76,50 +119,53 @@ export function calcPrimerCost(totalVolumeMl, primerType, config) {
   return { material, labour, total: material + labour };
 }
 
-// ---- Group-level cost ------------------------------------------------
-// totalVolumeMl = sum of each file's scaledVolumeMl × its quantity
-// (represents the total resin printed for this model assembly)
+// ---- Group-level cost --------------------------------------------------
 
 export function calcGroupCost(items, groupSettings, config) {
-  const readyItems = items.filter(i => i.status === 'ready' && i.cost);
+  const readyItems     = items.filter(i => i.status === 'ready' && i.cost);
+  const priceableItems = readyItems.filter(i => i.cost.tier);
+  const oversizedCount = readyItems.length - priceableItems.length;
 
-  const fileSubtotal   = readyItems.reduce((s, i) => s + i.cost.totalCost, 0);
-  const totalVolumeMl  = readyItems.reduce((s, i) => s + i.cost.scaledVolumeMl * i.settings.quantity, 0);
-  const totalPartCount = readyItems.reduce((s, i) => s + i.settings.quantity, 0);
+  const fileSubtotal   = priceableItems.reduce((s, i) => s + i.cost.totalCost, 0);
+  const totalVolumeMl  = priceableItems.reduce((s, i) => s + i.cost.scaledVolumeMl * i.settings.quantity, 0);
+  const totalPartCount = priceableItems.reduce((s, i) => s + i.settings.quantity, 0);
 
-  const { assembly = false, primer = 'unprimed' } = groupSettings;
+  const { assembly = false, primer = 'unprimed', extras = [] } = groupSettings;
 
-  const assemblyCost  = assembly ? calcAssemblyCost(totalPartCount, config) : 0;
-  const primerResult  = calcPrimerCost(totalVolumeMl, primer, config);
-  const labourBase    = config.labourBaseFee;
+  const extrasCost = extras.reduce((s, extraId) => {
+    const extra = config.extras.find(e => e.id === extraId);
+    return s + (extra ? extra.price : 0);
+  }, 0);
 
-  // Labour surcharge for primer — already included in primerResult.labour
-  // Labour surcharge for assembly — included in assemblyCost
+  const assemblyCost = assembly ? calcAssemblyCost(totalPartCount, config) : 0;
+  const primerResult = calcPrimerCost(totalVolumeMl, primer, config);
 
-  const groupTotal = fileSubtotal + assemblyCost + primerResult.total + labourBase;
+  const groupTotal = fileSubtotal + extrasCost + assemblyCost + primerResult.total;
 
   return {
     fileSubtotal,
     totalVolumeMl,
     totalPartCount,
+    oversizedCount,
+    extrasCost,
     assemblyCost,
-    primerMaterial:  primerResult.material,
-    primerLabour:    primerResult.labour,
-    primerTotal:     primerResult.total,
-    labourBase,
+    primerMaterial: primerResult.material,
+    primerLabour:   primerResult.labour,
+    primerTotal:    primerResult.total,
     groupTotal,
-    isPrimed:        primer !== 'unprimed',
-    primerLabel:     primer,
+    isPrimed:    primer !== 'unprimed',
+    primerLabel: primer,
   };
 }
 
 // ---- Order total -----------------------------------------------------
-// config is optional — when supplied the minimum order floor is applied.
 
-export function calcOrderTotal(groups, config) {
-  const raw = groups.reduce((s, g) => s + (g.groupCost?.groupTotal ?? 0), 0);
-  const floor = config?.minimumItemCost ?? 0;
-  return floor > 0 ? Math.max(raw, floor) : raw;
+export function calcOrderTotal(groups) {
+  return groups.reduce((s, g) => s + (g.groupCost?.groupTotal ?? 0), 0);
+}
+
+export function exceedsCustomQuoteThreshold(grandTotal, config) {
+  return grandTotal >= config.customQuoteOrderThreshold;
 }
 
 // ---- Formatters -------------------------------------------------------
