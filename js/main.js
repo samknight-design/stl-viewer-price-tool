@@ -424,7 +424,6 @@ function buildItemHTML(item, group) {
   const c   = item.cost;
   const ps  = item.settings.presupported;
   const dims = c ? c.scaledDims : d.dimensions;
-  const supportPct = config.supportMaterial;
 
   const thumbHTML = item.thumbnail
     ? `<img src="${item.thumbnail}" alt="${esc(item.name)}" class="thumb-img" loading="lazy">`
@@ -450,14 +449,12 @@ function buildItemHTML(item, group) {
              data-action="scale-preset" data-scale="${s}" data-id="${item.id}">${Math.round(s * 100)}%</button>`
   ).join('');
 
-  const breakdownHTML = config.showCostBreakdown && c ? `
+  const breakdownHTML = config.showCostBreakdown && c && c.tier ? `
     <details class="cost-details">
-      <summary>💡 See cost breakdown</summary>
+      <summary>💡 See price breakdown</summary>
       <table class="breakdown-table">
-        <tr><td>Volume at ${Math.round(item.settings.scale * 100)}% scale</td><td>${fmtMl(c.scaledVolumeMl)}</td></tr>
-        <tr><td>Size tier</td><td>${c.tier ? esc(c.tier.name) : 'Custom quote needed'}</td></tr>
-        ${c.tier ? `<tr><td>Tier price</td><td>${fmt(c.tier.price, sym)}</td></tr>` : ''}
-        ${c.surchargePct > 0 ? `<tr><td>${esc(c.materialName)} surcharge (${c.surchargePct}%)</td><td>${fmt(c.surchargeAmount, sym)}</td></tr>` : ''}
+        <tr><td>Size tier: ${esc(c.tier.name)} (largest side ≤ ${c.tier.maxDimensionMm ? c.tier.maxDimensionMm + 'mm' : 'build plate'})</td><td>${fmt(c.tier.price, sym)}</td></tr>
+        ${c.surchargePct > 0 ? `<tr><td>${esc(c.materialName)} surcharge (+${c.surchargePct}%)</td><td>${fmt(c.surchargeAmount, sym)}</td></tr>` : ''}
       </table>
     </details>` : '';
 
@@ -485,7 +482,8 @@ function buildItemHTML(item, group) {
 
       <div class="card-body">
         ${item.warning ? `<div class="card-warning">${esc(item.warning)}</div>` : ''}
-        ${c ? `<div class="card-dims">📐 Print size: <strong>${fmtMm(dims.x)} × ${fmtMm(dims.y)} × ${fmtMm(dims.z)}</strong> &nbsp;·&nbsp; <strong>${fmtMl(c.scaledVolumeMl)}</strong> resin</div>` : ''}
+        ${c && c.tier ? `<div class="card-dims">📐 Print size: <strong>${fmtMm(dims.x)} × ${fmtMm(dims.y)} × ${fmtMm(dims.z)}</strong> &nbsp;·&nbsp; <strong>${esc(c.tier.name)}</strong> tier</div>` : ''}
+        ${c && !c.tier ? `<div class="card-warning">⚠️ This model is too large to fit our build plate, even with the support margin. Please scale it down or split it into parts before requesting a quote.</div>` : ''}
 
         <div class="card-controls">
 
@@ -507,8 +505,8 @@ function buildItemHTML(item, group) {
             </div>
             <div class="control-hint ${ps ? 'hint-green' : ''}">
               ${ps
-                ? '✅ No extra support material charged — your file already includes them.'
-                : `+${supportPct}% extra resin added for support scaffolding`}
+                ? '✅ Marked as already supported — no changes needed on our end.'
+                : 'We’ll add supports during printing as needed — this doesn’t change the price.'}
             </div>
           </div>
 
@@ -542,10 +540,10 @@ function buildItemHTML(item, group) {
         ${breakdownHTML}
 
         <div class="card-cost">
-          ${c ? `
+          ${c && c.tier ? `
             <span class="unit-cost">${fmt(c.unitCost, sym)} each</span>
             ${c.quantity > 1 ? `<span class="total-cost">${fmt(c.totalCost, sym)} for ${c.quantity}</span>` : ''}
-          ` : '—'}
+          ` : c && !c.tier ? `<span class="text-error">Cannot price — too large</span>` : '—'}
         </div>
       </div>
     </div>`;
