@@ -225,20 +225,20 @@ function updatePreview() {
   ];
 
   const tbody = document.getElementById('preview-tbody');
-  tbody.innerHTML = samples.map(s => {
-    const cost = calcItemCost(s, { scale: 1, quantity: 1, materialId: config.materials[0]?.id }, config);
-    return `
-      <tr>
-        <td>${esc(s.label)}</td>
-        <td>${fmtMl(s.volumeMl)}</td>
-        <td>${fmt(cost.resinCost, sym)}</td>
-        <td>${fmtHours(cost.printHours)}</td>
-        <td>${fmt(cost.machineCost, sym)}</td>
-        <td>${fmt(cost.baseCost, sym)}</td>
-        <td>${fmt(cost.markupAmount, sym)}</td>
-        <td><strong>${fmt(cost.unitCost, sym)}</strong></td>
-      </tr>`;
-  }).join('');
+  try {
+    tbody.innerHTML = samples.map(s => {
+      const cost = calcItemCost(s, { scale: 1, quantity: 1, materialId: config.materials[0]?.id }, config);
+      return `
+        <tr>
+          <td>${esc(s.label)}</td>
+          <td>${fmtMl(s.volumeMl)}</td>
+          <td colspan="6"><strong>${fmt(cost.unitCost, sym)}</strong> (${cost.tier ? esc(cost.tier.name) + ' tier' : 'no tier'})</td>
+        </tr>`;
+    }).join('');
+  } catch (e) {
+    console.warn('Preview unavailable:', e);
+    tbody.innerHTML = `<tr><td colspan="8">Preview unavailable — pricing model has changed. This will be resolved when admin moves to Shopify.</td></tr>`;
+  }
 }
 
 // ---- Utilities -------------------------------------------------------

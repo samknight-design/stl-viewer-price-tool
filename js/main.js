@@ -9,7 +9,7 @@ import { parseSTLFile } from './stl-parser.js?v=9';
 import { generateThumbnail, STLViewer } from './viewer.js?v=11';
 import {
   calcItemCost, calcGroupCost, calcOrderTotal, exceedsCustomQuoteThreshold,
-  fmt, fmtMl, fmtMm, fmtHours,
+  fmt, fmtMm,
 } from './calculator.js?v=10';
 
 // ---- State -----------------------------------------------------------
@@ -859,7 +859,7 @@ function renderOrderSummary() {
           <div class="summary-line">
             <span class="sum-name" title="${esc(i.name)}">${esc(shortName(i.name))}</span>
             <span class="sum-qty">×${i.settings.quantity}</span>
-            <span class="sum-price">${fmt(i.cost.totalCost, sym)}</span>
+            <span class="sum-price">${i.cost?.tier ? fmt(i.cost.totalCost, sym) : '<span class="text-error">Too large</span>'}</span>
           </div>
           <div class="sum-file-detail">
             ${esc(i.cost.materialName)} · ${Math.round(i.settings.scale * 100)}% scale · ${i.settings.presupported ? '<span style="color:var(--green)">Pre-sup.</span>' : 'Std. supports'}
@@ -1042,7 +1042,7 @@ function openOrderForm() {
 
   _orderNumber = generateOrderNumber();
   const sym        = config.currencySymbol;
-  const grandTotal = calcOrderTotal(activeGroups, config);
+  const grandTotal = calcOrderTotal(activeGroups);
 
   const quoteNoteEl = document.getElementById('review-custom-quote-note');
   if (quoteNoteEl) quoteNoteEl.style.display = exceedsCustomQuoteThreshold(grandTotal, config) ? 'block' : 'none';
