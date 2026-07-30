@@ -6,29 +6,68 @@
 const CONFIG_KEY = 'stl_calc_config_v1';
 
 export const DEFAULT_CONFIG = {
-  // --- Core resin pricing ---
-  resinCostPerMl:      0.08,
-  supportMaterial:     20,       // % extra volume for supports
-  machineHourlyCost:   2.50,
-  printSpeedMlPerHour: 15,
-  markupPercentage:    40,
-  minimumItemCost:     5.00,     // minimum per individual STL file
+  // --- Size tiers (resin) ---
+  // A model's tier is decided by its LARGEST single scaled dimension (mm).
+  // Ascending by maxDimensionMm. A model bigger than the last tier falls
+  // back to the build-plate check (maxPlatePrice); if it doesn't fit the
+  // plate either, it cannot be auto-priced at all.
+  sizeTiers: [
+    { name: 'XS',      maxDimensionMm: 15,  price: 1  },
+    { name: 'Small',   maxDimensionMm: 30,  price: 3  },
+    { name: 'Regular', maxDimensionMm: 50,  price: 6  },
+    { name: 'Large',   maxDimensionMm: 100, price: 15 },
+    { name: 'Large+',  maxDimensionMm: 120, price: 21 },
+    { name: 'XL',      maxDimensionMm: 150, price: 30 },
+    { name: 'XL+',     maxDimensionMm: 180, price: 45 },
+  ],
+  maxPlatePrice: 60,   // price for a model bigger than XL+ but still fits the build plate
 
-  // --- Labour (replaces handling fee) ---
-  // Applied once per model group, scales up with finishing work
-  labourBaseFee:       2.00,     // £ flat per model group
+  // --- Build plate (physical fit check) ---
+  buildPlate: {
+    x: 211.68, y: 118.37, z: 220,
+    supportMarginPct: 20,   // usable space is reduced by this % to leave room for supports
+  },
 
-  // --- Assembly ---
-  // Applied when a group has multiple parts and assembly is requested
-  assemblyBase:        5.00,     // cost for joining 2 parts
-  assemblyPerJoint:    3.50,     // cost per additional joint (3rd part, 4th, …)
-  assemblyMax:         40.00,    // cap so large kits don't get absurd
+  // --- Assembly (unchanged) ---
+  assemblyBase:        5.00,
+  assemblyPerJoint:    3.50,
+  assemblyMax:         40.00,
 
-  // --- Primer ---
-  primerMaterialCost:       5.00,   // flat material cost per model (any primer colour)
-  primerLabourMultiplier:   0.50,   // × volume^(2/3) → surface-area-based labour
-  primerLabourMin:          1.50,   // minimum primer labour
-  primerLabourMax:          12.00,  // cap on primer labour
+  // --- Primer (unchanged) ---
+  primerMaterialCost:       5.00,
+  primerLabourMultiplier:   0.50,
+  primerLabourMin:          1.50,
+  primerLabourMax:          12.00,
+
+  // --- Resin material surcharges ---
+  // % added on top of the tier price for non-standard resins.
+  materialSurcharges: {
+    standard: 0,
+    tough:    15,
+    flexible: 20,
+    castable: 25,
+    dental:   35,
+  },
+
+  // --- Model types (govern which add-ons are relevant) ---
+  modelTypes: [
+    { id: 'mini-base-included', name: 'Miniature — base included', basesIncluded: true,  availableExtras: ['wings', 'weapon', 'banner'] },
+    { id: 'mini-base-separate', name: 'Miniature — base separate', basesIncluded: false, availableExtras: ['wings', 'weapon', 'banner'] },
+    { id: 'bust',               name: 'Display piece / bust',      basesIncluded: false, availableExtras: ['banner'] },
+    { id: 'terrain',            name: 'Terrain / scenery',         basesIncluded: true,  availableExtras: [] },
+    { id: 'other',              name: 'Other',                     basesIncluded: false, availableExtras: ['wings', 'weapon', 'banner', 'shield'] },
+  ],
+
+  // --- Extras (flat, fixed-price add-ons) ---
+  extras: [
+    { id: 'wings',  name: 'Wings',          price: 3.00 },
+    { id: 'weapon', name: 'Sword / Weapon', price: 1.50 },
+    { id: 'shield', name: 'Shield',         price: 1.50 },
+    { id: 'banner', name: 'Banner',         price: 2.50 },
+  ],
+
+  // --- Order guardrail ---
+  customQuoteOrderThreshold: 150.00,
 
   // --- Display ---
   currency:        'GBP',
@@ -42,11 +81,11 @@ export const DEFAULT_CONFIG = {
 
   // --- Materials ---
   materials: [
-    { id: 'standard',  name: 'Standard Resin',  costPerMl: 0.08, color: '#b0c4de', description: 'Great for display models' },
-    { id: 'tough',     name: 'Tough Resin',      costPerMl: 0.12, color: '#7ec8e3', description: 'Impact-resistant parts' },
-    { id: 'flexible',  name: 'Flexible Resin',   costPerMl: 0.15, color: '#f0a830', description: 'Bendable / rubber-like' },
-    { id: 'castable',  name: 'Castable Resin',   costPerMl: 0.28, color: '#ffd700', description: 'Lost-wax casting' },
-    { id: 'dental',    name: 'Dental/Medical',   costPerMl: 0.35, color: '#e8d5c4', description: 'Biocompatible grade' },
+    { id: 'standard',  name: 'Standard Resin',  color: '#b0c4de', description: 'Great for display models' },
+    { id: 'tough',     name: 'Tough Resin',      color: '#7ec8e3', description: 'Impact-resistant parts' },
+    { id: 'flexible',  name: 'Flexible Resin',   color: '#f0a830', description: 'Bendable / rubber-like' },
+    { id: 'castable',  name: 'Castable Resin',   color: '#ffd700', description: 'Lost-wax casting' },
+    { id: 'dental',    name: 'Dental/Medical',   color: '#e8d5c4', description: 'Biocompatible grade' },
   ],
 
   // --- Primer options (label only — cost controlled by fields above) ---
@@ -68,6 +107,9 @@ export function getConfig() {
         ...saved,
         materials:     saved.materials?.length     ? saved.materials     : DEFAULT_CONFIG.materials,
         primerOptions: saved.primerOptions?.length  ? saved.primerOptions : DEFAULT_CONFIG.primerOptions,
+        sizeTiers:     saved.sizeTiers?.length      ? saved.sizeTiers     : DEFAULT_CONFIG.sizeTiers,
+        modelTypes:    saved.modelTypes?.length     ? saved.modelTypes    : DEFAULT_CONFIG.modelTypes,
+        extras:        saved.extras?.length         ? saved.extras       : DEFAULT_CONFIG.extras,
       };
     }
   } catch { /* ignore */ }
