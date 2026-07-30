@@ -4,13 +4,13 @@
 // Files belong to a group. Multiple groups = multiple models.
 // ============================================================
 
-import { getConfig } from './config.js?v=9';
+import { getConfig } from './config.js?v=10';
 import { parseSTLFile } from './stl-parser.js?v=9';
 import { generateThumbnail, STLViewer } from './viewer.js?v=11';
 import {
   calcItemCost, calcGroupCost, calcOrderTotal, exceedsCustomQuoteThreshold,
   fmt, fmtMl, fmtMm, fmtHours,
-} from './calculator.js?v=9';
+} from './calculator.js?v=10';
 
 // ---- State -----------------------------------------------------------
 let config      = getConfig();
@@ -772,15 +772,12 @@ function generateOrderNumber() {
 function buildReviewGroupHTML(group, sym) {
   const gc = group.groupCost;
   if (!gc) return '';
-  const readyItems = group.items.filter(i => i.status === 'ready');
+  const readyItems = group.items.filter(i => i.status === 'ready' && i.cost?.tier);
 
   const filesHTML = readyItems.map(i => {
     const thumbHTML = i.thumbnail
       ? `<img src="${i.thumbnail}" alt="" class="review-thumb">`
       : `<div class="review-thumb review-thumb-ph">STL</div>`;
-    const supLabel = i.settings.presupported
-      ? `<span style="color:var(--green)">Pre-supported</span>`
-      : 'Standard supports';
     return `
       <div class="review-file-row">
         ${thumbHTML}
@@ -788,27 +785,35 @@ function buildReviewGroupHTML(group, sym) {
           <div class="review-file-name">${esc(shortName(i.name, 38))}</div>
           <div class="review-file-meta">
             ${esc(i.cost.materialName)} &middot; ×${i.settings.quantity}
-            &middot; ${Math.round(i.settings.scale * 100)}% scale
-            &middot; ${supLabel}
+            &middot; ${esc(i.cost.tier.name)} tier
           </div>
         </div>
         <div class="review-file-cost">${fmt(i.cost.totalCost, sym)}</div>
       </div>`;
   }).join('');
 
-  const extras = [];
-  if (gc.extrasCost > 0)
-    extras.push(`<div class="review-extra-row"><span>➕ Extras</span><span>+${fmt(gc.extrasCost, sym)}</span></div>`);
+  const extraLines = (group.settings.extras || []).map(extraId => {
+    const extra = config.extras.find(e => e.id === extraId);
+    return extra ? `<div class="review-extra-row"><span>➕ ${esc(extra.name)}</span><span>+${fmt(extra.price, sym)}</span></div>` : '';
+  }).join('');
+
+  const otherExtras = [];
   if (gc.assemblyCost > 0)
-    extras.push(`<div class="review-extra-row"><span>🔩 Assembly</span><span>+${fmt(gc.assemblyCost, sym)}</span></div>`);
+    otherExtras.push(`<div class="review-extra-row"><span>🔩 Assembly</span><span>+${fmt(gc.assemblyCost, sym)}</span></div>`);
   if (gc.isPrimed)
-    extras.push(`<div class="review-extra-row"><span>🎨 ${esc(config.primerOptions.find(p => p.id === gc.primerLabel)?.label || 'Primer')}</span><span>+${fmt(gc.primerTotal, sym)}</span></div>`);
+    otherExtras.push(`<div class="review-extra-row"><span>🎨 ${esc(config.primerOptions.find(p => p.id === gc.primerLabel)?.label || 'Primer')}</span><span>+${fmt(gc.primerTotal, sym)}</span></div>`);
+
+  const notesHTML = group.settings.notes?.trim()
+    ? `<div class="review-extra-row"><span>📝 Notes</span><span>${esc(group.settings.notes.trim())}</span></div>`
+    : '';
 
   return `
     <div class="review-group">
       <div class="review-group-hdr">${esc(group.name)}</div>
       ${filesHTML}
-      ${extras.join('')}
+      ${extraLines}
+      ${otherExtras.join('')}
+      ${notesHTML}
       <div class="review-group-subtotal">
         <span>${esc(group.name)} total</span>
         <span>${fmt(gc.groupTotal, sym)}</span>
@@ -1082,16 +1087,20 @@ function submitOrder(e) {
     orderNumber: _orderNumber,
     customer: { name, email, notes },
     groups: activeGroups.map(g => ({
-      name:     g.name,
-      assembly: g.settings.assembly,
-      primer:   g.settings.primer,
-      cost:     g.groupCost?.groupTotal,
-      files:    g.items.filter(i => i.status === 'ready').map(i => ({
+      name:      g.name,
+      modelType: g.settings.modelType,
+      extras:    g.settings.extras,
+      notes:     g.settings.notes,
+      assembly:  g.settings.assembly,
+      primer:    g.settings.primer,
+      cost:      g.groupCost?.groupTotal,
+      files:    g.items.filter(i => i.status === 'ready' && i.cost?.tier).map(i => ({
         filename:     i.name,
         material:     i.cost.materialName,
         presupported: i.settings.presupported,
         scale:        i.settings.scale,
         quantity:     i.settings.quantity,
+        tier:         i.cost.tier.name,
         unitCost:     i.cost.unitCost,
         total:        i.cost.totalCost,
       })),
