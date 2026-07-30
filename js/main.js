@@ -61,7 +61,13 @@ function findItem(id) {
 }
 
 function defaultGroupSettings() {
-  return { assembly: false, primer: 'unprimed' };
+  return {
+    assembly: false,
+    primer: 'unprimed',
+    modelType: config.modelTypes[0].id,
+    extras: [],
+    notes: '',
+  };
 }
 
 function createGroup(name) {
@@ -246,6 +252,24 @@ function buildGroupHTML(group) {
   const canAssemble   = totalParts >= 2;
   const assemblyActive = group.settings.assembly && canAssemble;
 
+  const selectedType = config.modelTypes.find(t => t.id === group.settings.modelType) ?? config.modelTypes[0];
+  const modelTypeOptions = config.modelTypes.map(t =>
+    `<option value="${esc(t.id)}" ${t.id === selectedType.id ? 'selected' : ''}>${esc(t.name)}</option>`
+  ).join('');
+  const extrasHTML = selectedType.availableExtras.length ? `
+    <div class="extras-list">
+      ${selectedType.availableExtras.map(extraId => {
+        const extra = config.extras.find(e => e.id === extraId);
+        if (!extra) return '';
+        const checked = (group.settings.extras || []).includes(extraId);
+        return `<label class="extra-row">
+          <input type="checkbox" data-action="extra-toggle" data-extra-id="${esc(extra.id)}" ${checked ? 'checked' : ''}>
+          <span>${esc(extra.name)}</span>
+          <span class="extra-price">+${fmt(extra.price, sym)}</span>
+        </label>`;
+      }).join('')}
+    </div>` : '';
+
   // Primer options
   const primerIcons = { unprimed: '🚫', black: '⬛', grey: '🔲', white: '⬜' };
   const primerOptions = config.primerOptions.map(p =>
@@ -277,9 +301,9 @@ function buildGroupHTML(group) {
     <div class="group-footer">
       <div class="group-costs">
         <span>Files subtotal</span><span>${fmt(gc.fileSubtotal, sym)}</span>
+        ${gc.extrasCost > 0 ? `<span>➕ Extras</span><span>+${fmt(gc.extrasCost, sym)}</span>` : ''}
         ${assemblyActive ? `<span>🔩 Assembly (${totalParts} parts)</span><span>+${fmt(gc.assemblyCost, sym)}</span>` : ''}
         ${gc.isPrimed ? `<span>🎨 ${esc(config.primerOptions.find(p => p.id === gc.primerLabel)?.label || 'Primer')}</span><span>+${fmt(gc.primerTotal, sym)}</span>` : ''}
-        <span>⚙️ Handling &amp; labour</span><span>+${fmt(gc.labourBase, sym)}</span>
       </div>
       <div class="group-total">
         <span>Model Total</span>
@@ -298,6 +322,18 @@ function buildGroupHTML(group) {
     </div>
 
     <div class="group-settings">
+
+      <div class="group-setting-block">
+        <div class="group-setting-label">🧩 Model Type</div>
+        <div class="group-setting-desc">
+          Tells us what kind of model this is, so we show the right add-ons.
+        </div>
+        <select class="model-type-select" data-action="model-type">
+          ${modelTypeOptions}
+        </select>
+        ${!selectedType.basesIncluded ? `<div class="control-hint">📎 Need a base? Upload it as an extra file using "Add Files to This Model" below — it's priced by size, same as the body.</div>` : ''}
+        ${extrasHTML}
+      </div>
 
       <div class="group-setting-block">
         <div class="group-setting-label">🎨 Primer Coating</div>
@@ -330,6 +366,12 @@ function buildGroupHTML(group) {
         </div>
       </div>
 
+    </div>
+
+    <div class="group-notes">
+      <label class="group-notes-label" for="notes-${group.id}">📝 Notes for this model (optional)</label>
+      <textarea class="group-notes-input" id="notes-${group.id}" data-action="notes"
+                placeholder="Any requests or things we should know about this model…">${esc(group.settings.notes || '')}</textarea>
     </div>
 
     <div class="group-items">${itemsHTML}</div>
@@ -413,11 +455,9 @@ function buildItemHTML(item, group) {
       <summary>💡 See cost breakdown</summary>
       <table class="breakdown-table">
         <tr><td>Volume at ${Math.round(item.settings.scale * 100)}% scale</td><td>${fmtMl(c.scaledVolumeMl)}</td></tr>
-        ${ps
-          ? `<tr class="row-saved"><td>✅ No support material (pre-supported)</td><td>—</td></tr>`
-          : `<tr><td>+ Support material (${supportPct}%)</td><td>${fmtMl(c.totalVolumeMl)}</td></tr>`}
-        <tr><td>Material cost</td><td>${fmt(c.resinCost, sym)}</td></tr>
-        <tr><td>Print &amp; finishing</td><td>${fmt(c.machineCost + c.markupAmount, sym)}</td></tr>
+        <tr><td>Size tier</td><td>${c.tier ? esc(c.tier.name) : 'Custom quote needed'}</td></tr>
+        ${c.tier ? `<tr><td>Tier price</td><td>${fmt(c.tier.price, sym)}</td></tr>` : ''}
+        ${c.surchargePct > 0 ? `<tr><td>${esc(c.materialName)} surcharge (${c.surchargePct}%)</td><td>${fmt(c.surchargeAmount, sym)}</td></tr>` : ''}
       </table>
     </details>` : '';
 
@@ -578,6 +618,26 @@ function handleGroupChange(e, group) {
   const action = el.dataset.action;
   const id     = el.dataset.id;
 
+  if (action === 'model-type') {
+    group.settings.modelType = el.value;
+    const type = config.modelTypes.find(t => t.id === el.value);
+    const allowed = new Set(type?.availableExtras ?? []);
+    group.settings.extras = (group.settings.extras || []).filter(id => allowed.has(id));
+    recomputeGroup(group);
+    renderAll();
+    return;
+  }
+
+  if (action === 'extra-toggle') {
+    const extraId = el.dataset.extraId;
+    const set = new Set(group.settings.extras || []);
+    if (el.checked) set.add(extraId); else set.delete(extraId);
+    group.settings.extras = [...set];
+    recomputeGroup(group);
+    renderAll();
+    return;
+  }
+
   if (action === 'primer') {
     group.settings.primer = el.value;
     recomputeGroup(group);
@@ -620,6 +680,10 @@ function handleGroupInput(e, group) {
   if (el.dataset.action === 'rename') {
     group.name = el.value || group.name;
     renderOrderSummary();
+    return;
+  }
+  if (el.dataset.action === 'notes') {
+    group.settings.notes = el.value;
   }
 }
 
@@ -779,9 +843,7 @@ function renderOrderSummary() {
     return;
   }
 
-  const rawTotal   = activeGroups.reduce((s, g) => s + (g.groupCost?.groupTotal ?? 0), 0);
-  const grandTotal = calcOrderTotal(activeGroups, config);
-  const minAdjust  = grandTotal - rawTotal;   // > 0 when minimum order floor was applied
+  const grandTotal = calcOrderTotal(activeGroups);
 
   const groupLines = activeGroups.map(g => {
     const gc = g.groupCost;
@@ -798,6 +860,11 @@ function renderOrderSummary() {
           <div class="sum-file-detail">
             ${esc(i.cost.materialName)} · ${Math.round(i.settings.scale * 100)}% scale · ${i.settings.presupported ? '<span style="color:var(--green)">Pre-sup.</span>' : 'Std. supports'}
           </div>`).join('')}
+        ${gc.extrasCost > 0 ? `
+          <div class="summary-line summary-line-extra">
+            <span class="sum-name">➕ Extras</span><span></span>
+            <span class="sum-price">+${fmt(gc.extrasCost, sym)}</span>
+          </div>` : ''}
         ${gc.assemblyCost > 0 ? `
           <div class="summary-line summary-line-extra">
             <span class="sum-name">🔩 Assembly</span><span></span>
@@ -808,10 +875,6 @@ function renderOrderSummary() {
             <span class="sum-name">🎨 ${esc(config.primerOptions.find(p => p.id === gc.primerLabel)?.label || 'Primer')}</span><span></span>
             <span class="sum-price">+${fmt(gc.primerTotal, sym)}</span>
           </div>` : ''}
-        <div class="summary-line summary-line-extra">
-          <span class="sum-name">⚙️ Handling &amp; labour</span><span></span>
-          <span class="sum-price">+${fmt(gc.labourBase, sym)}</span>
-        </div>
         <div class="summary-group-subtotal">
           <span>${esc(g.name)} total</span>
           <span>${fmt(gc.groupTotal, sym)}</span>
@@ -822,11 +885,6 @@ function renderOrderSummary() {
   if (panel) panel.innerHTML = `
     <h2 class="summary-title">Order Summary</h2>
     <div class="summary-groups">${groupLines}</div>
-    ${minAdjust > 0 ? `
-    <div class="summary-line summary-line-extra">
-      <span class="sum-name" style="color:var(--text-dim)">📋 Minimum order (${fmt(config.minimumItemCost, sym)})</span><span></span>
-      <span class="sum-price">+${fmt(minAdjust, sym)}</span>
-    </div>` : ''}
     <div class="summary-divider"></div>
     <div class="summary-total"><span>Grand Total</span><span>${fmt(grandTotal, sym)}</span></div>
     <p class="summary-note">💡 Estimate only — final price confirmed after file review.</p>
