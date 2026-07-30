@@ -8,7 +8,7 @@ import { getConfig } from './config.js?v=9';
 import { parseSTLFile } from './stl-parser.js?v=9';
 import { generateThumbnail, STLViewer } from './viewer.js?v=11';
 import {
-  calcItemCost, calcGroupCost, calcOrderTotal,
+  calcItemCost, calcGroupCost, calcOrderTotal, exceedsCustomQuoteThreshold,
   fmt, fmtMl, fmtMm, fmtHours,
 } from './calculator.js?v=9';
 
@@ -797,11 +797,12 @@ function buildReviewGroupHTML(group, sym) {
   }).join('');
 
   const extras = [];
+  if (gc.extrasCost > 0)
+    extras.push(`<div class="review-extra-row"><span>➕ Extras</span><span>+${fmt(gc.extrasCost, sym)}</span></div>`);
   if (gc.assemblyCost > 0)
     extras.push(`<div class="review-extra-row"><span>🔩 Assembly</span><span>+${fmt(gc.assemblyCost, sym)}</span></div>`);
   if (gc.isPrimed)
     extras.push(`<div class="review-extra-row"><span>🎨 ${esc(config.primerOptions.find(p => p.id === gc.primerLabel)?.label || 'Primer')}</span><span>+${fmt(gc.primerTotal, sym)}</span></div>`);
-  extras.push(`<div class="review-extra-row"><span>⚙️ Handling &amp; labour</span><span>+${fmt(gc.labourBase, sym)}</span></div>`);
 
   return `
     <div class="review-group">
@@ -1025,12 +1026,21 @@ function openOrderForm() {
   const activeGroups = groups.filter(g => g.items.some(i => i.status === 'ready'));
   if (!activeGroups.length) { showToast('No valid files to quote.', 'error'); return; }
 
+  const hasOversized = activeGroups.some(g => (g.groupCost?.oversizedCount ?? 0) > 0);
+  if (hasOversized) {
+    showToast('One or more files are too large to price automatically. Please scale them down or remove them before requesting a quote.', 'error');
+    return;
+  }
+
   const overlay = document.getElementById('order-overlay');
   if (!overlay) return;
 
   _orderNumber = generateOrderNumber();
   const sym        = config.currencySymbol;
   const grandTotal = calcOrderTotal(activeGroups, config);
+
+  const quoteNoteEl = document.getElementById('review-custom-quote-note');
+  if (quoteNoteEl) quoteNoteEl.style.display = exceedsCustomQuoteThreshold(grandTotal, config) ? 'block' : 'none';
 
   // Populate review step
   const numEl = document.getElementById('review-order-number');

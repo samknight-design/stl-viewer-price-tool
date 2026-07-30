@@ -198,6 +198,11 @@ img { display: block; max-width: 100%; }
 }
 .drop-zone p  { font-size: .85rem; color: var(--text-dim); }
 .drop-zone .drop-hint { margin-top: 10px; font-size: .76rem; color: var(--text-dim); }
+.ai-file-note {
+  margin-top: 8px; font-size: .74rem; color: var(--text-dim);
+  background: var(--bg3); border: 1px solid var(--card-border); border-radius: var(--radius-sm);
+  padding: 6px 10px; display: inline-block;
+}
 
 /* ---- Main grid ----------------------------------------------------- */
 .main-grid { display: grid; grid-template-columns: 1fr; gap: 20px; align-items: start; }
@@ -817,6 +822,12 @@ input.mat-color { padding: 2px; height: 32px; cursor: pointer; background: trans
   font-size: .78rem; color: var(--text-dim); line-height: 1.6;
   padding: 10px 14px; margin: 4px 0 16px;
   background: rgba(28,109,87,.04); border: 1px solid rgba(28,109,87,.15); border-radius: var(--radius-sm);
+}
+.review-custom-quote-note {
+  font-size: .8rem; color: var(--amber); line-height: 1.6;
+  padding: 10px 14px; margin: 4px 0 12px;
+  background: rgba(196,119,0,.08); border: 1px solid rgba(196,119,0,.3); border-radius: var(--radius-sm);
+  font-weight: 600;
 }
 .review-back-row {
   display: flex; align-items: center; justify-content: space-between;

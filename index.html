@@ -45,6 +45,7 @@
     <h3 class="drop-title-touch">Tap to Browse Your Files</h3>
     <p>or click to browse your files</p>
     <p class="drop-hint">Supports binary &amp; ASCII .stl · Multiple files at once · .lys (Lychee Slicer) files detected — export as STL first</p>
+    <p class="ai-file-note">🤖 Using an AI-generated model? These often need cleanup (thin walls, no drain holes, poor overhangs) before they'll print cleanly — mention it in that model's notes so we can check before starting.</p>
   </div>
   <input type="file" id="file-input" accept=".stl,.lys" multiple hidden>
 
@@ -122,10 +123,13 @@
           <span>Grand Total (estimated)</span>
           <span id="review-order-total">—</span>
         </div>
+        <p class="review-custom-quote-note" id="review-custom-quote-note" style="display:none">
+          🔍 Orders over £150 are personally reviewed before we confirm pricing — we'll be in touch if anything needs adjusting.
+        </p>
         <p class="review-disclaimer-note">
           ⚠️ Please review your order carefully before continuing.
           Ensure all scales, quantities, and material choices are correct.
-          Incorrect details may delay your order.
+          All orders are reviewed by hand before we confirm — you're welcome to cancel at that point if anything needs changing.
         </p>
         <div class="form-actions">
           <button class="btn btn-primary btn-lg" id="review-continue-btn">Continue to Contact Details →</button>
