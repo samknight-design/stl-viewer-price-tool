@@ -64,7 +64,6 @@ function defaultGroupSettings() {
   return {
     assembly: false,
     primer: 'unprimed',
-    modelType: config.modelTypes[0].id,
     extras: [],
     notes: '',
   };
@@ -252,16 +251,10 @@ function buildGroupHTML(group) {
   const canAssemble   = totalParts >= 2;
   const assemblyActive = group.settings.assembly && canAssemble;
 
-  const selectedType = config.modelTypes.find(t => t.id === group.settings.modelType) ?? config.modelTypes[0];
-  const modelTypeOptions = config.modelTypes.map(t =>
-    `<option value="${esc(t.id)}" ${t.id === selectedType.id ? 'selected' : ''}>${esc(t.name)}</option>`
-  ).join('');
-  const extrasHTML = selectedType.availableExtras.length ? `
+  const extrasHTML = config.extras.length ? `
     <div class="extras-list">
-      ${selectedType.availableExtras.map(extraId => {
-        const extra = config.extras.find(e => e.id === extraId);
-        if (!extra) return '';
-        const checked = (group.settings.extras || []).includes(extraId);
+      ${config.extras.map(extra => {
+        const checked = (group.settings.extras || []).includes(extra.id);
         return `<label class="extra-row">
           <input type="checkbox" data-action="extra-toggle" data-extra-id="${esc(extra.id)}" ${checked ? 'checked' : ''}>
           <span>${esc(extra.name)}</span>
@@ -324,14 +317,11 @@ function buildGroupHTML(group) {
     <div class="group-settings">
 
       <div class="group-setting-block">
-        <div class="group-setting-label">🧩 Model Type</div>
+        <div class="group-setting-label">➕ Extras</div>
         <div class="group-setting-desc">
-          Tells us what kind of model this is, so we show the right add-ons.
+          Optional add-ons for this model. Need a separate base? Upload it as an extra file using
+          "Add Files to This Model" below — it's priced by size, same as the body.
         </div>
-        <select class="model-type-select" data-action="model-type">
-          ${modelTypeOptions}
-        </select>
-        ${!selectedType.basesIncluded ? `<div class="control-hint">📎 Need a base? Upload it as an extra file using "Add Files to This Model" below — it's priced by size, same as the body.</div>` : ''}
         ${extrasHTML}
       </div>
 
@@ -455,6 +445,7 @@ function buildItemHTML(item, group) {
       <table class="breakdown-table">
         <tr><td>Size tier: ${esc(c.tier.name)} (largest side ≤ ${c.tier.maxDimensionMm ? c.tier.maxDimensionMm + 'mm' : 'build plate'})</td><td>${fmt(c.tier.price, sym)}</td></tr>
         ${c.surchargePct > 0 ? `<tr><td>${esc(c.materialName)} surcharge (+${c.surchargePct}%)</td><td>${fmt(c.surchargeAmount, sym)}</td></tr>` : ''}
+        ${c.supportHandlingFee > 0 ? `<tr><td>Support handling (no pre-supported file)</td><td>${fmt(c.supportHandlingFee, sym)}</td></tr>` : ''}
       </table>
     </details>` : '';
 
@@ -505,8 +496,8 @@ function buildItemHTML(item, group) {
             </div>
             <div class="control-hint ${ps ? 'hint-green' : ''}">
               ${ps
-                ? '✅ Marked as already supported — no changes needed on our end.'
-                : 'We’ll add supports during printing as needed — this doesn’t change the price.'}
+                ? '✅ Marked as already supported — this saves us time, so it’s priced a little cheaper.'
+                : 'We’ll add supports during printing — a small handling fee applies, and your file’s effective size for pricing includes an allowance for the extra support material.'}
             </div>
           </div>
 
@@ -615,16 +606,6 @@ function handleGroupChange(e, group) {
   const el     = e.target;
   const action = el.dataset.action;
   const id     = el.dataset.id;
-
-  if (action === 'model-type') {
-    group.settings.modelType = el.value;
-    const type = config.modelTypes.find(t => t.id === el.value);
-    const allowed = new Set(type?.availableExtras ?? []);
-    group.settings.extras = (group.settings.extras || []).filter(id => allowed.has(id));
-    recomputeGroup(group);
-    renderAll();
-    return;
-  }
 
   if (action === 'extra-toggle') {
     const extraId = el.dataset.extraId;
@@ -1088,7 +1069,6 @@ function submitOrder(e) {
     customer: { name, email, notes },
     groups: activeGroups.map(g => ({
       name:      g.name,
-      modelType: g.settings.modelType,
       extras:    g.settings.extras,
       notes:     g.settings.notes,
       assembly:  g.settings.assembly,

@@ -54,8 +54,28 @@ export function calcItemCost(stlData, settings, config) {
   };
   const scaledVolumeMl = stlData.volumeMl * Math.pow(scale, 3);
 
-  const tier = calcSizeTier(scaledDims, config);
+  // A standard (non pre-supported) file is bare — we'll add supports before
+  // printing, which grows its real footprint beyond what's in the upload.
+  // A pre-supported file's own mesh already includes that support geometry,
+  // so its measured size is honest as-is. Inflate a standard file's
+  // tier-lookup dimensions to estimate that growth, so the SAME model
+  // uploaded both ways lands in the same (or a very close) size tier
+  // instead of the bare version gaming its way into a cheaper one. This
+  // never touches the displayed print size or resin volume, only which
+  // tier/build-plate-fit result is used.
+  const supportInflation = presupported ? 1 : 1 + (config.supportSizeInflationPct ?? 0) / 100;
+  const tierDims = {
+    x: scaledDims.x * supportInflation,
+    y: scaledDims.y * supportInflation,
+    z: scaledDims.z * supportInflation,
+  };
+
+  const tier = calcSizeTier(tierDims, config);
   const surchargePct = config.materialSurcharges?.[materialId] ?? 0;
+  // Small flat fee for us adding supports ourselves, so pre-supported always
+  // prices a little cheaper than an equivalent standard upload — even when
+  // both land in the same tier.
+  const supportHandlingFee = presupported ? 0 : (config.unsupportedHandlingFee ?? 0);
 
   if (!tier) {
     return {
@@ -66,13 +86,14 @@ export function calcItemCost(stlData, settings, config) {
       tier: null,
       fitsBuildPlate: false,
       surchargePct,
+      supportHandlingFee,
       unitCost: 0,
       totalCost: 0,
     };
   }
 
   const surchargeAmount = tier.price * (surchargePct / 100);
-  const unitCost  = tier.price + surchargeAmount;
+  const unitCost  = tier.price + surchargeAmount + supportHandlingFee;
   const totalCost = unitCost * quantity;
 
   return {
@@ -84,6 +105,7 @@ export function calcItemCost(stlData, settings, config) {
     fitsBuildPlate: true,
     surchargePct,
     surchargeAmount,
+    supportHandlingFee,
     unitCost,
     totalCost,
   };

@@ -49,16 +49,7 @@ export const DEFAULT_CONFIG = {
     dental:   35,
   },
 
-  // --- Model types (govern which add-ons are relevant) ---
-  modelTypes: [
-    { id: 'mini-base-included', name: 'Miniature — base included', basesIncluded: true,  availableExtras: ['wings', 'weapon', 'banner'] },
-    { id: 'mini-base-separate', name: 'Miniature — base separate', basesIncluded: false, availableExtras: ['wings', 'weapon', 'banner'] },
-    { id: 'bust',               name: 'Display piece / bust',      basesIncluded: false, availableExtras: ['banner'] },
-    { id: 'terrain',            name: 'Terrain / scenery',         basesIncluded: true,  availableExtras: [] },
-    { id: 'other',              name: 'Other',                     basesIncluded: false, availableExtras: ['wings', 'weapon', 'banner', 'shield'] },
-  ],
-
-  // --- Extras (flat, fixed-price add-ons) ---
+  // --- Extras (flat, fixed-price add-ons, available on every model) ---
   extras: [
     { id: 'wings',  name: 'Wings',          price: 3.00 },
     { id: 'weapon', name: 'Sword / Weapon', price: 1.50 },
@@ -68,6 +59,21 @@ export const DEFAULT_CONFIG = {
 
   // --- Order guardrail ---
   customQuoteOrderThreshold: 150.00,
+
+  // --- Support-fairness adjustment ---
+  // Tier lookup is based on measured dimensions, but a "pre-supported" file's
+  // own mesh already includes its support geometry (so its measured size is
+  // honest), while a "standard" file is bare and gets supports added by us
+  // afterwards — which grows its real printed footprint beyond what's in the
+  // upload. Without correcting for this, uploading the same model without
+  // supports would exploit a cheaper size tier. supportSizeInflationPct is
+  // applied (for tier/build-plate purposes only, never to the displayed
+  // print size) to a standard file's dimensions to estimate that growth.
+  // unsupportedHandlingFee is a small flat fee on top, so a pre-supported
+  // upload always comes out at least a little cheaper than an equivalent
+  // standard one, even when both land in the same tier.
+  supportSizeInflationPct: 8,
+  unsupportedHandlingFee: 0.20,
 
   // --- Display ---
   currency:        'GBP',
@@ -108,7 +114,6 @@ export function getConfig() {
         materials:     saved.materials?.length     ? saved.materials     : DEFAULT_CONFIG.materials,
         primerOptions: saved.primerOptions?.length  ? saved.primerOptions : DEFAULT_CONFIG.primerOptions,
         sizeTiers:     saved.sizeTiers?.length      ? saved.sizeTiers     : DEFAULT_CONFIG.sizeTiers,
-        modelTypes:    saved.modelTypes?.length     ? saved.modelTypes    : DEFAULT_CONFIG.modelTypes,
         extras:        saved.extras?.length         ? saved.extras       : DEFAULT_CONFIG.extras,
       };
     }
