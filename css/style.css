@@ -422,6 +422,11 @@ details[open] > summary::before { transform: rotate(90deg); }
   padding: 8px 10px; border: 1px solid var(--card-border);
   border-radius: var(--radius-sm); background: var(--bg3);
 }
+.summary-min-note {
+  font-size: .78rem; color: var(--accent); font-weight: 600; line-height: 1.5;
+  padding: 8px 10px; margin-bottom: 12px;
+  border: 1px solid var(--accent-glow); border-radius: var(--radius-sm); background: var(--accent-glow);
+}
 
 /* ---- 3D Viewer Modal — always dark --------------------------------- */
 .modal-backdrop {
@@ -876,6 +881,12 @@ input.mat-color { padding: 2px; height: 32px; cursor: pointer; background: trans
   font-size: .8rem; color: var(--amber); line-height: 1.6;
   padding: 10px 14px; margin: 4px 0 12px;
   background: rgba(196,119,0,.08); border: 1px solid rgba(196,119,0,.3); border-radius: var(--radius-sm);
+  font-weight: 600;
+}
+.review-minimum-note {
+  font-size: .8rem; color: var(--accent); line-height: 1.6;
+  padding: 10px 14px; margin: 4px 0 12px;
+  background: var(--accent-glow); border: 1px solid var(--accent-glow); border-radius: var(--radius-sm);
   font-weight: 600;
 }
 .review-back-row {

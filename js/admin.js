@@ -70,7 +70,7 @@ function renderForm() {
   f('inp-machine-hourly').value      = config.machineHourlyCost;
   f('inp-print-speed').value         = config.printSpeedMlPerHour;
   f('inp-markup').value              = config.markupPercentage;
-  f('inp-minimum').value             = config.minimumItemCost;
+  f('inp-minimum').value             = config.minimumOrderTotal;
   f('inp-labour-base').value         = config.labourBaseFee;
   f('inp-currency-symbol').value     = config.currencySymbol;
   f('inp-biz-name').value            = config.businessName;
@@ -187,7 +187,7 @@ function collectForm() {
   config.machineHourlyCost      = num('inp-machine-hourly',       DEFAULT_CONFIG.machineHourlyCost);
   config.printSpeedMlPerHour    = num('inp-print-speed',          DEFAULT_CONFIG.printSpeedMlPerHour);
   config.markupPercentage       = num('inp-markup',               DEFAULT_CONFIG.markupPercentage);
-  config.minimumItemCost        = num('inp-minimum',              DEFAULT_CONFIG.minimumItemCost);
+  config.minimumOrderTotal      = num('inp-minimum',              DEFAULT_CONFIG.minimumOrderTotal);
   config.labourBaseFee          = num('inp-labour-base',          DEFAULT_CONFIG.labourBaseFee);
   config.currencySymbol         = str('inp-currency-symbol',      '£');
   config.businessName           = str('inp-biz-name',             DEFAULT_CONFIG.businessName);

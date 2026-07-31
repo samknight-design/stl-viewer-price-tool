@@ -111,8 +111,9 @@ export const DEFAULT_CONFIG = {
     { id: 'banner', name: 'Banner',         price: 2.50 },
   ],
 
-  // --- Order guardrail ---
+  // --- Order guardrails ---
   customQuoteOrderThreshold: 150.00,
+  minimumOrderTotal:         5.00,   // whole-order floor; individual items can be cheaper than this
 
   // --- Support-fairness adjustment ---
   // Tier lookup is based on measured dimensions, but a "pre-supported" file's

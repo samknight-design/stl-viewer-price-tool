@@ -4,13 +4,13 @@
 // Files belong to a group. Multiple groups = multiple models.
 // ============================================================
 
-import { getConfig } from './config.js?v=10';
+import { getConfig } from './config.js?v=11';
 import { parseSTLFile } from './stl-parser.js?v=9';
 import { generateThumbnail, STLViewer } from './viewer.js?v=11';
 import {
-  calcItemCost, calcGroupCost, calcOrderTotal, exceedsCustomQuoteThreshold,
-  fmt, fmtMm,
-} from './calculator.js?v=10';
+  calcItemCost, calcGroupCost, calcOrderTotal, calcOrderMinimumShortfall,
+  exceedsCustomQuoteThreshold, fmt, fmtMm,
+} from './calculator.js?v=11';
 
 // ---- State -----------------------------------------------------------
 let config      = getConfig();
@@ -920,7 +920,8 @@ function renderOrderSummary() {
     return;
   }
 
-  const grandTotal = calcOrderTotal(activeGroups);
+  const grandTotal = calcOrderTotal(activeGroups, config);
+  const minimumShortfall = calcOrderMinimumShortfall(activeGroups, config);
 
   const groupLines = activeGroups.map(g => {
     const gc = g.groupCost;
@@ -964,6 +965,9 @@ function renderOrderSummary() {
     <div class="summary-groups">${groupLines}</div>
     <div class="summary-divider"></div>
     <div class="summary-total"><span>Grand Total</span><span>${fmt(grandTotal, sym)}</span></div>
+    ${minimumShortfall > 0 ? `
+      <p class="summary-min-note">✨ You're already covered by our ${fmt(config.minimumOrderTotal, sym)} order minimum — add up to ${fmt(minimumShortfall, sym)} more in parts at no extra cost!</p>
+    ` : ''}
     <p class="summary-note">💡 Estimate only — final price confirmed after file review.</p>
     <button class="btn btn-primary btn-lg" id="request-quote-btn">Request a Quote →</button>
   `;
@@ -1115,10 +1119,17 @@ function openOrderForm() {
 
   _orderNumber = generateOrderNumber();
   const sym        = config.currencySymbol;
-  const grandTotal = calcOrderTotal(activeGroups);
+  const grandTotal = calcOrderTotal(activeGroups, config);
+  const minimumShortfall = calcOrderMinimumShortfall(activeGroups, config);
 
   const quoteNoteEl = document.getElementById('review-custom-quote-note');
   if (quoteNoteEl) quoteNoteEl.style.display = exceedsCustomQuoteThreshold(grandTotal, config) ? 'block' : 'none';
+
+  const minNoteEl = document.getElementById('review-minimum-note');
+  if (minNoteEl) {
+    minNoteEl.style.display = minimumShortfall > 0 ? 'block' : 'none';
+    minNoteEl.textContent = `✨ You're already covered by our ${fmt(config.minimumOrderTotal, sym)} order minimum — add up to ${fmt(minimumShortfall, sym)} more in parts at no extra cost!`;
+  }
 
   // Populate review step
   const numEl = document.getElementById('review-order-number');
@@ -1154,7 +1165,7 @@ function submitOrder(e) {
   if (!disclaimer)     { showToast('Please tick the confirmation checkbox to continue.', 'error'); return; }
 
   const activeGroups = groups.filter(g => g.items.some(i => i.status === 'ready'));
-  const grandTotal   = calcOrderTotal(activeGroups);
+  const grandTotal   = calcOrderTotal(activeGroups, config);
 
   const payload = {
     orderNumber: _orderNumber,

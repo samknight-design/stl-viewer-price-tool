@@ -4,7 +4,7 @@
 // unchanged assembly/primer add-ons.
 // ============================================================
 
-import { getMaterial } from './config.js?v=10';
+import { getMaterial } from './config.js?v=11';
 
 // ---- Build plate fit check --------------------------------------------
 
@@ -203,8 +203,38 @@ export function calcGroupCost(items, groupSettings, config) {
 
 // ---- Order total -----------------------------------------------------
 
-export function calcOrderTotal(groups) {
+function sumGroupTotals(groups) {
   return groups.reduce((s, g) => s + (g.groupCost?.groupTotal ?? 0), 0);
+}
+
+function hasPriceableItems(groups) {
+  return groups.some(g => (g.groupCost?.totalPartCount ?? 0) > 0);
+}
+
+/**
+ * Grand total across all groups, floored at config.minimumOrderTotal once
+ * there's at least one actually-priceable item (an empty cart, or one
+ * containing only oversized/unpriceable files, is never bumped up to a
+ * fake minimum).
+ */
+export function calcOrderTotal(groups, config) {
+  const rawTotal = sumGroupTotals(groups);
+  const minimum  = config?.minimumOrderTotal ?? 0;
+  if (!minimum || !hasPriceableItems(groups)) return rawTotal;
+  return Math.max(rawTotal, minimum);
+}
+
+/**
+ * How much more (in currency units) the order needs to reach
+ * config.minimumOrderTotal — 0 if the minimum doesn't apply or is
+ * already met. Lets the UI nudge the customer to add more before they
+ * hit the minimum anyway.
+ */
+export function calcOrderMinimumShortfall(groups, config) {
+  const rawTotal = sumGroupTotals(groups);
+  const minimum  = config?.minimumOrderTotal ?? 0;
+  if (!minimum || !hasPriceableItems(groups) || rawTotal >= minimum) return 0;
+  return minimum - rawTotal;
 }
 
 export function exceedsCustomQuoteThreshold(grandTotal, config) {
