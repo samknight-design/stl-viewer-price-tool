@@ -114,8 +114,9 @@ Deno.test("POST /files uploads and returns file id/url", async () => {
   });
 });
 
-Deno.test("POST /checkout below threshold creates a priced variant", async () => {
+Deno.test("POST /checkout below threshold creates a priced variant and returns first line item's properties", async () => {
   const deps = fakeDeps({
+    getShopConfig: () => Promise.resolve(null),
     createPricedVariant: () => Promise.resolve({ variantId: 999 }),
   });
   const res = await handleRequest(
@@ -127,17 +128,30 @@ Deno.test("POST /checkout below threshold creates a priced variant", async () =>
         customerName: "Jane Smith",
         grandTotal: 17.68,
         thresholdExceeded: false,
-        lineItems: [{ title: "Model 1", price: "17.68", quantity: 1, properties: [] }],
+        lineItems: [{
+          title: "Model 1",
+          price: "17.68",
+          quantity: 1,
+          properties: [
+            { name: "_quote_ref", value: "AF-1" },
+            { name: "_model_name", value: "Model 1" },
+          ],
+        }],
       }),
     }),
     deps,
   );
   assertEquals(res.status, 200);
-  assertEquals(await res.json(), { mode: "cart", variantId: 999 });
+  assertEquals(await res.json(), {
+    mode: "cart",
+    variantId: 999,
+    properties: { _quote_ref: "AF-1", _model_name: "Model 1" },
+  });
 });
 
 Deno.test("POST /checkout above threshold creates a draft order", async () => {
   const deps = fakeDeps({
+    getShopConfig: () => Promise.resolve(null),
     createDraftOrder: () => Promise.resolve({ invoiceUrl: "https://example.com/invoice" }),
   });
   const res = await handleRequest(
@@ -156,6 +170,86 @@ Deno.test("POST /checkout above threshold creates a draft order", async () => {
   );
   assertEquals(res.status, 200);
   assertEquals(await res.json(), { mode: "draft-order", invoiceUrl: "https://example.com/invoice" });
+});
+
+Deno.test("POST /checkout rejects a grandTotal that doesn't match the line items' price*quantity", async () => {
+  const deps = fakeDeps({
+    getShopConfig: () => Promise.resolve(null),
+    createPricedVariant: () => Promise.resolve({ variantId: 999 }),
+  });
+  const res = await handleRequest(
+    new Request("https://relay.test/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        customerEmail: "jane@example.com",
+        customerName: "Jane Smith",
+        grandTotal: 0.01, // tampered — real line item total is 180.00
+        thresholdExceeded: false,
+        lineItems: [{ title: "Model 1", price: "180.00", quantity: 1, properties: [] }],
+      }),
+    }),
+    deps,
+  );
+  assertEquals(res.status, 400);
+});
+
+Deno.test("POST /checkout forces a draft order server-side when grandTotal exceeds the configured threshold, even if thresholdExceeded is false", async () => {
+  let draftOrderCalled = false;
+  let variantCalled = false;
+  const deps = fakeDeps({
+    getShopConfig: () => Promise.resolve({ customQuoteOrderThreshold: 150 }),
+    createDraftOrder: () => {
+      draftOrderCalled = true;
+      return Promise.resolve({ invoiceUrl: "https://example.com/invoice" });
+    },
+    createPricedVariant: () => {
+      variantCalled = true;
+      return Promise.resolve({ variantId: 999 });
+    },
+  });
+  const res = await handleRequest(
+    new Request("https://relay.test/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        customerEmail: "jane@example.com",
+        customerName: "Jane Smith",
+        grandTotal: 200, // over the configured threshold
+        thresholdExceeded: false, // client tries to bypass manual review
+        lineItems: [{ title: "Model 1", price: "200.00", quantity: 1, properties: [] }],
+      }),
+    }),
+    deps,
+  );
+  assertEquals(res.status, 200);
+  assertEquals(await res.json(), { mode: "draft-order", invoiceUrl: "https://example.com/invoice" });
+  assertEquals(draftOrderCalled, true);
+  assertEquals(variantCalled, false);
+});
+
+Deno.test("POST /checkout returns a generic 500 (no leaked details) when a downstream dependency throws", async () => {
+  const deps = fakeDeps({
+    getShopConfig: () => Promise.resolve(null),
+    createPricedVariant: () => Promise.reject(new Error("Shopify GraphQL error: secret internal detail")),
+  });
+  const res = await handleRequest(
+    new Request("https://relay.test/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        customerEmail: "jane@example.com",
+        customerName: "Jane Smith",
+        grandTotal: 17.68,
+        thresholdExceeded: false,
+        lineItems: [{ title: "Model 1", price: "17.68", quantity: 1, properties: [] }],
+      }),
+    }),
+    deps,
+  );
+  assertEquals(res.status, 500);
+  const body = await res.json();
+  assertEquals(body, { error: "Internal error" });
 });
 
 Deno.test("OPTIONS request returns CORS headers with no body", async () => {
