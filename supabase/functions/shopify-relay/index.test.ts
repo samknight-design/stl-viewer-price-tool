@@ -194,6 +194,31 @@ Deno.test("POST /checkout rejects a grandTotal that doesn't match the line items
   assertEquals(res.status, 400);
 });
 
+Deno.test("POST /checkout accepts a grandTotal bumped up to the configured minimumOrderTotal", async () => {
+  const deps = fakeDeps({
+    getShopConfig: () => Promise.resolve({ minimumOrderTotal: 5 }),
+    createPricedVariant: () => Promise.resolve({ variantId: 999 }),
+  });
+  const res = await handleRequest(
+    new Request("https://relay.test/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        customerEmail: "jane@example.com",
+        customerName: "Jane Smith",
+        // Raw line item total is 3.20, but the frontend bumps grandTotal up
+        // to the configured whole-order minimum (5.00) before submitting.
+        grandTotal: 5.00,
+        thresholdExceeded: false,
+        lineItems: [{ title: "Tiny Model", price: "3.20", quantity: 1, properties: [] }],
+      }),
+    }),
+    deps,
+  );
+  assertEquals(res.status, 200);
+  assertEquals(await res.json(), { mode: "cart", variantId: 999, properties: {} });
+});
+
 Deno.test("POST /checkout forces a draft order server-side when grandTotal exceeds the configured threshold, even if thresholdExceeded is false", async () => {
   let draftOrderCalled = false;
   let variantCalled = false;
@@ -250,6 +275,17 @@ Deno.test("POST /checkout returns a generic 500 (no leaked details) when a downs
   assertEquals(res.status, 500);
   const body = await res.json();
   assertEquals(body, { error: "Internal error" });
+});
+
+Deno.test("POST /checkout with malformed JSON body returns 400, not 500", async () => {
+  const res = await handleRequest(
+    new Request("https://relay.test/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{not valid json",
+    }),
+  );
+  assertEquals(res.status, 400);
 });
 
 Deno.test("OPTIONS request returns CORS headers with no body", async () => {
