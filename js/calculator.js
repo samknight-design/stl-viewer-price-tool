@@ -4,7 +4,7 @@
 // unchanged assembly/primer add-ons.
 // ============================================================
 
-import { getMaterial } from './config.js?v=11';
+import { getMaterial } from './config.js?v=13';
 
 // ---- Build plate fit check --------------------------------------------
 
@@ -61,8 +61,27 @@ export function calcSizeTier(dims, config) {
 
 // ---- Per-file cost ---------------------------------------------------
 
-export function calcItemCost(stlData, settings, config) {
-  const { scale = 1.0, quantity = 1, materialId, presupported = false } = settings;
+/**
+ * printMethod is a per-MODEL choice ('resin' or 'pla'), not per-part —
+ * every item in a group prints the same way. Resin keeps the existing
+ * size-tiered pricing (see calcSizeTier). PLA/FDM is priced purely by
+ * volume (config.fdm.costPerMl) — no size tiers, no support handling
+ * fee (those are resin-specific) — but IS still checked against
+ * config.fdmBuildPlate, since a print can be physically too big for the
+ * printer regardless of pricing model.
+ *
+ * PLA colour, however, IS per-part (settings.plaColor) — each part
+ * prints in exactly one colour, and its surcharge is a % of that part's
+ * own cost (config.plaColorSurchargePct), so it scales with print size
+ * instead of being a flat fee that overcharges small parts and
+ * undercharges large ones.
+ *
+ * `priceable` is the generalized "does this item have a valid price" flag
+ * that callers should check instead of `tier` (which is always null for
+ * PLA by design, not because the item failed to price).
+ */
+export function calcItemCost(stlData, settings, config, printMethod = 'resin') {
+  const { scale = 1.0, quantity = 1, materialId, presupported = false, plaColor } = settings;
   const material = getMaterial(config, materialId);
 
   const scaledDims = {
@@ -71,6 +90,48 @@ export function calcItemCost(stlData, settings, config) {
     z: stlData.dimensions.z * scale,
   };
   const scaledVolumeMl = stlData.volumeMl * Math.pow(scale, 3);
+
+  if (printMethod === 'pla') {
+    if (!fitsBuildPlate(scaledDims, config.fdmBuildPlate)) {
+      return {
+        scale, quantity,
+        materialName: 'PLA',
+        presupported: false,
+        scaledDims, scaledVolumeMl,
+        tier: null,
+        priceable: false,
+        fitsBuildPlate: false,
+        surchargePct: 0,
+        supportHandlingFee: 0,
+        unitCost: 0,
+        totalCost: 0,
+      };
+    }
+
+    const costPerMl  = config.fdm?.costPerMl ?? 0;
+    const baseCost   = scaledVolumeMl * costPerMl;
+    const colorInfo  = config.plaColors?.find(c => c.id === plaColor);
+    const colorSurchargePct = colorInfo ? (config.plaColorSurchargePct?.[colorInfo.tier] ?? 0) : 0;
+    const colorSurchargeAmount = baseCost * (colorSurchargePct / 100);
+    const unitCost  = baseCost + colorSurchargeAmount;
+    const totalCost = unitCost * quantity;
+    return {
+      scale, quantity,
+      materialName: colorInfo ? `PLA (${colorInfo.name})` : 'PLA',
+      presupported: false,
+      scaledDims, scaledVolumeMl,
+      tier: null,
+      priceable: true,
+      fitsBuildPlate: true,
+      baseCost,
+      colorSurchargePct,
+      colorSurchargeAmount,
+      surchargePct: 0,
+      supportHandlingFee: 0,
+      unitCost,
+      totalCost,
+    };
+  }
 
   // A standard (non pre-supported) file is bare — we'll add supports before
   // printing, which grows its real footprint beyond what's in the upload.
@@ -98,6 +159,7 @@ export function calcItemCost(stlData, settings, config) {
       presupported,
       scaledDims, scaledVolumeMl,
       tier: null,
+      priceable: false,
       fitsBuildPlate: false,
       surchargePct,
       supportHandlingFee: 0,
@@ -121,6 +183,7 @@ export function calcItemCost(stlData, settings, config) {
     presupported,
     scaledDims, scaledVolumeMl,
     tier,
+    priceable: true,
     fitsBuildPlate: true,
     surchargePct,
     surchargeAmount,
@@ -168,14 +231,17 @@ export function calcPrimerCost(totalVolumeMl, primerType, config) {
 
 export function calcGroupCost(items, groupSettings, config) {
   const readyItems     = items.filter(i => i.status === 'ready' && i.cost);
-  const priceableItems = readyItems.filter(i => i.cost.tier);
+  const priceableItems = readyItems.filter(i => i.cost.priceable);
   const oversizedCount = readyItems.length - priceableItems.length;
 
   const fileSubtotal   = priceableItems.reduce((s, i) => s + i.cost.totalCost, 0);
   const totalVolumeMl  = priceableItems.reduce((s, i) => s + i.cost.scaledVolumeMl * i.settings.quantity, 0);
   const totalPartCount = priceableItems.reduce((s, i) => s + i.settings.quantity, 0);
 
-  const { assembly = false, primer = 'unprimed', extras = [] } = groupSettings;
+  const {
+    assembly = false, primer = 'unprimed', extras = [],
+    printMethod = 'resin',
+  } = groupSettings;
 
   const extrasCost = extras.reduce((s, extraId) => {
     const extra = config.extras.find(e => e.id === extraId);
@@ -184,6 +250,13 @@ export function calcGroupCost(items, groupSettings, config) {
 
   const assemblyCost = assembly ? calcAssemblyCost(totalPartCount, config) : 0;
   const primerResult = calcPrimerCost(totalVolumeMl, primer, config);
+
+  // PLA colour surcharge is priced per part (in calcItemCost) and is
+  // already folded into fileSubtotal via each item's totalCost — this is
+  // just the sum for display purposes (e.g. a "colour surcharge" line).
+  const plaColorCost = priceableItems.reduce(
+    (s, i) => s + (i.cost.colorSurchargeAmount ?? 0) * i.settings.quantity, 0
+  );
 
   const groupTotal = fileSubtotal + extrasCost + assemblyCost + primerResult.total;
 
@@ -195,6 +268,8 @@ export function calcGroupCost(items, groupSettings, config) {
     extrasCost,
     assemblyCost,
     primerTotal: primerResult.total,
+    printMethod,
+    plaColorCost,
     groupTotal,
     isPrimed:    primer !== 'unprimed',
     primerLabel: primer,

@@ -103,6 +103,60 @@ export const DEFAULT_CONFIG = {
     dental:   35,
   },
 
+  // --- Print method (per model): Resin (size-tiered) vs PLA/FDM ---
+  // FDM is priced purely by print volume (no size tiers, no support
+  // handling fee — those are resin-specific), but IS still checked
+  // against a build-plate fit (fdmBuildPlate below), since a print can
+  // still be physically too big for the printer regardless of price model.
+  fdm: {
+    costPerMl: 0.12,
+  },
+
+  // Bambu Lab X1 Carbon's build volume is 256×256×256mm; usable space is
+  // reduced by supportMarginPct to leave a safety margin (same mechanism
+  // as the resin buildPlate below, just a flat 15% here rather than a
+  // support-specific allowance).
+  fdmBuildPlate: {
+    x: 256, y: 256, z: 256,
+    supportMarginPct: 15,
+  },
+
+  // PLA colours, loosely modelled on Bambu Lab's PLA range (Basic/Matte
+  // for standard colours, Metal/Silk for metallic & pearlescent). 'tier'
+  // drives the surcharge below — edit colours/tiers freely to match
+  // actual stock. White/Black/Dark Grey are 'included' per the shop's
+  // current filament stock. Colour is chosen per PART (not per model) —
+  // each part prints in exactly one colour; this tool doesn't support
+  // multi-colour/gradient printing on a single part (point customers to
+  // request a custom quote for that instead).
+  plaColors: [
+    { id: 'white',       name: 'White',       hex: '#f2f2ee', tier: 'included' },
+    { id: 'black',       name: 'Black',       hex: '#1c1c1c', tier: 'included' },
+    { id: 'dark-grey',   name: 'Dark Grey',   hex: '#4d4d4d', tier: 'included' },
+    { id: 'red',         name: 'Red',         hex: '#c0392b', tier: 'standard' },
+    { id: 'orange',      name: 'Orange',      hex: '#e2711d', tier: 'standard' },
+    { id: 'yellow',      name: 'Yellow',      hex: '#f0c414', tier: 'standard' },
+    { id: 'green',       name: 'Green',       hex: '#1f8a3d', tier: 'standard' },
+    { id: 'blue',        name: 'Blue',        hex: '#1a5fb4', tier: 'standard' },
+    { id: 'purple',      name: 'Purple',      hex: '#7d3c98', tier: 'standard' },
+    { id: 'pink',        name: 'Pink',        hex: '#e88ab0', tier: 'standard' },
+    { id: 'brown',       name: 'Brown',       hex: '#6d4c33', tier: 'standard' },
+    { id: 'gold',        name: 'Gold',        hex: '#cfa036', tier: 'metallic' },
+    { id: 'silver',      name: 'Silver',      hex: '#b8bcc0', tier: 'metallic' },
+    { id: 'copper',      name: 'Copper',      hex: '#b3673f', tier: 'metallic' },
+    { id: 'pearl-white', name: 'Pearl White', hex: '#efe8df', tier: 'pearlescent' },
+    { id: 'pearl-blue',  name: 'Pearl Blue',  hex: '#a9c3d6', tier: 'pearlescent' },
+  ],
+  // % added on top of a part's own PLA cost — scales with print size
+  // instead of a flat fee (which overcharges small parts and undercharges
+  // large ones).
+  plaColorSurchargePct: {
+    included:    0,
+    standard:    10,
+    metallic:    20,
+    pearlescent: 20,
+  },
+
   // --- Extras (flat, fixed-price add-ons, available on every model) ---
   extras: [
     { id: 'wings',  name: 'Wings',          price: 3.00 },
@@ -171,6 +225,7 @@ export function getConfig() {
         primerOptions: saved.primerOptions?.length  ? saved.primerOptions : DEFAULT_CONFIG.primerOptions,
         sizeTiers:     saved.sizeTiers?.length      ? saved.sizeTiers     : DEFAULT_CONFIG.sizeTiers,
         primerTiers:   saved.primerTiers?.length    ? saved.primerTiers   : DEFAULT_CONFIG.primerTiers,
+        plaColors:     saved.plaColors?.length      ? saved.plaColors     : DEFAULT_CONFIG.plaColors,
         extras:        saved.extras?.length         ? saved.extras       : DEFAULT_CONFIG.extras,
       };
     }

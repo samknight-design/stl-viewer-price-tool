@@ -4,13 +4,14 @@
 // Files belong to a group. Multiple groups = multiple models.
 // ============================================================
 
-import { getConfig } from './config.js?v=11';
+import { getConfig } from './config.js?v=13';
 import { parseSTLFile } from './stl-parser.js?v=9';
 import { generateThumbnail, STLViewer } from './viewer.js?v=11';
+import { icon, applyStaticIcons } from './icons.js?v=1';
 import {
   calcItemCost, calcGroupCost, calcOrderTotal, calcOrderMinimumShortfall,
   exceedsCustomQuoteThreshold, fmt, fmtMm,
-} from './calculator.js?v=11';
+} from './calculator.js?v=13';
 
 // ---- State -----------------------------------------------------------
 let config      = getConfig();
@@ -62,6 +63,7 @@ function disarmDelete() {
 
 document.addEventListener('DOMContentLoaded', () => {
   config = getConfig();
+  applyStaticIcons();
   setupDropZone();
   setupFileInput();
   setupModal();
@@ -98,6 +100,7 @@ function defaultGroupSettings() {
     primer: 'unprimed',
     extras: [],
     notes: '',
+    printMethod: 'resin',
   };
 }
 
@@ -182,7 +185,8 @@ function setupGroupList() {
 
 function recomputeItemCost(item) {
   if (item.status !== 'ready') return;
-  item.cost = calcItemCost(item.data, item.settings, config);
+  const printMethod = findItem(item.id)?.group?.settings?.printMethod ?? 'resin';
+  item.cost = calcItemCost(item.data, item.settings, config, printMethod);
 }
 
 function recomputeGroup(group) {
@@ -291,6 +295,13 @@ function buildGroupHTML(group) {
   const canAssemble   = totalParts >= 2;
   const assemblyActive = group.settings.assembly && canAssemble;
 
+  // Print method — per-model toggle. PLA is priced by volume only (no
+  // size tiers). Colour, though, is chosen per PART (see buildItemHTML) —
+  // each part prints in exactly one colour, and the surcharge scales with
+  // that part's own size instead of being a flat per-model fee.
+  const printMethod = group.settings.printMethod === 'pla' ? 'pla' : 'resin';
+  const isPlaModel  = printMethod === 'pla';
+
   // Primer swatches — visual, finger-size circles. Unprimed = blank circle, red slash.
   const primerColors = { black: '#1a1a1a', grey: '#9a9a9a', white: '#f6f3ec' };
   const primerSwatchesHTML = config.primerOptions.map(p => {
@@ -302,7 +313,7 @@ function buildGroupHTML(group) {
               title="${esc(p.label)}" aria-label="${esc(p.label)}" aria-pressed="${active}">
         <span class="primer-swatch ${active ? 'active' : ''} ${isNone ? 'primer-none' : ''}"
               ${isNone ? '' : `style="background:${color};"`}>
-          ${active ? '<span class="primer-check">✓</span>' : ''}
+          ${active ? `<span class="primer-check">${icon('check', { size: 14 })}</span>` : ''}
         </span>
         <span class="primer-swatch-label">${esc(p.label)}</span>
       </button>`;
@@ -325,7 +336,7 @@ function buildGroupHTML(group) {
   const itemsHTML = group.items.length
     ? group.items.map(item => buildItemHTML(item, group)).join('')
     : `<div class="group-empty-hint">
-         <span>📎 Use <strong>"Add Part to This Model"</strong> below to upload files.</span>
+         <span>${icon('paperclip')} Use <strong>"Add Part to This Model"</strong> below to upload files.</span>
        </div>`;
 
   // Cost footer
@@ -333,8 +344,9 @@ function buildGroupHTML(group) {
     <div class="group-footer">
       <div class="group-costs">
         <span>Files subtotal</span><span>${fmt(gc.fileSubtotal, sym)}</span>
-        ${assemblyActive ? `<span>🔩 Assembly (${totalParts} parts)</span><span>+${fmt(gc.assemblyCost, sym)}</span>` : ''}
-        ${gc.isPrimed ? `<span>🎨 ${esc(config.primerOptions.find(p => p.id === gc.primerLabel)?.label || 'Primer')}</span><span>+${fmt(gc.primerTotal, sym)}</span>` : ''}
+        ${assemblyActive ? `<span>${icon('puzzle')} Assembly (${totalParts} parts)</span><span>+${fmt(gc.assemblyCost, sym)}</span>` : ''}
+        ${gc.isPrimed ? `<span>${icon('paintbrush')} ${esc(config.primerOptions.find(p => p.id === gc.primerLabel)?.label || 'Primer')}</span><span>+${fmt(gc.primerTotal, sym)}</span>` : ''}
+        ${gc.plaColorCost > 0 ? `<span>${icon('layers')} Colour surcharge</span><span>+${fmt(gc.plaColorCost, sym)}</span>` : ''}
       </div>
       <div class="group-total">
         <span>Model Total</span>
@@ -350,18 +362,36 @@ function buildGroupHTML(group) {
                title="Click to rename" aria-label="Model name">
       </div>
       <div class="group-header-actions">
-        ${readyItems.length > 0 ? `<button class="btn btn-primary btn-sm group-done-btn" data-action="collapse-group" title="Mark this model as done">✅ Done</button>` : ''}
+        ${readyItems.length > 0 ? `<button class="btn btn-primary btn-sm group-done-btn" data-action="collapse-group" title="Mark this model as done">${icon('check')} Done</button>` : ''}
         <button class="btn btn-sm group-delete-btn ${isArmedForDelete('group', group.id) ? 'armed' : ''}"
                 data-action="delete-group" title="Delete this model" aria-label="Delete this model">
-          🗑️${isArmedForDelete('group', group.id) ? '<span class="delete-confirm-text">Delete model?</span>' : ''}
+          ${icon('trash')}${isArmedForDelete('group', group.id) ? '<span class="delete-confirm-text">Delete model?</span>' : ''}
         </button>
       </div>
     </div>
 
     <div class="group-settings">
 
+      <div class="group-setting-block print-method-block">
+        <div class="group-setting-label">
+          <span class="label-icon-row">${icon('printer')} Print Method</span>
+          <span class="info-tip-wrap">
+            <button type="button" class="info-tip-btn" data-action="toggle-info" aria-label="What's the difference between Resin and PLA?" aria-expanded="false">${icon('helpCircle', { size: 14 })}</button>
+            <span class="info-tip-content" role="tooltip">
+              <strong>Resin</strong> — highest detail, best for fine miniatures. Priced by size tier.<br><br>
+              <strong>PLA (FDM)</strong> — stronger and faster, best for larger or simpler parts. Priced by volume only.
+            </span>
+          </span>
+        </div>
+        <div class="print-method-seg">
+          <button class="seg-btn ${!isPlaModel ? 'active' : ''}" data-action="print-method" data-val="resin">${icon('flask')} Resin</button>
+          <button class="seg-btn ${isPlaModel ? 'active-green' : ''}" data-action="print-method" data-val="pla">${icon('layers')} PLA</button>
+        </div>
+        ${isPlaModel ? `<div class="group-setting-desc">Choose each part's filament colour below — every part prints in one solid colour. Need multi-colour on a single part? We don't support that here — please request a custom quote instead.</div>` : ''}
+      </div>
+
       <div class="group-setting-block">
-        <div class="group-setting-label">🎨 Primer Coating</div>
+        <div class="group-setting-label"><span class="label-icon-row">${icon('paintbrush')} Primer Coating</span></div>
         <div class="group-setting-desc">
           A spray primer is applied to the finished model before painting.
           Improves paint adhesion and hides layer lines for a smoother finish.
@@ -373,18 +403,18 @@ function buildGroupHTML(group) {
       </div>
 
       <div class="group-setting-block ${!canAssemble ? 'setting-disabled' : ''}">
-        <div class="group-setting-label">🔩 Parts Assembly</div>
+        <div class="group-setting-label"><span class="label-icon-row">${icon('puzzle')} Parts Assembly</span></div>
         <div class="group-setting-desc">${assemblyDesc}</div>
         <div class="assembly-seg ${!canAssemble ? 'seg-disabled' : ''}">
           <button class="seg-btn ${!assemblyActive ? 'active' : ''}"
                   data-action="assembly" data-val="false"
                   ${!canAssemble ? 'disabled' : ''}>
-            📦 No — supply as separate parts
+            ${icon('package')} No — supply as separate parts
           </button>
           <button class="seg-btn ${assemblyActive ? 'active-green' : ''}"
                   data-action="assembly" data-val="true"
                   ${!canAssemble ? 'disabled' : ''}>
-            🔩 Yes — assemble for me${assemblyCostHint}
+            ${icon('puzzle')} Yes — assemble for me${assemblyCostHint}
           </button>
         </div>
       </div>
@@ -392,7 +422,7 @@ function buildGroupHTML(group) {
     </div>
 
     <div class="group-notes">
-      <label class="group-notes-label" for="notes-${group.id}">📝 Notes for this model (optional)</label>
+      <label class="group-notes-label" for="notes-${group.id}"><span class="label-icon-row">${icon('note')} Notes for this model (optional)</span></label>
       <textarea class="group-notes-input" id="notes-${group.id}" data-action="notes"
                 placeholder="Any requests or things we should know about this model…">${esc(group.settings.notes || '')}</textarea>
     </div>
@@ -403,7 +433,7 @@ function buildGroupHTML(group) {
 
     <div class="group-actions">
       <button class="btn btn-primary btn-lg add-part-btn" data-action="add-files-to-group">
-        📎 Add Part to This Model
+        ${icon('paperclip')} Add Part to This Model
       </button>
     </div>
   `;
@@ -420,13 +450,13 @@ function buildCollapsedGroupHTML(group) {
 
   return `
     <div class="group-collapsed">
-      <span class="group-collapsed-check" title="Complete" aria-hidden="true">✅</span>
+      <span class="group-collapsed-check" title="Complete" aria-hidden="true">${icon('checkCircle', { size: 20 })}</span>
       <div class="group-collapsed-info">
         <div class="group-collapsed-name">${esc(group.name)}</div>
         <div class="group-collapsed-meta">${readyItems.length} file${readyItems.length === 1 ? '' : 's'} · ${totalParts} part${totalParts === 1 ? '' : 's'}</div>
       </div>
       <div class="group-collapsed-price">${priceStr}</div>
-      <button class="btn btn-ghost btn-sm group-edit-btn" data-action="expand-group" title="Edit this model" aria-label="Edit this model">✎ Edit</button>
+      <button class="btn btn-ghost btn-sm group-edit-btn" data-action="expand-group" title="Edit this model" aria-label="Edit this model">${icon('pencil', { size: 14 })} Edit</button>
     </div>
   `;
 }
@@ -453,10 +483,10 @@ function buildItemHTML(item, group) {
   if (item.status === 'error') return `
     <div class="file-card" data-id="${item.id}">
       <div class="card-header">
-        <div class="card-thumb error-thumb">⚠</div>
+        <div class="card-thumb error-thumb">${icon('alertTriangle', { size: 22 })}</div>
         <div class="card-header-text">
           <div class="card-filename">${esc(item.name)}</div>
-          <div class="card-meta text-error">⚠️ ${esc(item.errorMsg || 'Could not read this file — is it a valid STL?')}</div>
+          <div class="card-meta text-error">${icon('alertTriangle', { size: 13 })} ${esc(item.errorMsg || 'Could not read this file — is it a valid STL?')}</div>
         </div>
       </div>
       <div class="card-body">
@@ -473,16 +503,14 @@ function buildItemHTML(item, group) {
     ? `<img src="${item.thumbnail}" alt="${esc(item.name)}" class="thumb-img" loading="lazy">`
     : `<div class="thumb-placeholder">STL</div>`;
 
-  const matOptions = config.materials.map(m =>
-    `<option value="${esc(m.id)}" ${m.id === item.settings.materialId ? 'selected' : ''}>${esc(m.name)}${m.description ? ' — ' + esc(m.description) : ''}</option>`
-  ).join('');
+  const isPla = group.settings.printMethod === 'pla';
 
   const groupMoveHTML = `
     <div class="control-row">
-      <label>📁 Model</label>
+      <label><span class="label-icon-row">${icon('folder', { size: 14 })} Model</span></label>
       <select class="input-group-move" data-action="move-item" data-id="${item.id}">
         ${groups.map(g => `<option value="${esc(g.id)}" ${g.id === group.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}
-        <option value="__new__">➕ Move to new model…</option>
+        <option value="__new__">+ Move to new model…</option>
       </select>
     </div>`;
 
@@ -493,13 +521,18 @@ function buildItemHTML(item, group) {
              data-action="scale-preset" data-scale="${s}" data-id="${item.id}">${Math.round(s * 100)}%</button>`
   ).join('');
 
-  const breakdownHTML = config.showCostBreakdown && c && c.tier ? `
+  const breakdownHTML = config.showCostBreakdown && c && c.priceable ? `
     <details class="cost-details">
-      <summary>💡 See price breakdown</summary>
+      <summary><span class="label-icon-row">${icon('lightbulb', { size: 14 })} See price breakdown</span></summary>
       <table class="breakdown-table">
-        <tr><td>Size tier: ${esc(c.tier.name)} (model size ≤ ${c.tier.maxDimensionMm ? c.tier.maxDimensionMm + 'mm' : 'build plate'})</td><td>${fmt(c.tier.price, sym)}</td></tr>
-        ${c.surchargePct > 0 ? `<tr><td>${esc(c.materialName)} surcharge (+${c.surchargePct}%)</td><td>${fmt(c.surchargeAmount, sym)}</td></tr>` : ''}
-        ${c.supportHandlingFee > 0 ? `<tr><td>Support handling (no pre-supported file)</td><td>${fmt(c.supportHandlingFee, sym)}</td></tr>` : ''}
+        ${c.tier ? `
+          <tr><td>Size tier: ${esc(c.tier.name)} (model size ≤ ${c.tier.maxDimensionMm ? c.tier.maxDimensionMm + 'mm' : 'build plate'})</td><td>${fmt(c.tier.price, sym)}</td></tr>
+          ${c.surchargePct > 0 ? `<tr><td>${esc(c.materialName)} surcharge (+${c.surchargePct}%)</td><td>${fmt(c.surchargeAmount, sym)}</td></tr>` : ''}
+          ${c.supportHandlingFee > 0 ? `<tr><td>Support handling (no pre-supported file)</td><td>${fmt(c.supportHandlingFee, sym)}</td></tr>` : ''}
+        ` : `
+          <tr><td>PLA volume (${c.scaledVolumeMl.toFixed(2)}mL × ${fmt(config.fdm?.costPerMl ?? 0, sym)}/mL)</td><td>${fmt(c.baseCost ?? c.unitCost, sym)}</td></tr>
+          ${c.colorSurchargePct > 0 ? `<tr><td>Colour surcharge (+${c.colorSurchargePct}%)</td><td>${fmt(c.colorSurchargeAmount, sym)}</td></tr>` : ''}
+        `}
       </table>
     </details>` : '';
 
@@ -507,18 +540,18 @@ function buildItemHTML(item, group) {
     <div class="file-card" data-id="${item.id}">
       <button class="card-remove-x ${isArmedForDelete('item', item.id) ? 'armed' : ''}"
               data-action="remove-item" data-id="${item.id}" title="Delete this part" aria-label="Delete this part">
-        🗑️${isArmedForDelete('item', item.id) ? '<span class="delete-confirm-text">Delete part?</span>' : ''}
+        ${icon('trash')}${isArmedForDelete('item', item.id) ? '<span class="delete-confirm-text">Delete part?</span>' : ''}
       </button>
 
       <div class="card-header">
         <div class="card-thumb" data-action="view3d" data-id="${item.id}" title="Click to view in 3D">
           ${thumbHTML}
-          <div class="thumb-overlay">🔍 View in 3D</div>
+          <div class="thumb-overlay">${icon('eye', { size: 14 })} View in 3D</div>
         </div>
         <div class="card-header-text">
           <div class="card-filename" title="${esc(item.name)}">
             ${esc(item.name)}
-            ${ps ? `<span class="presupported-badge">✅ Pre-Supported</span>` : ''}
+            ${ps && !isPla ? `<span class="presupported-badge">${icon('check', { size: 12 })} Pre-Supported</span>` : ''}
           </div>
           <div class="card-meta">
             <span>${formatBytes(item.size)}</span> ·
@@ -530,13 +563,14 @@ function buildItemHTML(item, group) {
 
       <div class="card-body">
         ${item.warning ? `<div class="card-warning">${esc(item.warning)}</div>` : ''}
-        ${c && c.tier ? `<div class="card-dims">📐 Print size: <strong>${fmtMm(dims.x)} × ${fmtMm(dims.y)} × ${fmtMm(dims.z)}</strong> &nbsp;·&nbsp; <strong>${esc(c.tier.name)}</strong> tier</div>` : ''}
-        ${c && !c.tier ? `<div class="card-warning">⚠️ This model is too large to fit our build plate, even with the support margin. Please scale it down or split it into parts before requesting a quote.</div>` : ''}
+        ${c && c.priceable ? `<div class="card-dims">${icon('maximize', { size: 14 })} Print size: <strong>${fmtMm(dims.x)} × ${fmtMm(dims.y)} × ${fmtMm(dims.z)}</strong> &nbsp;·&nbsp; <strong>${c.tier ? esc(c.tier.name) + ' tier' : 'PLA — priced by volume'}</strong></div>` : ''}
+        ${c && !c.priceable ? `<div class="card-warning">${icon('alertTriangle', { size: 14 })} This model is too large to fit ${isPla ? 'our FDM printer' : 'our build plate, even with the support margin'}. Please scale it down or split it into parts before requesting a quote.</div>` : ''}
 
         <div class="card-controls">
 
+          ${!isPla ? `
           <div class="control-block">
-            <div class="control-label">🏗️ Support Structures</div>
+            <div class="control-label"><span class="label-icon-row">${icon('construction', { size: 15 })} Support Structures</span></div>
             <div class="control-desc">
               Supports are temporary scaffolding automatically added to hold up overhanging parts during printing.
               If your file already includes them, select "Pre-supported" to avoid being charged twice.
@@ -544,22 +578,43 @@ function buildItemHTML(item, group) {
             <div class="seg-control supports-seg">
               <button class="seg-btn ${!ps ? 'active' : ''}"
                       data-action="presupported" data-id="${item.id}" data-val="false">
-                🏗️ Standard &mdash; add supports
+                ${icon('construction', { size: 14 })} Standard &mdash; add supports
               </button>
               <button class="seg-btn ${ps ? 'active-green' : ''}"
                       data-action="presupported" data-id="${item.id}" data-val="true">
-                ✅ Pre-supported &mdash; already included
+                ${icon('check', { size: 14 })} Pre-supported &mdash; already included
               </button>
             </div>
             <div class="control-hint ${ps ? 'hint-green' : ''}">
               ${ps
-                ? '✅ Marked as already supported — this saves us time, so it’s priced a little cheaper.'
+                ? `${icon('check', { size: 13 })} Marked as already supported — this saves us time, so it’s priced a little cheaper.`
                 : 'We’ll add supports during printing — a small handling fee applies, and your file’s effective size for pricing includes an allowance for the extra support material.'}
             </div>
-          </div>
+          </div>` : ''}
+
+          ${isPla ? `
+          <div class="control-block">
+            <div class="control-label"><span class="label-icon-row">${icon('layers', { size: 15 })} Filament Colour</span></div>
+            <div class="control-desc">White, Black &amp; Dark Grey are included. Other colours add a % of this part's cost.</div>
+            <div class="pla-color-row">
+              ${(config.plaColors || []).map(pc => {
+                const active = item.settings.plaColor === pc.id;
+                const pct = config.plaColorSurchargePct?.[pc.tier] ?? 0;
+                const badge = pct > 0 ? `+${pct}%` : '';
+                return `
+                  <button type="button" class="pla-swatch-btn" data-action="pla-color-select" data-id="${item.id}" data-color-id="${esc(pc.id)}"
+                          title="${esc(pc.name)}${badge ? ' (' + badge + ')' : ''}" aria-label="${esc(pc.name)}" aria-pressed="${active}">
+                    <span class="pla-swatch ${active ? 'active' : ''}" style="background:${esc(pc.hex)};">
+                      ${active ? `<span class="primer-check">${icon('check', { size: 14 })}</span>` : ''}
+                    </span>
+                    <span class="pla-swatch-label">${esc(pc.name)}${badge ? `<span class="pla-swatch-badge">${badge}</span>` : ''}</span>
+                  </button>`;
+              }).join('')}
+            </div>
+          </div>` : ''}
 
           <div class="control-block">
-            <div class="control-label">📐 Print Scale</div>
+            <div class="control-label"><span class="label-icon-row">${icon('maximize', { size: 15 })} Print Scale</span></div>
             <div class="control-desc">Resize the model. 1.0 = original file size. 0.5 = half size. 2.0 = double size.</div>
             <div class="scale-wrap">
               <div class="scale-input-row">
@@ -572,14 +627,9 @@ function buildItemHTML(item, group) {
           </div>
 
           <div class="control-row">
-            <label>🔢 Quantity</label>
+            <label><span class="label-icon-row">${icon('hash', { size: 14 })} Quantity</span></label>
             <input type="number" class="input-qty" value="${item.settings.quantity}" min="1" max="999"
                    data-action="quantity" data-id="${item.id}">
-          </div>
-
-          <div class="control-row">
-            <label>🧪 Resin Type</label>
-            <select class="input-material" data-action="material" data-id="${item.id}">${matOptions}</select>
           </div>
 
           ${groupMoveHTML}
@@ -588,10 +638,10 @@ function buildItemHTML(item, group) {
         ${breakdownHTML}
 
         <div class="card-cost">
-          ${c && c.tier ? `
+          ${c && c.priceable ? `
             <span class="unit-cost">${fmt(c.unitCost, sym)} each</span>
             ${c.quantity > 1 ? `<span class="total-cost">${fmt(c.totalCost, sym)} for ${c.quantity}</span>` : ''}
-          ` : c && !c.tier ? `<span class="text-error">Cannot price — too large</span>` : '—'}
+          ` : c && !c.priceable ? `<span class="text-error">Cannot price — too large</span>` : '—'}
         </div>
       </div>
     </div>`;
@@ -651,6 +701,35 @@ function handleGroupClick(e, group, card) {
       recomputeGroup(group);
       renderAll();
       break;
+
+    case 'print-method': {
+      const val = btn.dataset.val === 'pla' ? 'pla' : 'resin';
+      if (group.settings.printMethod !== val) {
+        group.settings.printMethod = val;
+        group.items.forEach(recomputeItemCost);
+        recomputeGroup(group);
+        renderAll();
+      }
+      break;
+    }
+
+    case 'pla-color-select': {
+      const found = findItem(id);
+      if (found) {
+        found.item.settings.plaColor = btn.dataset.colorId;
+        recomputeItemCost(found.item);
+        recomputeGroup(found.group);
+        renderAll();
+      }
+      break;
+    }
+
+    case 'toggle-info': {
+      const wrap = btn.closest('.info-tip-wrap');
+      const open = wrap?.classList.toggle('open');
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      break;
+    }
 
     case 'collapse-group':
       group.collapsed = true;
@@ -712,8 +791,6 @@ function handleGroupChange(e, group) {
   } else if (action === 'quantity') {
     const v = parseInt(el.value);
     if (!isNaN(v) && v > 0) item.settings.quantity = v;
-  } else if (action === 'material') {
-    item.settings.materialId = el.value;
   }
 
   recomputeItemCost(item);
@@ -801,7 +878,7 @@ async function addFileToGroup(file, targetGroup) {
   const item = {
     id: iId(), file, name: file.name, size: file.size,
     status: 'loading', data: null, thumbnail: null,
-    settings: { scale: 1.0, quantity: 1, materialId: config.materials[0].id, presupported: false },
+    settings: { scale: 1.0, quantity: 1, materialId: config.materials[0].id, presupported: false, plaColor: 'black' },
     cost: null, warning: null,
   };
   targetGroup.items.push(item);
@@ -845,7 +922,7 @@ function generateOrderNumber() {
 function buildReviewGroupHTML(group, sym) {
   const gc = group.groupCost;
   if (!gc) return '';
-  const readyItems = group.items.filter(i => i.status === 'ready' && i.cost?.tier);
+  const readyItems = group.items.filter(i => i.status === 'ready' && i.cost?.priceable);
 
   const filesHTML = readyItems.map(i => {
     const thumbHTML = i.thumbnail
@@ -858,7 +935,7 @@ function buildReviewGroupHTML(group, sym) {
           <div class="review-file-name">${esc(shortName(i.name, 38))}</div>
           <div class="review-file-meta">
             ${esc(i.cost.materialName)} &middot; ×${i.settings.quantity}
-            &middot; ${esc(i.cost.tier.name)} tier
+            &middot; ${i.cost.tier ? esc(i.cost.tier.name) + ' tier' : 'volume-priced'}
           </div>
         </div>
         <div class="review-file-cost">${fmt(i.cost.totalCost, sym)}</div>
@@ -867,17 +944,19 @@ function buildReviewGroupHTML(group, sym) {
 
   const extraLines = (group.settings.extras || []).map(extraId => {
     const extra = config.extras.find(e => e.id === extraId);
-    return extra ? `<div class="review-extra-row"><span>➕ ${esc(extra.name)}</span><span>+${fmt(extra.price, sym)}</span></div>` : '';
+    return extra ? `<div class="review-extra-row"><span>${icon('plus', { size: 13 })} ${esc(extra.name)}</span><span>+${fmt(extra.price, sym)}</span></div>` : '';
   }).join('');
 
   const otherExtras = [];
   if (gc.assemblyCost > 0)
-    otherExtras.push(`<div class="review-extra-row"><span>🔩 Assembly</span><span>+${fmt(gc.assemblyCost, sym)}</span></div>`);
+    otherExtras.push(`<div class="review-extra-row"><span>${icon('puzzle', { size: 13 })} Assembly</span><span>+${fmt(gc.assemblyCost, sym)}</span></div>`);
   if (gc.isPrimed)
-    otherExtras.push(`<div class="review-extra-row"><span>🎨 ${esc(config.primerOptions.find(p => p.id === gc.primerLabel)?.label || 'Primer')}</span><span>+${fmt(gc.primerTotal, sym)}</span></div>`);
+    otherExtras.push(`<div class="review-extra-row"><span>${icon('paintbrush', { size: 13 })} ${esc(config.primerOptions.find(p => p.id === gc.primerLabel)?.label || 'Primer')}</span><span>+${fmt(gc.primerTotal, sym)}</span></div>`);
+  if (gc.plaColorCost > 0)
+    otherExtras.push(`<div class="review-extra-row"><span>${icon('layers', { size: 13 })} Colour surcharge</span><span>+${fmt(gc.plaColorCost, sym)}</span></div>`);
 
   const notesHTML = group.settings.notes?.trim()
-    ? `<div class="review-extra-row"><span>📝 Notes</span><span>${esc(group.settings.notes.trim())}</span></div>`
+    ? `<div class="review-extra-row"><span>${icon('note', { size: 13 })} Notes</span><span>${esc(group.settings.notes.trim())}</span></div>`
     : '';
 
   return `
@@ -933,24 +1012,24 @@ function renderOrderSummary() {
           <div class="summary-line">
             <span class="sum-name" title="${esc(i.name)}">${esc(shortName(i.name))}</span>
             <span class="sum-qty">×${i.settings.quantity}</span>
-            <span class="sum-price">${i.cost?.tier ? fmt(i.cost.totalCost, sym) : '<span class="text-error">Too large</span>'}</span>
+            <span class="sum-price">${i.cost?.priceable ? fmt(i.cost.totalCost, sym) : '<span class="text-error">Too large</span>'}</span>
           </div>
           <div class="sum-file-detail">
-            ${esc(i.cost.materialName)} · ${Math.round(i.settings.scale * 100)}% scale · ${i.settings.presupported ? '<span style="color:var(--green)">Pre-sup.</span>' : 'Std. supports'}
+            ${esc(i.cost.materialName)} · ${Math.round(i.settings.scale * 100)}% scale${g.settings.printMethod === 'pla' ? '' : ` · ${i.settings.presupported ? '<span style="color:var(--green)">Pre-sup.</span>' : 'Std. supports'}`}
           </div>`).join('')}
         ${gc.extrasCost > 0 ? `
           <div class="summary-line summary-line-extra">
-            <span class="sum-name">➕ Extras</span><span></span>
+            <span class="sum-name">${icon('plus', { size: 13 })} Extras</span><span></span>
             <span class="sum-price">+${fmt(gc.extrasCost, sym)}</span>
           </div>` : ''}
         ${gc.assemblyCost > 0 ? `
           <div class="summary-line summary-line-extra">
-            <span class="sum-name">🔩 Assembly</span><span></span>
+            <span class="sum-name">${icon('puzzle', { size: 13 })} Assembly</span><span></span>
             <span class="sum-price">+${fmt(gc.assemblyCost, sym)}</span>
           </div>` : ''}
         ${gc.isPrimed ? `
           <div class="summary-line summary-line-extra">
-            <span class="sum-name">🎨 ${esc(config.primerOptions.find(p => p.id === gc.primerLabel)?.label || 'Primer')}</span><span></span>
+            <span class="sum-name">${icon('paintbrush', { size: 13 })} ${esc(config.primerOptions.find(p => p.id === gc.primerLabel)?.label || 'Primer')}</span><span></span>
             <span class="sum-price">+${fmt(gc.primerTotal, sym)}</span>
           </div>` : ''}
         <div class="summary-group-subtotal">
@@ -966,10 +1045,10 @@ function renderOrderSummary() {
     <div class="summary-divider"></div>
     <div class="summary-total"><span>Grand Total</span><span>${fmt(grandTotal, sym)}</span></div>
     ${minimumShortfall > 0 ? `
-      <p class="summary-min-note">✨ You're already covered by our ${fmt(config.minimumOrderTotal, sym)} order minimum — add up to ${fmt(minimumShortfall, sym)} more in parts at no extra cost!</p>
+      <p class="summary-min-note">${icon('sparkles', { size: 14 })} You're already covered by our ${fmt(config.minimumOrderTotal, sym)} order minimum — add up to ${fmt(minimumShortfall, sym)} more in parts at no extra cost!</p>
     ` : ''}
-    <p class="summary-note">💡 Estimate only — final price confirmed after file review.</p>
-    <button class="btn btn-primary btn-lg" id="request-quote-btn">Request a Quote →</button>
+    <p class="summary-note">${icon('lightbulb', { size: 14 })} Estimate only — final price confirmed after file review.</p>
+    <button class="btn btn-primary btn-lg" id="request-quote-btn">Request a Quote ${icon('arrowRight', { size: 15 })}</button>
   `;
   document.getElementById('request-quote-btn')?.addEventListener('click', openOrderForm);
 
@@ -1128,7 +1207,7 @@ function openOrderForm() {
   const minNoteEl = document.getElementById('review-minimum-note');
   if (minNoteEl) {
     minNoteEl.style.display = minimumShortfall > 0 ? 'block' : 'none';
-    minNoteEl.textContent = `✨ You're already covered by our ${fmt(config.minimumOrderTotal, sym)} order minimum — add up to ${fmt(minimumShortfall, sym)} more in parts at no extra cost!`;
+    minNoteEl.innerHTML = `${icon('sparkles', { size: 14 })} You're already covered by our ${fmt(config.minimumOrderTotal, sym)} order minimum — add up to ${fmt(minimumShortfall, sym)} more in parts at no extra cost!`;
   }
 
   // Populate review step
@@ -1171,19 +1250,21 @@ function submitOrder(e) {
     orderNumber: _orderNumber,
     customer: { name, email, notes },
     groups: activeGroups.map(g => ({
-      name:      g.name,
-      extras:    g.settings.extras,
-      notes:     g.settings.notes,
-      assembly:  g.settings.assembly,
-      primer:    g.settings.primer,
-      cost:      g.groupCost?.groupTotal,
-      files:    g.items.filter(i => i.status === 'ready' && i.cost?.tier).map(i => ({
+      name:        g.name,
+      extras:      g.settings.extras,
+      notes:       g.settings.notes,
+      assembly:    g.settings.assembly,
+      primer:      g.settings.primer,
+      printMethod: g.settings.printMethod,
+      cost:        g.groupCost?.groupTotal,
+      files:    g.items.filter(i => i.status === 'ready' && i.cost?.priceable).map(i => ({
         filename:     i.name,
         material:     i.cost.materialName,
+        plaColor:     g.settings.printMethod === 'pla' ? i.settings.plaColor : undefined,
         presupported: i.settings.presupported,
         scale:        i.settings.scale,
         quantity:     i.settings.quantity,
-        tier:         i.cost.tier.name,
+        tier:         i.cost.tier?.name ?? 'volume-priced',
         unitCost:     i.cost.unitCost,
         total:        i.cost.totalCost,
       })),

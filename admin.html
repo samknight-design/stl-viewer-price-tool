@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin — 3D Print Calculator Settings</title>
-  <link rel="stylesheet" href="css/style.css?v=8">
+  <link rel="stylesheet" href="css/style.css?v=14">
   <script type="importmap">
   {
     "imports": {
@@ -19,7 +19,7 @@
 <!-- ── Password gate ─────────────────────────────────────────────── -->
 <div class="auth-overlay" id="auth-overlay">
   <div class="auth-panel" id="auth-panel">
-    <div style="font-size:2rem;margin-bottom:12px">🔐</div>
+    <div style="margin-bottom:12px" data-icon-only="lock" data-icon-size="32"></div>
     <h2>Admin Access</h2>
     <p>Enter the admin password to manage pricing settings.</p>
     <form id="auth-form">
@@ -44,11 +44,11 @@
 
   <div class="admin-header">
     <div>
-      <h1>⚙ Pricing Settings</h1>
+      <h1 data-icon="settings" data-icon-size="22">Pricing Settings</h1>
       <p>Configure resin costs, materials, and markup. Changes save to browser storage.</p>
     </div>
     <div class="flex gap-8">
-      <a href="index.html" class="btn btn-ghost btn-sm">← Calculator</a>
+      <a href="index.html" class="btn btn-ghost btn-sm" data-icon="arrowLeft">Calculator</a>
     </div>
   </div>
 
@@ -56,7 +56,7 @@
 
     <!-- ── Core pricing ──────────────────────────────────────────── -->
     <div class="section">
-      <div class="section-header">💰 Core Pricing</div>
+      <div class="section-header" data-icon="dollarSign">Core Pricing</div>
       <div class="section-body">
         <div class="form-grid">
 
@@ -124,7 +124,7 @@
 
     <!-- ── Assembly pricing ─────────────────────────────────────────── -->
     <div class="section">
-      <div class="section-header">🔩 Assembly Pricing</div>
+      <div class="section-header" data-icon="puzzle">Assembly Pricing</div>
       <div class="section-body">
         <p style="font-size:.82rem;color:var(--text-dim);margin-bottom:18px">
           Applied per model group when the customer requests assembly. Formula:
@@ -156,7 +156,7 @@
 
     <!-- ── Primer pricing ───────────────────────────────────────────── -->
     <div class="section">
-      <div class="section-header">🎨 Primer Pricing</div>
+      <div class="section-header" data-icon="paintbrush">Primer Pricing</div>
       <div class="section-body">
         <p style="font-size:.82rem;color:var(--text-dim);margin-bottom:18px">
           Applied once per model group (not per part), from the combined print volume of
@@ -184,8 +184,8 @@
     <!-- ── Materials ─────────────────────────────────────────────── -->
     <div class="section">
       <div class="section-header">
-        <span>🧪 Materials</span>
-        <button class="btn btn-secondary btn-sm" type="button" id="add-material">+ Add Material</button>
+        <span data-icon="flask">Materials</span>
+        <button class="btn btn-secondary btn-sm" type="button" id="add-material" data-icon="plus" data-icon-size="14">Add Material</button>
       </div>
       <div class="section-body">
         <div style="display:grid;grid-template-columns:1fr 160px 42px 1fr 32px;gap:8px;font-size:.75rem;color:var(--text-dim);padding:0 0 6px">
@@ -197,7 +197,7 @@
 
     <!-- ── Business info ─────────────────────────────────────────── -->
     <div class="section">
-      <div class="section-header">🏪 Business Info</div>
+      <div class="section-header" data-icon="store">Business Info</div>
       <div class="section-body">
         <div class="form-grid">
           <div class="form-field-adm">
@@ -219,16 +219,16 @@
 
     <!-- ── Actions ───────────────────────────────────────────────── -->
     <div class="flex gap-8" style="flex-wrap:wrap">
-      <button class="btn btn-primary" type="button" id="save-btn">💾 Save Settings</button>
-      <button class="btn btn-secondary" type="button" id="export-btn">📤 Export JSON</button>
-      <button class="btn btn-ghost" type="button" id="reset-btn">↩ Reset to Defaults</button>
+      <button class="btn btn-primary" type="button" id="save-btn" data-icon="save">Save Settings</button>
+      <button class="btn btn-secondary" type="button" id="export-btn" data-icon="download">Export JSON</button>
+      <button class="btn btn-ghost" type="button" id="reset-btn" data-icon="undo">Reset to Defaults</button>
     </div>
 
   </form><!-- /#config-form -->
 
   <!-- ── Live pricing preview ──────────────────────────────────── -->
   <div class="section" style="margin-top:28px">
-    <div class="section-header">📊 Live Pricing Preview <small style="font-weight:400;color:var(--text-dim)">(updates as you type)</small></div>
+    <div class="section-header" data-icon="barChart">Live Pricing Preview <small style="font-weight:400;color:var(--text-dim)">(updates as you type)</small></div>
     <div class="section-body" style="overflow-x:auto">
       <table class="preview-table">
         <thead>

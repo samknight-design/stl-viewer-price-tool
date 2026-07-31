@@ -4,10 +4,12 @@
 
 import { getConfig, saveConfig, resetConfig, DEFAULT_CONFIG } from './config.js?v=6';
 import { calcItemCost, fmt, fmtMl, fmtHours } from './calculator.js?v=6';
+import { icon, applyStaticIcons } from './icons.js?v=1';
 
 let config;
 
 document.addEventListener('DOMContentLoaded', () => {
+  applyStaticIcons();
   // Simple password gate
   const stored = sessionStorage.getItem('admin_auth');
   if (!stored) {
@@ -102,7 +104,7 @@ function renderMaterials() {
       </div>
       <input class="mat-color" type="color" value="${m.color}" title="Swatch colour">
       <input class="mat-desc"  value="${esc(m.description || '')}" placeholder="Description" title="Description">
-      <button class="btn btn-ghost btn-sm mat-del" data-idx="${i}" title="Remove material">✕</button>
+      <button class="btn btn-ghost btn-sm mat-del" data-idx="${i}" title="Remove material">${icon('x', { size: 14 })}</button>
     </div>`
   ).join('');
 
