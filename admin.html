@@ -30,11 +30,7 @@
       <p class="auth-error" id="auth-error"></p>
     </form>
     <p style="margin-top:16px;font-size:.75rem;color:var(--text-dimmer)">
-      Locked out?
-      <button type="button" id="auth-reset-btn"
-              style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:inherit;text-decoration:underline;padding:0">
-        Reset to default password
-      </button>
+      Locked out? The password is stored as an ADMIN_PASSWORD secret on the Supabase project — reset it with the Supabase CLI or dashboard.
     </p>
   </div>
 </div>
@@ -207,11 +203,6 @@
           <div class="form-field-adm">
             <label for="inp-biz-email">Contact email</label>
             <input type="email" id="inp-biz-email" placeholder="orders@example.com">
-          </div>
-          <div class="form-field-adm">
-            <label for="inp-admin-pw">Admin password</label>
-            <input type="password" id="inp-admin-pw" value="admin123">
-            <p class="field-hint">Protects this admin page.</p>
           </div>
         </div>
       </div>
