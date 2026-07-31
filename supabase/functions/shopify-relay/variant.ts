@@ -32,6 +32,10 @@ export async function createPricedVariant(
     }],
   });
 
+  if (!data.productVariantsBulkCreate.productVariants?.length) {
+    throw new Error("Shopify did not return a created variant");
+  }
+
   const gid = data.productVariantsBulkCreate.productVariants[0].id;
   const variantId = Number(gid.split("/").pop());
   return { variantId };
