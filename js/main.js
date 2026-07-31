@@ -14,7 +14,7 @@ import {
 } from './calculator.js?v=14';
 
 // ---- State -----------------------------------------------------------
-let config      = getConfig();
+let config      = null;
 let groups      = [];    // Group[]
 let modalViewer  = null;
 let _orderNumber = null;
@@ -61,8 +61,8 @@ function disarmDelete() {
 
 // ---- Boot ------------------------------------------------------------
 
-document.addEventListener('DOMContentLoaded', () => {
-  config = getConfig();
+document.addEventListener('DOMContentLoaded', async () => {
+  config = await getConfig();
   applyStaticIcons();
   setupDropZone();
   setupFileInput();
@@ -72,14 +72,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('add-model-btn')?.addEventListener('click', () => { addGroup(); });
   setupGroupList();   // Single delegated listener — no duplicates across re-renders
   document.addEventListener('add-group', () => { addGroup(); });
-  renderAll();
-});
-
-window.addEventListener('storage', e => {
-  if (e.key !== 'stl_calc_config_v1') return;
-  config = getConfig();
-  allItems().forEach(item => { if (item.status === 'ready') recomputeItemCost(item); });
-  recomputeAllGroups();
   renderAll();
 });
 
@@ -897,6 +889,40 @@ async function addFileToGroup(file, targetGroup) {
 
     item.thumbnail = generateThumbnail(item.data.triangles);
     item.status    = 'ready';
+
+    const RELAY_BASE_URL = 'https://<project-ref>.supabase.co/functions/v1/shopify-relay';
+
+    try {
+      const fileBuffer = await file.arrayBuffer();
+      const base64Data = btoa(
+        new Uint8Array(fileBuffer).reduce((s, b) => s + String.fromCharCode(b), ''),
+      );
+      const stlUpload = await fetch(`${RELAY_BASE_URL}/files`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: item.name, mimeType: 'model/stl', base64Data }),
+      }).then(r => r.json());
+      item.shopifyFileId = stlUpload.id;
+
+      if (item.thumbnail) {
+        const thumbBase64 = item.thumbnail.split(',')[1]; // strip "data:image/png;base64,"
+        const thumbUpload = await fetch(`${RELAY_BASE_URL}/files`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filename: item.name.replace(/\.stl$/i, '.png'),
+            mimeType: 'image/png',
+            base64Data: thumbBase64,
+          }),
+        }).then(r => r.json());
+        item.shopifyThumbnailId = thumbUpload.id;
+      }
+    } catch (err) {
+      // Non-fatal: pricing still works without the Shopify-side file copy.
+      // The packing tool just won't have a thumbnail for this part if this failed.
+      console.warn('Shopify file upload failed for', item.name, err);
+    }
+
     recomputeItemCost(item);
     recomputeGroup(targetGroup);
   } catch (err) {
@@ -1245,43 +1271,79 @@ function submitOrder(e) {
 
   const activeGroups = groups.filter(g => g.items.some(i => i.status === 'ready'));
   const grandTotal   = calcOrderTotal(activeGroups, config);
+  const thresholdExceeded = exceedsCustomQuoteThreshold(grandTotal, config);
 
-  const payload = {
-    orderNumber: _orderNumber,
-    customer: { name, email, notes },
-    groups: activeGroups.map(g => ({
-      name:        g.name,
-      extras:      g.settings.extras,
-      notes:       g.settings.notes,
-      assembly:    g.settings.assembly,
-      primer:      g.settings.primer,
-      printMethod: g.settings.printMethod,
-      cost:        g.groupCost?.groupTotal,
-      files:    g.items.filter(i => i.status === 'ready' && i.cost?.priceable).map(i => ({
-        filename:     i.name,
-        material:     i.cost.materialName,
-        plaColor:     g.settings.printMethod === 'pla' ? i.settings.plaColor : undefined,
-        presupported: i.settings.presupported,
-        scale:        i.settings.scale,
-        quantity:     i.settings.quantity,
-        tier:         i.cost.tier?.name ?? 'volume-priced',
-        unitCost:     i.cost.unitCost,
-        total:        i.cost.totalCost,
-      })),
-    })),
-    grandTotal,
-    submittedAt: new Date().toISOString(),
-  };
-  console.info('Quote payload:', payload);
+  const lineItems = activeGroups.map(g => {
+    const files = g.items
+      .filter(i => i.status === 'ready' && i.cost?.priceable)
+      .map(i => ({
+        filename: i.name,
+        fileId: i.shopifyFileId ?? null,
+        thumbnailId: i.shopifyThumbnailId ?? null,
+        quantity: i.settings.quantity,
+      }));
+    return {
+      title: g.name,
+      price: (g.groupCost?.groupTotal ?? 0).toFixed(2),
+      quantity: 1,
+      properties: [
+        { name: '_quote_ref', value: _orderNumber ?? '' },
+        { name: '_model_name', value: g.name },
+        { name: '_print_method', value: g.settings.printMethod },
+        { name: '_notes', value: g.settings.notes || '' },
+        { name: '_files_json', value: JSON.stringify(files) },
+      ],
+    };
+  });
 
-  // ---- Shopify integration point ----
-  // fetch('/cart/add.js', { method:'POST', body: JSON.stringify(buildShopifyPayload(payload)) });
-  // -----------------------------------
+  const RELAY_BASE_URL = 'https://<project-ref>.supabase.co/functions/v1/shopify-relay';
+  const submitBtn = form.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
 
-  document.getElementById('order-form-wrap').style.display    = 'none';
-  document.getElementById('order-success-wrap').style.display = 'flex';
-  document.getElementById('order-success-email').textContent  = email;
-  document.getElementById('order-success-number').textContent = _orderNumber ?? '—';
+  fetch(`${RELAY_BASE_URL}/checkout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      customerEmail: email,
+      customerName: name,
+      grandTotal,
+      thresholdExceeded,
+      lineItems,
+    }),
+  })
+    .then(r => {
+      if (!r.ok) throw new Error(`Checkout failed: HTTP ${r.status}`);
+      return r.json();
+    })
+    .then(result => {
+      if (result.mode === 'draft-order') {
+        window.location.href = result.invoiceUrl;
+        return;
+      }
+      // mode === 'cart' — add the priced variant to the real Shopify cart, then go to checkout.
+      return fetch('/cart/add.js', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: [{
+            id: result.variantId,
+            quantity: 1,
+            properties: {
+              _quote_ref: _orderNumber ?? '',
+              _customer_notes: notes,
+            },
+          }],
+        }),
+      }).then(r => {
+        if (!r.ok) throw new Error(`Add to cart failed: HTTP ${r.status}`);
+        window.location.href = '/checkout';
+      });
+    })
+    .catch(err => {
+      console.error(err);
+      showToast('Something went wrong submitting your order — please try again or contact us.', 'error');
+      if (submitBtn) submitBtn.disabled = false;
+    });
 }
 
 // ---- Utilities -------------------------------------------------------
