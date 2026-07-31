@@ -4,6 +4,7 @@
 // ============================================================
 
 const CONFIG_KEY = 'stl_calc_config_v1';
+const RELAY_BASE_URL = 'https://<project-ref>.supabase.co/functions/v1/shopify-relay';
 
 export const DEFAULT_CONFIG = {
   // --- Size tiers (resin) ---
@@ -213,29 +214,49 @@ export const DEFAULT_CONFIG = {
   ],
 };
 
-export function getConfig() {
+export async function getConfig() {
   try {
-    const raw = localStorage.getItem(CONFIG_KEY);
-    if (raw) {
-      const saved = JSON.parse(raw);
-      return {
-        ...DEFAULT_CONFIG,
-        ...saved,
-        materials:     saved.materials?.length     ? saved.materials     : DEFAULT_CONFIG.materials,
-        primerOptions: saved.primerOptions?.length  ? saved.primerOptions : DEFAULT_CONFIG.primerOptions,
-        sizeTiers:     saved.sizeTiers?.length      ? saved.sizeTiers     : DEFAULT_CONFIG.sizeTiers,
-        primerTiers:   saved.primerTiers?.length    ? saved.primerTiers   : DEFAULT_CONFIG.primerTiers,
-        plaColors:     saved.plaColors?.length      ? saved.plaColors     : DEFAULT_CONFIG.plaColors,
-        extras:        saved.extras?.length         ? saved.extras       : DEFAULT_CONFIG.extras,
-      };
+    const res = await fetch(`${RELAY_BASE_URL}/config`);
+    if (res.ok) {
+      const { config: saved } = await res.json();
+      if (saved) {
+        const merged = {
+          ...DEFAULT_CONFIG,
+          ...saved,
+          materials:     saved.materials?.length     ? saved.materials     : DEFAULT_CONFIG.materials,
+          primerOptions: saved.primerOptions?.length  ? saved.primerOptions : DEFAULT_CONFIG.primerOptions,
+          sizeTiers:     saved.sizeTiers?.length      ? saved.sizeTiers     : DEFAULT_CONFIG.sizeTiers,
+          primerTiers:   saved.primerTiers?.length    ? saved.primerTiers   : DEFAULT_CONFIG.primerTiers,
+          plaColors:     saved.plaColors?.length      ? saved.plaColors     : DEFAULT_CONFIG.plaColors,
+          extras:        saved.extras?.length         ? saved.extras       : DEFAULT_CONFIG.extras,
+        };
+        // Cache locally so the calculator still works if the relay is briefly unreachable.
+        try { localStorage.setItem(CONFIG_KEY, JSON.stringify(merged)); } catch { /* ignore */ }
+        return merged;
+      }
     }
+  } catch { /* fall through to cache below */ }
+
+  // Relay unreachable or nothing saved yet — fall back to last-known-good cache, then defaults.
+  try {
+    const cached = localStorage.getItem(CONFIG_KEY);
+    if (cached) return { ...DEFAULT_CONFIG, ...JSON.parse(cached) };
   } catch { /* ignore */ }
   return { ...DEFAULT_CONFIG };
 }
 
-export function saveConfig(config) {
-  try { localStorage.setItem(CONFIG_KEY, JSON.stringify(config)); return true; }
-  catch (e) { console.error('Config save failed:', e); return false; }
+export async function saveConfig(config, adminPassword) {
+  const res = await fetch(`${RELAY_BASE_URL}/config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword },
+    body: JSON.stringify({ config }),
+  });
+  if (!res.ok) {
+    if (res.status === 401) throw new Error('Incorrect admin password.');
+    throw new Error(`Save failed: HTTP ${res.status}`);
+  }
+  try { localStorage.setItem(CONFIG_KEY, JSON.stringify(config)); } catch { /* ignore */ }
+  return true;
 }
 
 export function resetConfig() {
