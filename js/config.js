@@ -1,10 +1,12 @@
 // ============================================================
-// config.js — Pricing configuration with localStorage persistence
-// For Shopify: replace localStorage with Shopify metafields API
+// config.js — Pricing configuration, backed by the Shopify relay
+// (shop metafields via supabase/functions/shopify-relay). A localStorage
+// cache is kept as a last-known-good fallback for when the relay is
+// briefly unreachable — it is not the source of truth.
 // ============================================================
 
 const CONFIG_KEY = 'stl_calc_config_v1';
-const RELAY_BASE_URL = 'https://<project-ref>.supabase.co/functions/v1/shopify-relay';
+export const RELAY_BASE_URL = 'https://<project-ref>.supabase.co/functions/v1/shopify-relay';
 
 export const DEFAULT_CONFIG = {
   // --- Size tiers (resin) ---
@@ -211,7 +213,14 @@ export const DEFAULT_CONFIG = {
   ],
 };
 
-export async function getConfig() {
+/**
+ * Fetch the current config plus where it actually came from. Most callers
+ * just want the config (use getConfig() below) — this variant exists for
+ * callers that need to know whether the relay was actually reached (e.g.
+ * admin.js's password check, which must not silently save a stale/default
+ * config back to the shop if the relay call fell back to cache/defaults).
+ */
+export async function getConfigWithSource() {
   try {
     const res = await fetch(`${RELAY_BASE_URL}/config`);
     if (res.ok) {
@@ -229,7 +238,7 @@ export async function getConfig() {
         };
         // Cache locally so the calculator still works if the relay is briefly unreachable.
         try { localStorage.setItem(CONFIG_KEY, JSON.stringify(merged)); } catch { /* ignore */ }
-        return merged;
+        return { config: merged, source: 'relay' };
       }
     }
   } catch { /* fall through to cache below */ }
@@ -237,9 +246,14 @@ export async function getConfig() {
   // Relay unreachable or nothing saved yet — fall back to last-known-good cache, then defaults.
   try {
     const cached = localStorage.getItem(CONFIG_KEY);
-    if (cached) return { ...DEFAULT_CONFIG, ...JSON.parse(cached) };
+    if (cached) return { config: { ...DEFAULT_CONFIG, ...JSON.parse(cached) }, source: 'cache' };
   } catch { /* ignore */ }
-  return { ...DEFAULT_CONFIG };
+  return { config: { ...DEFAULT_CONFIG }, source: 'default' };
+}
+
+export async function getConfig() {
+  const { config } = await getConfigWithSource();
+  return config;
 }
 
 export async function saveConfig(config, adminPassword) {
@@ -254,11 +268,6 @@ export async function saveConfig(config, adminPassword) {
   }
   try { localStorage.setItem(CONFIG_KEY, JSON.stringify(config)); } catch { /* ignore */ }
   return true;
-}
-
-export function resetConfig() {
-  localStorage.removeItem(CONFIG_KEY);
-  return { ...DEFAULT_CONFIG };
 }
 
 export function getMaterial(config, materialId) {

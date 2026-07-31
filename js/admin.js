@@ -2,7 +2,7 @@
 // admin.js — Admin pricing configuration page
 // ============================================================
 
-import { getConfig, saveConfig, DEFAULT_CONFIG } from './config.js?v=7';
+import { getConfig, getConfigWithSource, saveConfig, DEFAULT_CONFIG } from './config.js?v=8';
 import { calcItemCost, fmt, fmtMl, fmtHours } from './calculator.js?v=7';
 import { icon, applyStaticIcons } from './icons.js?v=1';
 
@@ -31,7 +31,18 @@ function showAuthModal() {
     const submitBtn = e.target.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
     try {
-      config = await getConfig();
+      // Use getConfigWithSource (not getConfig) here specifically: if the
+      // relay call falls back to the localStorage cache or hard-coded
+      // defaults (relay unreachable), saving that fallback config back
+      // via the password-check round trip would silently overwrite the
+      // real shop metafield with stale/default pricing. Only proceed with
+      // the save-based password check once we know we actually reached
+      // the relay.
+      const { config: fetchedConfig, source } = await getConfigWithSource();
+      if (source !== 'relay') {
+        throw new Error('Could not reach the pricing server to verify your password — check your connection and try again.');
+      }
+      config = fetchedConfig;
       await saveConfig(config, pw); // no-op save, just to verify the password server-side
       sessionStorage.setItem('admin_auth', '1');
       sessionStorage.setItem('admin_pw', pw); // needed for subsequent real saves this session
