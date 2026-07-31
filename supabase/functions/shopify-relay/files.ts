@@ -51,7 +51,11 @@ export async function uploadFile(
     }],
   });
 
-  const target = staged.stagedUploadsCreate.stagedTargets[0];
+  const targets = staged.stagedUploadsCreate.stagedTargets;
+  if (!targets?.length) {
+    throw new Error("Shopify did not return a staged upload target");
+  }
+  const target = targets[0];
 
   const form = new FormData();
   for (const p of target.parameters) form.append(p.name, p.value);
@@ -74,6 +78,10 @@ export async function uploadFile(
     }],
   });
 
-  const file = created.fileCreate.files[0];
+  const files = created.fileCreate.files;
+  if (!files?.length) {
+    throw new Error("Shopify did not return a created file");
+  }
+  const file = files[0];
   return { id: file.id, url: file.preview?.image?.url ?? null };
 }

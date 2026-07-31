@@ -18,6 +18,15 @@ interface CreatePricedVariantInput {
   price: string;
 }
 
+// NOTE: every checkout below the custom-quote threshold permanently adds a new
+// variant to PRINT_PRODUCT_ID — there is no cleanup or reuse of old variants.
+// Shopify caps variants per product at 100 by default, so this product will
+// eventually hit that ceiling under sustained order volume and start failing
+// checkouts. Additionally, `title` becomes an option value on the product;
+// two orders that happen to produce the same title (e.g. identical model
+// names) will collide as the same option value. Needs an operational plan
+// (periodic variant pruning, or a different pricing mechanism entirely)
+// before this can handle meaningful order volume — out of scope for v1.
 export async function createPricedVariant(
   input: CreatePricedVariantInput,
 ): Promise<{ variantId: number }> {

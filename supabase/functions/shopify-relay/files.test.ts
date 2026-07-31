@@ -1,5 +1,5 @@
 // supabase/functions/shopify-relay/files.test.ts
-import { assertEquals } from "std/testing/asserts.ts";
+import { assertEquals, assertRejects } from "std/testing/asserts.ts";
 import { uploadFile } from "./files.ts";
 
 const STAGED_PUT_URL = "https://shopify-staged-uploads.example/put-here";
@@ -201,6 +201,110 @@ Deno.test("uploadFile throws when staged upload PUT fails", async () => {
       threw = true;
     }
     assertEquals(threw, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("uploadFile throws a clear error when stagedUploadsCreate returns no targets", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = ((_input: RequestInfo | URL, init?: RequestInit) => {
+    const body = JSON.parse((init?.body as string) ?? "{}");
+    const query: string = body.query ?? "";
+
+    if (query.includes("stagedUploadsCreate")) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: {
+              stagedUploadsCreate: { stagedTargets: [], userErrors: [] },
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    }
+
+    throw new Error("unexpected query: " + query);
+  }) as typeof fetch;
+
+  try {
+    await assertRejects(
+      () =>
+        uploadFile({
+          filename: "part.stl",
+          mimeType: "model/stl",
+          base64Data: btoa("fake stl bytes"),
+        }),
+      Error,
+      "Shopify did not return a staged upload target",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("uploadFile throws a clear error when fileCreate returns no files", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString();
+
+    if (url === STAGED_PUT_URL) {
+      return Promise.resolve(new Response("", { status: 201 }));
+    }
+
+    const body = JSON.parse((init?.body as string) ?? "{}");
+    const query: string = body.query ?? "";
+
+    if (query.includes("stagedUploadsCreate")) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: {
+              stagedUploadsCreate: {
+                stagedTargets: [{
+                  url: STAGED_PUT_URL,
+                  resourceUrl: "https://shopify-staged-uploads.example/resource",
+                  parameters: [{ name: "key", value: "tmp/abc" }],
+                }],
+                userErrors: [],
+              },
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    }
+
+    if (query.includes("fileCreate")) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: {
+              fileCreate: { files: [], userErrors: [] },
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    }
+
+    throw new Error("unexpected query: " + query);
+  }) as typeof fetch;
+
+  try {
+    await assertRejects(
+      () =>
+        uploadFile({
+          filename: "part.stl",
+          mimeType: "model/stl",
+          base64Data: btoa("fake stl bytes"),
+        }),
+      Error,
+      "Shopify did not return a created file",
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

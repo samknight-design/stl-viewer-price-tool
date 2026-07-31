@@ -18,7 +18,13 @@ export async function getShopConfig(): Promise<Record<string, unknown> | null> {
     GET_QUERY,
   );
   if (!data.shop.metafield) return null;
-  return JSON.parse(data.shop.metafield.value);
+  try {
+    return JSON.parse(data.shop.metafield.value);
+  } catch (err) {
+    throw new Error(
+      `Stored pricing config metafield is not valid JSON: ${(err as Error).message}`,
+    );
+  }
 }
 
 const SET_MUTATION = `

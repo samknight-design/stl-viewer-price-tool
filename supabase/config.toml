@@ -1,0 +1,2 @@
+[functions.shopify-relay]
+verify_jwt = false
