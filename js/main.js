@@ -891,11 +891,16 @@ async function addFileToGroup(file, targetGroup) {
     recomputeItemCost(item);
     recomputeGroup(targetGroup);
 
-    // Fire-and-forget: upload the STL + thumbnail to Shopify Files in the
-    // background. Non-fatal if it fails — pricing still works without the
-    // Shopify-side file copy, the packing tool just won't have a
-    // file/thumbnail reference for this part.
-    uploadItemToShopify(item, file);
+    // Fire-and-forget from the pricing UI's point of view: upload the STL +
+    // thumbnail to Shopify Files in the background so pricing doesn't wait
+    // on the round trip. Non-fatal if it fails — pricing still works without
+    // the Shopify-side file copy, the packing tool just won't have a
+    // file/thumbnail reference for this part. The promise itself is kept on
+    // the item (not truly discarded) so submitOrder() can await any still-
+    // in-flight uploads before reading item.shopifyFileId/shopifyThumbnailId
+    // — otherwise a fast submit could race the upload and silently ship
+    // null file ids (see uploadItemToShopify's own doc comment).
+    item.uploadPromise = uploadItemToShopify(item, file);
   } catch (err) {
     item.status   = 'error';
     item.errorMsg = err.message;
@@ -1278,7 +1283,7 @@ function closeOrderForm() {
   document.getElementById('order-overlay')?.classList.remove('open');
 }
 
-function submitOrder(e) {
+async function submitOrder(e) {
   e.preventDefault();
   const form       = e.target;
   const name       = form.querySelector('[name="cust-name"]').value.trim();
@@ -1290,6 +1295,25 @@ function submitOrder(e) {
   if (!disclaimer)     { showToast('Please tick the confirmation checkbox to continue.', 'error'); return; }
 
   const activeGroups = groups.filter(g => g.items.some(i => i.status === 'ready'));
+
+  const submitBtn = form.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
+
+  // Wait for any Shopify file uploads still in flight for priceable items in
+  // this order. Uploads run fire-and-forget from addFileToGroup() so pricing
+  // never blocks on them, but submitOrder reads item.shopifyFileId/
+  // shopifyThumbnailId below — without this await, a fast submit could beat
+  // an in-flight upload and silently ship null file/thumbnail ids (the
+  // future packing tool needs those). uploadItemToShopify() catches its own
+  // errors internally and always resolves, so this never rejects/hangs.
+  const pendingUploads = activeGroups
+    .flatMap(g => g.items)
+    .filter(i => i.status === 'ready' && i.cost?.priceable && i.uploadPromise)
+    .map(i => i.uploadPromise);
+  if (pendingUploads.length) {
+    await Promise.all(pendingUploads);
+  }
+
   const grandTotal   = calcOrderTotal(activeGroups, config);
   const thresholdExceeded = exceedsCustomQuoteThreshold(grandTotal, config);
 
@@ -1315,9 +1339,6 @@ function submitOrder(e) {
       ],
     };
   });
-
-  const submitBtn = form.querySelector('button[type="submit"]');
-  if (submitBtn) submitBtn.disabled = true;
 
   fetch(`${RELAY_BASE_URL}/checkout`, {
     method: 'POST',
