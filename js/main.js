@@ -4,7 +4,7 @@
 // Files belong to a group. Multiple groups = multiple models.
 // ============================================================
 
-import { getConfig } from './config.js?v=14';
+import { getConfig, RELAY_BASE_URL } from './config.js?v=15';
 import { parseSTLFile } from './stl-parser.js?v=9';
 import { generateThumbnail, STLViewer } from './viewer.js?v=11';
 import { icon, applyStaticIcons } from './icons.js?v=1';
@@ -183,10 +183,6 @@ function recomputeItemCost(item) {
 
 function recomputeGroup(group) {
   group.groupCost = calcGroupCost(group.items, group.settings, config);
-}
-
-function recomputeAllGroups() {
-  groups.forEach(recomputeGroup);
 }
 
 // ---- Group management ------------------------------------------------
@@ -890,46 +886,70 @@ async function addFileToGroup(file, targetGroup) {
     item.thumbnail = generateThumbnail(item.data.triangles);
     item.status    = 'ready';
 
-    const RELAY_BASE_URL = 'https://<project-ref>.supabase.co/functions/v1/shopify-relay';
-
-    try {
-      const fileBuffer = await file.arrayBuffer();
-      const base64Data = btoa(
-        new Uint8Array(fileBuffer).reduce((s, b) => s + String.fromCharCode(b), ''),
-      );
-      const stlUpload = await fetch(`${RELAY_BASE_URL}/files`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: item.name, mimeType: 'model/stl', base64Data }),
-      }).then(r => r.json());
-      item.shopifyFileId = stlUpload.id;
-
-      if (item.thumbnail) {
-        const thumbBase64 = item.thumbnail.split(',')[1]; // strip "data:image/png;base64,"
-        const thumbUpload = await fetch(`${RELAY_BASE_URL}/files`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            filename: item.name.replace(/\.stl$/i, '.png'),
-            mimeType: 'image/png',
-            base64Data: thumbBase64,
-          }),
-        }).then(r => r.json());
-        item.shopifyThumbnailId = thumbUpload.id;
-      }
-    } catch (err) {
-      // Non-fatal: pricing still works without the Shopify-side file copy.
-      // The packing tool just won't have a thumbnail for this part if this failed.
-      console.warn('Shopify file upload failed for', item.name, err);
-    }
-
+    // Compute pricing immediately — don't make the user wait on the
+    // Shopify file-upload round trip below just to see a price.
     recomputeItemCost(item);
     recomputeGroup(targetGroup);
+
+    // Fire-and-forget: upload the STL + thumbnail to Shopify Files in the
+    // background. Non-fatal if it fails — pricing still works without the
+    // Shopify-side file copy, the packing tool just won't have a
+    // file/thumbnail reference for this part.
+    uploadItemToShopify(item, file);
   } catch (err) {
     item.status   = 'error';
     item.errorMsg = err.message;
   }
   renderAll();
+}
+
+/** Base64-encode bytes in chunks — avoids the call-stack/perf blowup of
+ *  spreading or reduce()-ing very large typed arrays one byte at a time. */
+function bytesToBase64(bytes) {
+  const CHUNK_SIZE = 8192;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK_SIZE));
+  }
+  return btoa(binary);
+}
+
+/** Upload an item's STL bytes + thumbnail to the relay's Shopify Files
+ *  endpoint, without blocking the caller. Sets item.shopifyFileId /
+ *  item.shopifyThumbnailId on success and re-renders. */
+async function uploadItemToShopify(item, file) {
+  try {
+    const fileBuffer = await file.arrayBuffer();
+    const base64Data = bytesToBase64(new Uint8Array(fileBuffer));
+    const stlRes = await fetch(`${RELAY_BASE_URL}/files`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: item.name, mimeType: 'model/stl', base64Data }),
+    });
+    if (!stlRes.ok) throw new Error(`STL upload failed: HTTP ${stlRes.status}`);
+    const stlUpload = await stlRes.json();
+    item.shopifyFileId = stlUpload.id;
+
+    if (item.thumbnail) {
+      const thumbBase64 = item.thumbnail.split(',')[1]; // strip "data:image/png;base64,"
+      const thumbRes = await fetch(`${RELAY_BASE_URL}/files`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: item.name.replace(/\.stl$/i, '.png'),
+          mimeType: 'image/png',
+          base64Data: thumbBase64,
+        }),
+      });
+      if (!thumbRes.ok) throw new Error(`Thumbnail upload failed: HTTP ${thumbRes.status}`);
+      const thumbUpload = await thumbRes.json();
+      item.shopifyThumbnailId = thumbUpload.id;
+    }
+  } catch (err) {
+    console.warn('Shopify file upload failed for', item.name, err);
+  } finally {
+    renderAll();
+  }
 }
 
 // ---- Order helpers ---------------------------------------------------
@@ -1296,7 +1316,6 @@ function submitOrder(e) {
     };
   });
 
-  const RELAY_BASE_URL = 'https://<project-ref>.supabase.co/functions/v1/shopify-relay';
   const submitBtn = form.querySelector('button[type="submit"]');
   if (submitBtn) submitBtn.disabled = true;
 
@@ -1321,6 +1340,16 @@ function submitOrder(e) {
         return;
       }
       // mode === 'cart' — add the priced variant to the real Shopify cart, then go to checkout.
+      // result.properties comes from the relay (the first model group's
+      // _quote_ref/_model_name/_print_method/_notes/_files_json — see
+      // index.ts's /checkout handler); _quote_ref/_customer_notes below are
+      // the frontend's own authoritative values and take precedence over
+      // anything of the same name in result.properties.
+      const cartProperties = {
+        ...(result.properties || {}),
+        _quote_ref: _orderNumber ?? '',
+        _customer_notes: notes,
+      };
       return fetch('/cart/add.js', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1328,10 +1357,7 @@ function submitOrder(e) {
           items: [{
             id: result.variantId,
             quantity: 1,
-            properties: {
-              _quote_ref: _orderNumber ?? '',
-              _customer_notes: notes,
-            },
+            properties: cartProperties,
           }],
         }),
       }).then(r => {
