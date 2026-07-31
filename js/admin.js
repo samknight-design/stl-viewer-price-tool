@@ -2,7 +2,7 @@
 // admin.js — Admin pricing configuration page
 // ============================================================
 
-import { getConfig, saveConfig, resetConfig, DEFAULT_CONFIG } from './config.js?v=7';
+import { getConfig, saveConfig, DEFAULT_CONFIG } from './config.js?v=7';
 import { calcItemCost, fmt, fmtMl, fmtHours } from './calculator.js?v=7';
 import { icon, applyStaticIcons } from './icons.js?v=1';
 
@@ -25,37 +25,28 @@ function showAuthModal() {
   document.getElementById('auth-overlay').style.display = 'flex';
   document.getElementById('auth-panel').style.display   = 'block';
 
-  document.getElementById('auth-form').addEventListener('submit', e => {
+  document.getElementById('auth-form').addEventListener('submit', async e => {
     e.preventDefault();
     const pw = document.getElementById('auth-password').value;
-    const cfg = getConfig();
-    if (pw === cfg.adminPassword) {
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    try {
+      config = await getConfig();
+      await saveConfig(config, pw); // no-op save, just to verify the password server-side
       sessionStorage.setItem('admin_auth', '1');
+      sessionStorage.setItem('admin_pw', pw); // needed for subsequent real saves this session
       document.getElementById('auth-overlay').style.display = 'none';
       bootAdmin();
-    } else {
-      document.getElementById('auth-error').textContent = 'Incorrect password.';
+    } catch (err) {
+      document.getElementById('auth-error').textContent = err.message || 'Incorrect password.';
+    } finally {
+      submitBtn.disabled = false;
     }
-  });
-
-  document.getElementById('auth-reset-btn')?.addEventListener('click', () => {
-    if (!confirm('Reset admin password back to "admin123"?\n\nThis will not affect any other settings.')) return;
-    try {
-      const raw = localStorage.getItem('stl_calc_config_v1');
-      const cfg = raw ? JSON.parse(raw) : {};
-      cfg.adminPassword = 'admin123';
-      localStorage.setItem('stl_calc_config_v1', JSON.stringify(cfg));
-    } catch { /* ignore */ }
-    const err = document.getElementById('auth-error');
-    err.style.color = 'var(--green, #16a34a)';
-    err.textContent = 'Password reset to "admin123". Enter it above to log in.';
-    document.getElementById('auth-password').value = '';
-    document.getElementById('auth-password').focus();
   });
 }
 
-function bootAdmin() {
-  config = getConfig();
+async function bootAdmin() {
+  config = await getConfig();
   renderForm();
   renderMaterials();
   updatePreview();
@@ -77,7 +68,6 @@ function renderForm() {
   f('inp-currency-symbol').value     = config.currencySymbol;
   f('inp-biz-name').value            = config.businessName;
   f('inp-biz-email').value           = config.businessEmail;
-  f('inp-admin-pw').value            = config.adminPassword;
   f('chk-show-breakdown').checked    = config.showCostBreakdown;
 
   // Assembly
@@ -145,26 +135,25 @@ function setupEvents() {
   });
 
   // Save
-  document.getElementById('save-btn').addEventListener('click', () => {
+  document.getElementById('save-btn')?.addEventListener('click', async () => {
     collectForm();
-    if (saveConfig(config)) {
-      showToast('Settings saved ✓', 'success');
+    try {
+      await saveConfig(config, sessionStorage.getItem('admin_pw'));
+      showToast('Settings saved', 'success');
       renderForm();
       renderMaterials();
-    } else {
-      showToast('Save failed.', 'error');
+    } catch (err) {
+      showToast(err.message || 'Save failed', 'error');
     }
   });
 
-  // Reset
-  document.getElementById('reset-btn').addEventListener('click', () => {
-    if (confirm('Reset all settings to defaults?')) {
-      config = resetConfig();
-      renderForm();
-      renderMaterials();
-      updatePreview();
-      showToast('Reset to defaults.', 'info');
-    }
+  // Reset (loads defaults into the form only — nothing is saved until Save Settings is clicked)
+  document.getElementById('reset-btn')?.addEventListener('click', () => {
+    if (!confirm('Load default settings into the form? Nothing is saved until you click Save Settings.')) return;
+    config = { ...DEFAULT_CONFIG };
+    renderForm();
+    renderMaterials();
+    updatePreview();
   });
 
   // Export JSON (for Shopify metafield)
@@ -194,7 +183,6 @@ function collectForm() {
   config.currencySymbol         = str('inp-currency-symbol',      '£');
   config.businessName           = str('inp-biz-name',             DEFAULT_CONFIG.businessName);
   config.businessEmail          = str('inp-biz-email',            DEFAULT_CONFIG.businessEmail);
-  config.adminPassword          = str('inp-admin-pw',             DEFAULT_CONFIG.adminPassword);
   config.showCostBreakdown      = document.getElementById('chk-show-breakdown')?.checked ?? true;
 
   // Assembly

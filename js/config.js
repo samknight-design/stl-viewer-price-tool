@@ -193,9 +193,6 @@ export const DEFAULT_CONFIG = {
   businessEmail:   'orders@arcane-flame.com',
   showCostBreakdown: true,
 
-  // --- Admin access (client-side only) ---
-  adminPassword:   'admin123',
-
   // --- Materials ---
   materials: [
     { id: 'standard',  name: 'Standard Resin',  color: '#b0c4de', description: 'Great for display models' },
