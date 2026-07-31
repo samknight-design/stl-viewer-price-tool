@@ -2,7 +2,7 @@
 // admin.js — Admin pricing configuration page
 // ============================================================
 
-import { getConfig, getConfigWithSource, saveConfig, DEFAULT_CONFIG } from './config.js?v=8';
+import { getConfigWithSource, saveConfig, DEFAULT_CONFIG } from './config.js?v=8';
 import { calcItemCost, fmt, fmtMl, fmtHours } from './calculator.js?v=7';
 import { icon, applyStaticIcons } from './icons.js?v=1';
 
@@ -57,11 +57,52 @@ function showAuthModal() {
 }
 
 async function bootAdmin() {
-  config = await getConfig();
+  // Use getConfigWithSource (not plain getConfig) here for the same reason
+  // as the login check above: if an already-authenticated admin reloads the
+  // page during a transient relay blip, a silent fallback to cached/default
+  // config would let Save Settings write that stale fallback straight back
+  // to the shop metafield, overwriting the real config. Guard against that
+  // explicitly rather than relying on the login-time check alone, since a
+  // persisted sessionStorage session skips showAuthModal()/getConfigWithSource()
+  // entirely on reload.
+  const { config: fetchedConfig, source } = await getConfigWithSource();
+  config = fetchedConfig;
   renderForm();
   renderMaterials();
   updatePreview();
   setupEvents();
+  setConfigSourceWarning(source !== 'relay');
+}
+
+/** Toggle a persistent warning + disable Save Settings when the config we're
+ *  showing did NOT come from a confirmed round trip to the relay (i.e. it's
+ *  a localStorage cache or hard-coded defaults). Saving in that state would
+ *  silently overwrite the real shop metafield with stale/default pricing. */
+function setConfigSourceWarning(show) {
+  let banner = document.getElementById('config-source-warning');
+  const saveBtn = document.getElementById('save-btn');
+  if (show) {
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'config-source-warning';
+      banner.className = 'toast toast-error show';
+      banner.style.position = 'sticky';
+      banner.style.top = '0';
+      banner.style.zIndex = '1000';
+      banner.textContent = 'Could not reach the pricing server — showing cached/default values. Changes will NOT be saved correctly until this is resolved.';
+      document.body.prepend(banner);
+    }
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.title = 'Save is disabled — the pricing server could not be reached, so saving now could overwrite real settings with stale/default values. Reload once the connection is restored.';
+    }
+  } else {
+    banner?.remove();
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.removeAttribute('title');
+    }
+  }
 }
 
 // ---- Form rendering --------------------------------------------------

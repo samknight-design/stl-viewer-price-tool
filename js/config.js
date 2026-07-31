@@ -225,6 +225,12 @@ export async function getConfigWithSource() {
     const res = await fetch(`${RELAY_BASE_URL}/config`);
     if (res.ok) {
       const { config: saved } = await res.json();
+      // A fresh shop's metafield is genuinely unset on first use — GET
+      // /config correctly returns { config: null } with a 200 OK for that
+      // case. That is NOT a failure to reach the relay, so source is still
+      // 'relay' here (letting a fresh shop's admin pass the login check and
+      // bootstrap their first config) — only fetch failures / non-ok
+      // responses below fall back to 'cache'/'default'.
       if (saved) {
         const merged = {
           ...DEFAULT_CONFIG,
@@ -240,10 +246,13 @@ export async function getConfigWithSource() {
         try { localStorage.setItem(CONFIG_KEY, JSON.stringify(merged)); } catch { /* ignore */ }
         return { config: merged, source: 'relay' };
       }
+      // Relay reached fine, nothing saved yet — use defaults but still
+      // report 'relay' since we know for certain that's really the state.
+      return { config: { ...DEFAULT_CONFIG }, source: 'relay' };
     }
   } catch { /* fall through to cache below */ }
 
-  // Relay unreachable or nothing saved yet — fall back to last-known-good cache, then defaults.
+  // Relay unreachable or errored — fall back to last-known-good cache, then defaults.
   try {
     const cached = localStorage.getItem(CONFIG_KEY);
     if (cached) return { config: { ...DEFAULT_CONFIG, ...JSON.parse(cached) }, source: 'cache' };
