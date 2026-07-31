@@ -234,14 +234,20 @@ img { display: block; max-width: 100%; }
 .card-remove-x {
   position: absolute; top: 8px; right: 8px;
   background: rgba(220,38,38,.08); border: none; color: var(--red);
-  cursor: pointer; width: 32px; height: 32px; border-radius: 50%;
-  font-size: .85rem; display: flex; align-items: center; justify-content: center;
-  transition: background var(--transition); z-index: 2;
+  cursor: pointer; width: 32px; height: 32px; border-radius: 16px;
+  font-size: .78rem; display: flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 0; transition: background var(--transition), padding var(--transition), width var(--transition);
+  z-index: 2; white-space: nowrap;
 }
 .card-remove-x:hover, .card-remove-x:focus-visible { background: rgba(220,38,38,.2); }
+.card-remove-x.armed {
+  width: auto; padding: 0 12px; background: var(--red); color: #fff; font-weight: 600;
+}
+.card-remove-x.armed:hover { background: #b91c1c; }
 
 @media (max-width: 767px) {
-  .card-remove-x { width: 44px; height: 44px; font-size: 1rem; }
+  .card-remove-x:not(.armed) { width: 44px; height: 44px; font-size: 1rem; }
+  .card-remove-x.armed { height: 44px; font-size: .85rem; }
 }
 
 .card-thumb {
@@ -645,7 +651,18 @@ input.mat-color { padding: 2px; height: 32px; cursor: pointer; background: trans
   padding: 2px 4px; width: 100%; max-width: 300px; transition: border-color var(--transition);
 }
 .group-name-input:focus { outline: none; border-bottom-color: var(--accent); }
-.group-delete { flex-shrink: 0; }
+.group-header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+.group-delete-btn {
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+  background: transparent; color: var(--text-dim); border: 1px solid var(--card-border);
+}
+.group-delete-btn:hover { background: rgba(220,38,38,.08); color: var(--red); border-color: rgba(220,38,38,.3); }
+.group-delete-btn.armed {
+  background: var(--red); color: #fff; border-color: var(--red); font-weight: 600;
+}
+.group-delete-btn.armed:hover { background: #b91c1c; }
+.delete-confirm-text { white-space: nowrap; }
 
 .group-settings {
   display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
@@ -662,22 +679,38 @@ input.mat-color { padding: 2px; height: 32px; cursor: pointer; background: trans
 .setting-disabled { opacity: .4; pointer-events: none; }
 .group-setting-label { font-size: .85rem; font-weight: 700; color: var(--text); }
 .group-setting-desc  { font-size: .76rem; color: var(--text-dim); line-height: 1.5; }
-.primer-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.primer-select { font-size: .82rem; flex: 1; min-width: 140px; }
+.primer-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .setting-cost-hint {
   font-size: .78rem; color: var(--green); font-weight: 600;
   background: rgba(22,163,74,.08); border: 1px solid rgba(22,163,74,.2);
   border-radius: 20px; padding: 2px 8px; white-space: nowrap;
 }
 
-.extras-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
-.extra-row {
-  display: flex; align-items: center; gap: 8px; cursor: pointer;
-  font-size: .82rem; color: var(--text); padding: 4px 2px;
+/* Primer swatches — large tap-friendly circles */
+.primer-swatch-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  background: none; border: none; padding: 2px; cursor: pointer; min-width: 52px;
 }
-.extra-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
-.extra-row span:first-of-type { flex: 1; }
-.extra-price { color: var(--text-dim); font-weight: 600; }
+.primer-swatch {
+  display: flex; align-items: center; justify-content: center;
+  width: 48px; height: 48px; min-width: 44px; min-height: 44px;
+  border-radius: 50%; border: 2px solid var(--card-border);
+  background: #fff; box-shadow: inset 0 0 0 1px rgba(0,0,0,.04);
+  transition: var(--transition);
+}
+.primer-swatch-btn:hover .primer-swatch { border-color: var(--card-border-h); transform: translateY(-1px); }
+.primer-swatch.active { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+.primer-swatch.primer-none {
+  background: repeating-linear-gradient(
+    135deg, #fff, #fff 45%, transparent 45%, transparent 55%, #fff 55%, #fff 100%
+  );
+  background-image: linear-gradient(135deg, transparent 47%, var(--red, #dc2626) 47%, var(--red, #dc2626) 53%, transparent 53%);
+  background-color: #fff;
+}
+.primer-check { color: #fff; font-size: 1.1rem; font-weight: 700; text-shadow: 0 1px 2px rgba(0,0,0,.4); }
+.primer-swatch.primer-none .primer-check { color: var(--red, #dc2626); text-shadow: none; }
+.primer-swatch-label { font-size: .7rem; color: var(--text-dim); text-align: center; }
+.primer-swatch-btn:has(.primer-swatch.active) .primer-swatch-label { color: var(--text); font-weight: 600; }
 
 .group-notes { padding: 0 18px 14px; }
 .group-notes-label { display: block; font-size: .8rem; font-weight: 500; color: var(--text-dim); margin-bottom: 5px; }
@@ -723,6 +756,22 @@ input.mat-color { padding: 2px; height: 32px; cursor: pointer; background: trans
 }
 .group-total span:last-child { color: var(--accent); }
 .group-actions { padding: 10px 16px 14px; display: flex; gap: 8px; flex-wrap: wrap; }
+.add-part-btn { font-size: .92rem; padding: 14px 24px; }
+
+.add-model-btn { margin-top: 14px; font-size: .95rem; }
+
+/* ---- Collapsed ("Done") group card ---------------------------------- */
+.group-done-btn { background: linear-gradient(135deg, #16a34a, #15803d); border-color: #15803d; box-shadow: 0 2px 10px rgba(22,163,74,.25); }
+.group-done-btn:hover { background: linear-gradient(135deg, #15803d, #12692f); }
+.group-collapsed {
+  display: flex; align-items: center; gap: 12px; padding: 14px 18px;
+}
+.group-collapsed-check { font-size: 1.3rem; flex-shrink: 0; }
+.group-collapsed-info { flex: 1; min-width: 0; }
+.group-collapsed-name { font-size: .95rem; font-weight: 600; color: var(--text); }
+.group-collapsed-meta { font-size: .76rem; color: var(--text-dim); }
+.group-collapsed-price { font-size: 1rem; font-weight: 700; color: var(--accent); white-space: nowrap; }
+.group-edit-btn { flex-shrink: 0; }
 
 /* ---- Order summary group lines ------------------------------------- */
 .summary-groups { margin-bottom: 4px; }

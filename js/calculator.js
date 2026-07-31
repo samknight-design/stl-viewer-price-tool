@@ -24,21 +24,39 @@ export function fitsBuildPlate(dims, buildPlate) {
 // ---- Size tier lookup ---------------------------------------------------
 
 /**
- * Decide a model's price tier from its largest scaled dimension.
- * Returns null if it exceeds every defined tier AND doesn't fit the
- * build plate even with the support margin — i.e. cannot be auto-priced.
+ * Decide a model's price tier from the MEDIAN (second-largest) of its three
+ * scaled dimensions, not the longest one. A single thin protrusion (a
+ * sword, spear, banner pole) inflates only one axis — pricing off the
+ * longest axis alone would charge for the whole model as if it were that
+ * big in every direction. The median reflects the model's actual bulk
+ * instead. A small boundary allowance (config.tierBoundaryAllowanceMm)
+ * also keeps a dimension that's just barely over a tier's ceiling from
+ * being bumped a whole tier up.
+ *
+ * Physical fit is checked first against the full 3D bounding box
+ * (fitsBuildPlate) — an oversized protrusion that genuinely won't fit the
+ * printer is rejected outright, before the median dimension ever gets a
+ * chance to make it look like a cheap, small tier.
+ *
+ * Returns null if the model doesn't fit the build plate even with the
+ * support margin — i.e. cannot be auto-priced.
  */
 export function calcSizeTier(dims, config) {
-  const largest = Math.max(dims.x, dims.y, dims.z);
+  // A model that doesn't physically fit the build plate can't be
+  // auto-priced at all, no matter how small its tier-lookup dimension
+  // looks — this catches e.g. a spear/appendage so long it wouldn't fit
+  // the printer, even though the model's bulk (median dimension) alone
+  // would otherwise look small enough for a cheap tier.
+  if (!fitsBuildPlate(dims, config.buildPlate)) return null;
+
+  const [, tierDim] = [dims.x, dims.y, dims.z].sort((a, b) => a - b);
+  const allowance = config.tierBoundaryAllowanceMm ?? 0;
   for (const tier of config.sizeTiers) {
-    if (largest <= tier.maxDimensionMm) {
+    if (tierDim <= tier.maxDimensionMm + allowance) {
       return { name: tier.name, maxDimensionMm: tier.maxDimensionMm, price: tier.price };
     }
   }
-  if (fitsBuildPlate(dims, config.buildPlate)) {
-    return { name: 'Max Plate', maxDimensionMm: null, price: config.maxPlatePrice };
-  }
-  return null;
+  return { name: 'Max Plate', maxDimensionMm: null, price: config.maxPlatePrice };
 }
 
 // ---- Per-file cost ---------------------------------------------------
@@ -72,10 +90,6 @@ export function calcItemCost(stlData, settings, config) {
 
   const tier = calcSizeTier(tierDims, config);
   const surchargePct = config.materialSurcharges?.[materialId] ?? 0;
-  // Small flat fee for us adding supports ourselves, so pre-supported always
-  // prices a little cheaper than an equivalent standard upload — even when
-  // both land in the same tier.
-  const supportHandlingFee = presupported ? 0 : (config.unsupportedHandlingFee ?? 0);
 
   if (!tier) {
     return {
@@ -86,11 +100,16 @@ export function calcItemCost(stlData, settings, config) {
       tier: null,
       fitsBuildPlate: false,
       surchargePct,
-      supportHandlingFee,
+      supportHandlingFee: 0,
       unitCost: 0,
       totalCost: 0,
     };
   }
+
+  // Fee for us adding supports ourselves, scaled to the tier price so
+  // pre-supported uploads always come out a meaningful percentage cheaper
+  // than an equivalent standard upload — even when both land in the same tier.
+  const supportHandlingFee = presupported ? 0 : tier.price * ((config.supportHandlingFeePct ?? 0) / 100);
 
   const surchargeAmount = tier.price * (surchargePct / 100);
   const unitCost  = tier.price + surchargeAmount + supportHandlingFee;
@@ -122,23 +141,27 @@ export function calcAssemblyCost(partCount, config) {
   return Math.min(firstJoint + extraJoints, config.assemblyMax);
 }
 
-// ---- Primer cost (unchanged) ------------------------------------------
-// Material: flat fee per model group. Labour: scales with volume^(2/3)
-// as a surface-area proxy, capped.
+// ---- Primer cost --------------------------------------------------------
+// Priced once per model group (not per part) from the group's combined
+// print volume — config.primerTiers, ascending by maxVolumeMl, same
+// pattern as the size-tier ladder. Falls back to primerMaxPrice for
+// anything bigger than the last tier, and primerMinPrice floors the
+// result either way.
 
 export function calcPrimerCost(totalVolumeMl, primerType, config) {
   if (!primerType || primerType === 'unprimed') {
-    return { material: 0, labour: 0, total: 0 };
+    return { total: 0 };
   }
-  const material = config.primerMaterialCost;
-  const labour   = Math.max(
-    config.primerLabourMin,
-    Math.min(
-      Math.pow(Math.max(totalVolumeMl, 0.1), 2 / 3) * config.primerLabourMultiplier,
-      config.primerLabourMax
-    )
-  );
-  return { material, labour, total: material + labour };
+  const vol = Math.max(totalVolumeMl, 0);
+  let price = config.primerMaxPrice;
+  for (const tier of config.primerTiers) {
+    if (vol <= tier.maxVolumeMl) {
+      price = tier.price;
+      break;
+    }
+  }
+  price = Math.min(Math.max(price, config.primerMinPrice ?? 0), config.primerMaxPrice ?? price);
+  return { total: price };
 }
 
 // ---- Group-level cost --------------------------------------------------
@@ -171,9 +194,7 @@ export function calcGroupCost(items, groupSettings, config) {
     oversizedCount,
     extrasCost,
     assemblyCost,
-    primerMaterial: primerResult.material,
-    primerLabour:   primerResult.labour,
-    primerTotal:    primerResult.total,
+    primerTotal: primerResult.total,
     groupTotal,
     isPrimed:    primer !== 'unprimed',
     primerLabel: primer,

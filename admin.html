@@ -159,34 +159,22 @@
       <div class="section-header">🎨 Primer Pricing</div>
       <div class="section-body">
         <p style="font-size:.82rem;color:var(--text-dim);margin-bottom:18px">
-          Applied when a primer colour is selected. Labour scales with model surface area
-          via <code style="color:var(--accent-light)">volume<sup>2/3</sup> × multiplier</code>,
-          clamped between min and max.
+          Applied once per model group (not per part), from the combined print volume of
+          all its parts, using a volume tier ladder (edit <code style="color:var(--accent-light)">primerTiers</code>
+          in config.js — not yet exposed here). The min/max below are safety clamps around it.
         </p>
         <div class="form-grid">
 
           <div class="form-field-adm">
-            <label for="inp-primer-material">Primer material cost</label>
-            <input type="number" id="inp-primer-material" min="0" step="0.01" value="5.00">
-            <p class="field-hint">Flat cost per model group (any colour).</p>
+            <label for="inp-primer-min">Minimum primer price</label>
+            <input type="number" id="inp-primer-min" min="0" step="0.10" value="0.50">
+            <p class="field-hint">Floor — even a tiny primed model costs at least this.</p>
           </div>
 
           <div class="form-field-adm">
-            <label for="inp-primer-multiplier">Labour multiplier</label>
-            <input type="number" id="inp-primer-multiplier" min="0" step="0.01" value="0.50">
-            <p class="field-hint">Multiplied by volume^(2/3) to get surface-area-based labour.</p>
-          </div>
-
-          <div class="form-field-adm">
-            <label for="inp-primer-labour-min">Minimum primer labour</label>
-            <input type="number" id="inp-primer-labour-min" min="0" step="0.01" value="1.50">
-            <p class="field-hint">Minimum labour charge for any primed model.</p>
-          </div>
-
-          <div class="form-field-adm">
-            <label for="inp-primer-labour-max">Maximum primer labour</label>
-            <input type="number" id="inp-primer-labour-max" min="0" step="0.50" value="12.00">
-            <p class="field-hint">Cap on primer labour for very large models.</p>
+            <label for="inp-primer-max">Maximum primer price</label>
+            <input type="number" id="inp-primer-max" min="0" step="0.50" value="20.00">
+            <p class="field-hint">Cap — large kits won't exceed this.</p>
           </div>
 
         </div>

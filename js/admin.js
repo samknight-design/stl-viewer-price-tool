@@ -84,10 +84,8 @@ function renderForm() {
   f('inp-assembly-max').value        = config.assemblyMax;
 
   // Primer
-  f('inp-primer-material').value     = config.primerMaterialCost;
-  f('inp-primer-multiplier').value   = config.primerLabourMultiplier;
-  f('inp-primer-labour-min').value   = config.primerLabourMin;
-  f('inp-primer-labour-max').value   = config.primerLabourMax;
+  f('inp-primer-min').value          = config.primerMinPrice;
+  f('inp-primer-max').value          = config.primerMaxPrice;
 }
 
 // ---- Materials -------------------------------------------------------
@@ -203,10 +201,8 @@ function collectForm() {
   config.assemblyMax            = num('inp-assembly-max',         DEFAULT_CONFIG.assemblyMax);
 
   // Primer
-  config.primerMaterialCost     = num('inp-primer-material',      DEFAULT_CONFIG.primerMaterialCost);
-  config.primerLabourMultiplier = num('inp-primer-multiplier',    DEFAULT_CONFIG.primerLabourMultiplier);
-  config.primerLabourMin        = num('inp-primer-labour-min',    DEFAULT_CONFIG.primerLabourMin);
-  config.primerLabourMax        = num('inp-primer-labour-max',    DEFAULT_CONFIG.primerLabourMax);
+  config.primerMinPrice         = num('inp-primer-min',           DEFAULT_CONFIG.primerMinPrice);
+  config.primerMaxPrice         = num('inp-primer-max',           DEFAULT_CONFIG.primerMaxPrice);
 
   config.materials              = collectMaterials();
 }

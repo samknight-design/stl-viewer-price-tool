@@ -27,6 +27,37 @@ let _gSeq = 0, _iSeq = 0;
 const gId = () => `g${++_gSeq}`;
 const iId = () => `i${++_iSeq}`;
 
+// ---- Tap-to-arm delete confirmation ------------------------------------
+// First tap on a delete button arms it (shows "Delete part/model?" for a
+// few seconds); a second tap while armed actually deletes. Arming a
+// different button replaces the pending one, and it auto-disarms after
+// a few seconds of inactivity.
+let _pendingDeleteType  = null; // 'item' | 'group'
+let _pendingDeleteId    = null;
+let _pendingDeleteTimer = null;
+
+function isArmedForDelete(type, id) {
+  return _pendingDeleteType === type && _pendingDeleteId === id;
+}
+
+function armDelete(type, id) {
+  clearTimeout(_pendingDeleteTimer);
+  _pendingDeleteType  = type;
+  _pendingDeleteId    = id;
+  _pendingDeleteTimer = setTimeout(() => {
+    _pendingDeleteType = null;
+    _pendingDeleteId   = null;
+    renderAll();
+  }, 3000);
+  renderAll();
+}
+
+function disarmDelete() {
+  clearTimeout(_pendingDeleteTimer);
+  _pendingDeleteType  = null;
+  _pendingDeleteId    = null;
+}
+
 // ---- Boot ------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -36,6 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupModal();
   setupOrderForm();
   document.getElementById('mobile-summary-btn')?.addEventListener('click', openOrderForm);
+  document.getElementById('add-model-btn')?.addEventListener('click', () => { addGroup(); });
   setupGroupList();   // Single delegated listener — no duplicates across re-renders
   document.addEventListener('add-group', () => { addGroup(); });
   renderAll();
@@ -70,7 +102,7 @@ function defaultGroupSettings() {
 }
 
 function createGroup(name) {
-  return { id: gId(), name, settings: defaultGroupSettings(), items: [], groupCost: null };
+  return { id: gId(), name, settings: defaultGroupSettings(), items: [], groupCost: null, collapsed: false };
 }
 
 function ensureGroup() {
@@ -222,6 +254,12 @@ function renderGroupList() {
   const hasItems = groups.some(g => g.items.length > 0);
   if (empty) empty.style.display = hasItems ? 'none' : 'flex';
 
+  const dropZone   = document.getElementById('drop-zone');
+  if (dropZone) dropZone.style.display = hasItems ? 'none' : '';
+
+  const addModelBtn = document.getElementById('add-model-btn');
+  if (addModelBtn) addModelBtn.style.display = hasItems ? '' : 'none';
+
   // Remove stale group cards
   const currentIds = new Set(groups.map(g => g.id));
   [...container.querySelectorAll('.group-card')].forEach(el => {
@@ -244,6 +282,8 @@ function renderGroupList() {
 // ---- Group card HTML -------------------------------------------------
 
 function buildGroupHTML(group) {
+  if (group.collapsed) return buildCollapsedGroupHTML(group);
+
   const sym        = config.currencySymbol;
   const gc         = group.groupCost;
   const readyItems = group.items.filter(i => i.status === 'ready' && i.cost);
@@ -251,23 +291,22 @@ function buildGroupHTML(group) {
   const canAssemble   = totalParts >= 2;
   const assemblyActive = group.settings.assembly && canAssemble;
 
-  const extrasHTML = config.extras.length ? `
-    <div class="extras-list">
-      ${config.extras.map(extra => {
-        const checked = (group.settings.extras || []).includes(extra.id);
-        return `<label class="extra-row">
-          <input type="checkbox" data-action="extra-toggle" data-extra-id="${esc(extra.id)}" ${checked ? 'checked' : ''}>
-          <span>${esc(extra.name)}</span>
-          <span class="extra-price">+${fmt(extra.price, sym)}</span>
-        </label>`;
-      }).join('')}
-    </div>` : '';
-
-  // Primer options
-  const primerIcons = { unprimed: '🚫', black: '⬛', grey: '🔲', white: '⬜' };
-  const primerOptions = config.primerOptions.map(p =>
-    `<option value="${esc(p.id)}" ${group.settings.primer === p.id ? 'selected' : ''}>${primerIcons[p.id] || '🎨'} ${esc(p.label)}</option>`
-  ).join('');
+  // Primer swatches — visual, finger-size circles. Unprimed = blank circle, red slash.
+  const primerColors = { black: '#1a1a1a', grey: '#9a9a9a', white: '#f6f3ec' };
+  const primerSwatchesHTML = config.primerOptions.map(p => {
+    const active = group.settings.primer === p.id;
+    const isNone = p.id === 'unprimed';
+    const color  = primerColors[p.id] || '#c9a15a';
+    return `
+      <button type="button" class="primer-swatch-btn" data-action="primer-select" data-primer-id="${esc(p.id)}"
+              title="${esc(p.label)}" aria-label="${esc(p.label)}" aria-pressed="${active}">
+        <span class="primer-swatch ${active ? 'active' : ''} ${isNone ? 'primer-none' : ''}"
+              ${isNone ? '' : `style="background:${color};"`}>
+          ${active ? '<span class="primer-check">✓</span>' : ''}
+        </span>
+        <span class="primer-swatch-label">${esc(p.label)}</span>
+      </button>`;
+  }).join('');
 
   // Assembly description text
   const assemblyDesc = !canAssemble
@@ -278,7 +317,7 @@ function buildGroupHTML(group) {
 
   // Cost hints
   const primerCostHint   = (group.settings.primer !== 'unprimed' && gc)
-    ? ` <span class="setting-cost-hint">+${fmt(gc.primerTotal, sym)}</span>` : '';
+    ? `<span class="setting-cost-hint">+${fmt(gc.primerTotal, sym)}</span>` : '';
   const assemblyCostHint = (assemblyActive && gc)
     ? ` <span class="setting-cost-hint">+${fmt(gc.assemblyCost, sym)}</span>` : '';
 
@@ -286,7 +325,7 @@ function buildGroupHTML(group) {
   const itemsHTML = group.items.length
     ? group.items.map(item => buildItemHTML(item, group)).join('')
     : `<div class="group-empty-hint">
-         <span>📎 Use <strong>"Add Files to This Model"</strong> below, or drag &amp; drop STL files onto the upload area above.</span>
+         <span>📎 Use <strong>"Add Part to This Model"</strong> below to upload files.</span>
        </div>`;
 
   // Cost footer
@@ -294,7 +333,6 @@ function buildGroupHTML(group) {
     <div class="group-footer">
       <div class="group-costs">
         <span>Files subtotal</span><span>${fmt(gc.fileSubtotal, sym)}</span>
-        ${gc.extrasCost > 0 ? `<span>➕ Extras</span><span>+${fmt(gc.extrasCost, sym)}</span>` : ''}
         ${assemblyActive ? `<span>🔩 Assembly (${totalParts} parts)</span><span>+${fmt(gc.assemblyCost, sym)}</span>` : ''}
         ${gc.isPrimed ? `<span>🎨 ${esc(config.primerOptions.find(p => p.id === gc.primerLabel)?.label || 'Primer')}</span><span>+${fmt(gc.primerTotal, sym)}</span>` : ''}
       </div>
@@ -311,19 +349,16 @@ function buildGroupHTML(group) {
         <input class="group-name-input" value="${esc(group.name)}" data-action="rename"
                title="Click to rename" aria-label="Model name">
       </div>
-      ${groups.length > 1 ? `<button class="btn btn-ghost btn-sm group-delete" data-action="delete-group" title="Remove this model">✕ Remove</button>` : ''}
+      <div class="group-header-actions">
+        ${readyItems.length > 0 ? `<button class="btn btn-primary btn-sm group-done-btn" data-action="collapse-group" title="Mark this model as done">✅ Done</button>` : ''}
+        <button class="btn btn-sm group-delete-btn ${isArmedForDelete('group', group.id) ? 'armed' : ''}"
+                data-action="delete-group" title="Delete this model" aria-label="Delete this model">
+          🗑️${isArmedForDelete('group', group.id) ? '<span class="delete-confirm-text">Delete model?</span>' : ''}
+        </button>
+      </div>
     </div>
 
     <div class="group-settings">
-
-      <div class="group-setting-block">
-        <div class="group-setting-label">➕ Extras</div>
-        <div class="group-setting-desc">
-          Optional add-ons for this model. Need a separate base? Upload it as an extra file using
-          "Add Files to This Model" below — it's priced by size, same as the body.
-        </div>
-        ${extrasHTML}
-      </div>
 
       <div class="group-setting-block">
         <div class="group-setting-label">🎨 Primer Coating</div>
@@ -332,9 +367,7 @@ function buildGroupHTML(group) {
           Improves paint adhesion and hides layer lines for a smoother finish.
         </div>
         <div class="primer-row">
-          <select class="primer-select" data-action="primer">
-            ${primerOptions}
-          </select>
+          ${primerSwatchesHTML}
           ${primerCostHint}
         </div>
       </div>
@@ -369,10 +402,31 @@ function buildGroupHTML(group) {
     ${costsHTML}
 
     <div class="group-actions">
-      <button class="btn btn-secondary btn-sm" data-action="add-files-to-group">
-        📎 Add Files to This Model
+      <button class="btn btn-primary btn-lg add-part-btn" data-action="add-files-to-group">
+        📎 Add Part to This Model
       </button>
-      ${groups.length === 1 ? `<button class="btn btn-ghost btn-sm" data-action="new-group">+ New Model Group</button>` : ''}
+    </div>
+  `;
+}
+
+// ---- Collapsed ("Done") group card HTML -------------------------------
+
+function buildCollapsedGroupHTML(group) {
+  const sym        = config.currencySymbol;
+  const gc         = group.groupCost;
+  const readyItems = group.items.filter(i => i.status === 'ready' && i.cost);
+  const totalParts = readyItems.reduce((s, i) => s + i.settings.quantity, 0);
+  const priceStr   = gc ? fmt(gc.groupTotal, sym) : '—';
+
+  return `
+    <div class="group-collapsed">
+      <span class="group-collapsed-check" title="Complete" aria-hidden="true">✅</span>
+      <div class="group-collapsed-info">
+        <div class="group-collapsed-name">${esc(group.name)}</div>
+        <div class="group-collapsed-meta">${readyItems.length} file${readyItems.length === 1 ? '' : 's'} · ${totalParts} part${totalParts === 1 ? '' : 's'}</div>
+      </div>
+      <div class="group-collapsed-price">${priceStr}</div>
+      <button class="btn btn-ghost btn-sm group-edit-btn" data-action="expand-group" title="Edit this model" aria-label="Edit this model">✎ Edit</button>
     </div>
   `;
 }
@@ -443,7 +497,7 @@ function buildItemHTML(item, group) {
     <details class="cost-details">
       <summary>💡 See price breakdown</summary>
       <table class="breakdown-table">
-        <tr><td>Size tier: ${esc(c.tier.name)} (largest side ≤ ${c.tier.maxDimensionMm ? c.tier.maxDimensionMm + 'mm' : 'build plate'})</td><td>${fmt(c.tier.price, sym)}</td></tr>
+        <tr><td>Size tier: ${esc(c.tier.name)} (model size ≤ ${c.tier.maxDimensionMm ? c.tier.maxDimensionMm + 'mm' : 'build plate'})</td><td>${fmt(c.tier.price, sym)}</td></tr>
         ${c.surchargePct > 0 ? `<tr><td>${esc(c.materialName)} surcharge (+${c.surchargePct}%)</td><td>${fmt(c.surchargeAmount, sym)}</td></tr>` : ''}
         ${c.supportHandlingFee > 0 ? `<tr><td>Support handling (no pre-supported file)</td><td>${fmt(c.supportHandlingFee, sym)}</td></tr>` : ''}
       </table>
@@ -451,7 +505,10 @@ function buildItemHTML(item, group) {
 
   return `
     <div class="file-card" data-id="${item.id}">
-      <button class="card-remove-x" data-action="remove-item" data-id="${item.id}" title="Remove this file">✕</button>
+      <button class="card-remove-x ${isArmedForDelete('item', item.id) ? 'armed' : ''}"
+              data-action="remove-item" data-id="${item.id}" title="Delete this part" aria-label="Delete this part">
+        🗑️${isArmedForDelete('item', item.id) ? '<span class="delete-confirm-text">Delete part?</span>' : ''}
+      </button>
 
       <div class="card-header">
         <div class="card-thumb" data-action="view3d" data-id="${item.id}" title="Click to view in 3D">
@@ -550,7 +607,12 @@ function handleGroupClick(e, group, card) {
 
   switch (action) {
     case 'delete-group':
-      if (confirm(`Remove "${group.name}" and all its files?`)) removeGroup(group.id);
+      if (isArmedForDelete('group', group.id)) {
+        disarmDelete();
+        removeGroup(group.id);
+      } else {
+        armDelete('group', group.id);
+      }
       break;
 
     case 'add-files-to-group':
@@ -558,13 +620,19 @@ function handleGroupClick(e, group, card) {
       document.getElementById('file-input').click();
       break;
 
-    case 'new-group':
-      addGroup();
+    case 'remove-item': {
+      // Failed/error uploads have nothing to lose — remove immediately.
+      const found = findItem(id);
+      if (found?.item.status === 'error') {
+        removeItem(id);
+      } else if (isArmedForDelete('item', id)) {
+        disarmDelete();
+        removeItem(id);
+      } else {
+        armDelete('item', id);
+      }
       break;
-
-    case 'remove-item':
-      removeItem(id);
-      break;
+    }
 
     case 'view3d':
       openModal(findItem(id)?.item);
@@ -577,6 +645,22 @@ function handleGroupClick(e, group, card) {
       renderAll();
       break;
     }
+
+    case 'primer-select':
+      group.settings.primer = btn.dataset.primerId;
+      recomputeGroup(group);
+      renderAll();
+      break;
+
+    case 'collapse-group':
+      group.collapsed = true;
+      renderAll();
+      break;
+
+    case 'expand-group':
+      group.collapsed = false;
+      renderAll();
+      break;
 
     case 'presupported': {
       const found = findItem(id);
@@ -606,23 +690,6 @@ function handleGroupChange(e, group) {
   const el     = e.target;
   const action = el.dataset.action;
   const id     = el.dataset.id;
-
-  if (action === 'extra-toggle') {
-    const extraId = el.dataset.extraId;
-    const set = new Set(group.settings.extras || []);
-    if (el.checked) set.add(extraId); else set.delete(extraId);
-    group.settings.extras = [...set];
-    recomputeGroup(group);
-    renderAll();
-    return;
-  }
-
-  if (action === 'primer') {
-    group.settings.primer = el.value;
-    recomputeGroup(group);
-    renderAll();
-    return;
-  }
 
   if (action === 'move-item') {
     if (el.value === '__new__') {
@@ -673,6 +740,32 @@ async function handleFilesForGroup(files) {
   const targetGroupId = _pendingGroupId;
   _pendingGroupId     = null;
 
+  const validFiles = [];
+  for (const file of files) {
+    const fname = file.name.toLowerCase();
+    if (fname.endsWith('.stl') || fname.endsWith('.lys')) {
+      validFiles.push(file);
+    } else {
+      showToast(`${file.name} — unsupported file type. Please use .stl files.`, 'error');
+    }
+  }
+  if (!validFiles.length) return;
+
+  const isTopLevel = targetGroupId === 'new' || !targetGroupId;
+
+  if (isTopLevel && validFiles.length > 1) {
+    // A multi-file top-level drop usually means several separate models, not
+    // several parts of the same one — give each file its own model group by
+    // default. Parts that do belong together can be merged afterwards via
+    // each file's "Model" picker.
+    for (const file of validFiles) {
+      const newGroup = createGroup(`Model ${groups.length + 1}`);
+      groups.push(newGroup);
+      await addFileToGroup(file, newGroup);
+    }
+    return;
+  }
+
   let targetGroup;
   if (targetGroupId === 'new') {
     // Top-level upload — always land in a fresh group
@@ -684,57 +777,56 @@ async function handleFilesForGroup(files) {
     targetGroup = ensureGroup();
   }
 
-  for (const file of files) {
-    const fname = file.name.toLowerCase();
-
-    // .lys = Lychee Slicer project — can't parse directly, guide user to export STL
-    if (fname.endsWith('.lys')) {
-      const lItem = {
-        id: iId(), file, name: file.name, size: file.size,
-        status: 'error', data: null, thumbnail: null,
-        settings: {}, cost: null, warning: null,
-        errorMsg: 'Lychee Slicer (.lys) files cannot be read here. To add this model: open it in Lychee Slicer → File → Export → Export Model as STL, then upload the exported STL file.',
-      };
-      targetGroup.items.push(lItem);
-      renderAll();
-      continue;
-    }
-
-    if (!fname.endsWith('.stl')) {
-      showToast(`${file.name} — unsupported file type. Please use .stl files.`, 'error');
-      continue;
-    }
-
-    const item = {
-      id: iId(), file, name: file.name, size: file.size,
-      status: 'loading', data: null, thumbnail: null,
-      settings: { scale: 1.0, quantity: 1, materialId: config.materials[0].id, presupported: false },
-      cost: null, warning: null,
-    };
-    targetGroup.items.push(item);
-    renderAll();
-
-    try {
-      item.data = await parseSTLFile(file);
-
-      // Basic mesh validation
-      if (item.data.triangleCount === 0) {
-        throw new Error('File appears empty — no geometry found. Please re-export the model and try again.');
-      }
-      if (item.data.volumeMl <= 0.001) {
-        item.warning = 'Volume is near zero — this model may have mesh errors. The price estimate may be inaccurate. Please check your file in your slicer before submitting.';
-      }
-
-      item.thumbnail = generateThumbnail(item.data.triangles);
-      item.status    = 'ready';
-      recomputeItemCost(item);
-      recomputeGroup(targetGroup);
-    } catch (err) {
-      item.status   = 'error';
-      item.errorMsg = err.message;
-    }
-    renderAll();
+  for (const file of validFiles) {
+    await addFileToGroup(file, targetGroup);
   }
+}
+
+async function addFileToGroup(file, targetGroup) {
+  const fname = file.name.toLowerCase();
+
+  // .lys = Lychee Slicer project — can't parse directly, guide user to export STL
+  if (fname.endsWith('.lys')) {
+    const lItem = {
+      id: iId(), file, name: file.name, size: file.size,
+      status: 'error', data: null, thumbnail: null,
+      settings: {}, cost: null, warning: null,
+      errorMsg: 'Lychee Slicer (.lys) files cannot be read here. To add this model: open it in Lychee Slicer → File → Export → Export Model as STL, then upload the exported STL file.',
+    };
+    targetGroup.items.push(lItem);
+    renderAll();
+    return;
+  }
+
+  const item = {
+    id: iId(), file, name: file.name, size: file.size,
+    status: 'loading', data: null, thumbnail: null,
+    settings: { scale: 1.0, quantity: 1, materialId: config.materials[0].id, presupported: false },
+    cost: null, warning: null,
+  };
+  targetGroup.items.push(item);
+  renderAll();
+
+  try {
+    item.data = await parseSTLFile(file);
+
+    // Basic mesh validation
+    if (item.data.triangleCount === 0) {
+      throw new Error('File appears empty — no geometry found. Please re-export the model and try again.');
+    }
+    if (item.data.volumeMl <= 0.001) {
+      item.warning = 'Volume is near zero — this model may have mesh errors. The price estimate may be inaccurate. Please check your file in your slicer before submitting.';
+    }
+
+    item.thumbnail = generateThumbnail(item.data.triangles);
+    item.status    = 'ready';
+    recomputeItemCost(item);
+    recomputeGroup(targetGroup);
+  } catch (err) {
+    item.status   = 'error';
+    item.errorMsg = err.message;
+  }
+  renderAll();
 }
 
 // ---- Order helpers ---------------------------------------------------
