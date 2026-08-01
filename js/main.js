@@ -908,6 +908,18 @@ async function addFileToGroup(file, targetGroup) {
   renderAll();
 }
 
+const UPLOAD_TIMEOUT_MS = 25_000;
+
+/** fetch() with a hard timeout — without this, a stalled relay request could
+ *  hang uploadItemToShopify()'s promise forever, which would in turn block
+ *  submitOrder() (it awaits any still-in-flight upload) with no way out
+ *  short of reloading the page. */
+function fetchWithTimeout(url, options) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
 /** Base64-encode bytes in chunks — avoids the call-stack/perf blowup of
  *  spreading or reduce()-ing very large typed arrays one byte at a time. */
 function bytesToBase64(bytes) {
@@ -926,7 +938,7 @@ async function uploadItemToShopify(item, file) {
   try {
     const fileBuffer = await file.arrayBuffer();
     const base64Data = bytesToBase64(new Uint8Array(fileBuffer));
-    const stlRes = await fetch(`${RELAY_BASE_URL}/files`, {
+    const stlRes = await fetchWithTimeout(`${RELAY_BASE_URL}/files`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filename: item.name, mimeType: 'model/stl', base64Data }),
@@ -937,7 +949,7 @@ async function uploadItemToShopify(item, file) {
 
     if (item.thumbnail) {
       const thumbBase64 = item.thumbnail.split(',')[1]; // strip "data:image/png;base64,"
-      const thumbRes = await fetch(`${RELAY_BASE_URL}/files`, {
+      const thumbRes = await fetchWithTimeout(`${RELAY_BASE_URL}/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1297,6 +1309,7 @@ async function submitOrder(e) {
   const activeGroups = groups.filter(g => g.items.some(i => i.status === 'ready'));
 
   const submitBtn = form.querySelector('button[type="submit"]');
+  const submitBtnOriginalText = submitBtn?.textContent;
   if (submitBtn) submitBtn.disabled = true;
 
   // Wait for any Shopify file uploads still in flight for priceable items in
@@ -1305,13 +1318,16 @@ async function submitOrder(e) {
   // shopifyThumbnailId below — without this await, a fast submit could beat
   // an in-flight upload and silently ship null file/thumbnail ids (the
   // future packing tool needs those). uploadItemToShopify() catches its own
-  // errors internally and always resolves, so this never rejects/hangs.
+  // errors internally (including timeouts — see fetchWithTimeout) and always
+  // resolves, so this never rejects/hangs indefinitely.
   const pendingUploads = activeGroups
     .flatMap(g => g.items)
     .filter(i => i.status === 'ready' && i.cost?.priceable && i.uploadPromise)
     .map(i => i.uploadPromise);
   if (pendingUploads.length) {
+    if (submitBtn) submitBtn.textContent = 'Uploading files…';
     await Promise.all(pendingUploads);
+    if (submitBtn) submitBtn.textContent = submitBtnOriginalText;
   }
 
   const grandTotal   = calcOrderTotal(activeGroups, config);
