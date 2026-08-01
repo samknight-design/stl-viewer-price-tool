@@ -85,10 +85,7 @@ function setConfigSourceWarning(show) {
     if (!banner) {
       banner = document.createElement('div');
       banner.id = 'config-source-warning';
-      banner.className = 'toast toast-error show';
-      banner.style.position = 'sticky';
-      banner.style.top = '0';
-      banner.style.zIndex = '1000';
+      banner.className = 'config-source-warning';
       banner.textContent = 'Could not reach the pricing server — showing cached/default values. Changes will NOT be saved correctly until this is resolved.';
       document.body.prepend(banner);
     }

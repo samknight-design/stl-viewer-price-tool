@@ -578,6 +578,15 @@ details[open] > summary::before { transform: rotate(90deg); }
 #toast.toast-success { border-color: var(--green); color: var(--green); }
 #toast.toast-error   { border-color: var(--red);   color: var(--red); }
 
+/* Config source warning banner */
+.config-source-warning {
+  position: sticky; top: 0; z-index: 1000;
+  background: rgba(220,38,38,.08); border: 1px solid rgba(220,38,38,.25);
+  border-radius: var(--radius-sm); padding: 12px 16px;
+  color: var(--red); font-size: .875rem; line-height: 1.5;
+  margin: 0 -16px 16px -16px;
+}
+
 /* ---- Admin --------------------------------------------------------- */
 .admin-wrap { max-width: 980px; margin: 0 auto; padding: 0 24px 80px; }
 .admin-header {
