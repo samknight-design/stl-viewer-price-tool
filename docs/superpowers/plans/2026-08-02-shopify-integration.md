@@ -32,9 +32,7 @@
 **Interfaces:**
 - Produces: environment variables every later task reads — `SHOPIFY_STORE_DOMAIN` (e.g. `arcane-flame.myshopify.com`), `SHOPIFY_ADMIN_API_TOKEN`, `SHOPIFY_API_VERSION` (e.g. `2025-01`), `ADMIN_PASSWORD`, `PRINT_PRODUCT_ID` (the numeric ID of the hidden "Custom 3D Print" product created in Task 2).
 
-- [ ] **Step 1: Create the Supabase project (if one doesn't already exist for this)**
-
-Use the `mcp__bd72e01a-26cc-4897-b687-7d28477638da__create_project` tool (Supabase MCP) or the Supabase dashboard. Name it `arcane-flame-print-relay`. Note the project ref (e.g. `abcdefghijk`) — it's needed for the function URL later: `https://<project-ref>.supabase.co/functions/v1/shopify-relay`.
+- [x] **Step 1: Create the Supabase project (if one doesn't already exist for this)** — DONE. User created project `aqnpkvzycdjwbapfpvfl` (eu-west-1, Arcane-Flame-Software org). Relay deployed and live at `https://aqnpkvzycdjwbapfpvfl.supabase.co/functions/v1/shopify-relay` via the Supabase MCP's `deploy_edge_function` tool (no CLI auth needed). `js/config.js`'s `RELAY_BASE_URL` updated to match, verified reachable.
 
 - [ ] **Step 2: Create a private Shopify custom app for Admin API access**
 
