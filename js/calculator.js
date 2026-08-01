@@ -4,7 +4,7 @@
 // unchanged assembly/primer add-ons.
 // ============================================================
 
-import { getMaterial } from './config.js?v=14';
+import { getMaterial } from './config.js?v=15';
 
 // ---- Build plate fit check --------------------------------------------
 

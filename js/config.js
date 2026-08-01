@@ -6,7 +6,7 @@
 // ============================================================
 
 const CONFIG_KEY = 'stl_calc_config_v1';
-export const RELAY_BASE_URL = 'https://<project-ref>.supabase.co/functions/v1/shopify-relay';
+export const RELAY_BASE_URL = 'https://aqnpkvzycdjwbapfpvfl.supabase.co/functions/v1/shopify-relay';
 
 export const DEFAULT_CONFIG = {
   // --- Size tiers (resin) ---

@@ -2,8 +2,8 @@
 // admin.js — Admin pricing configuration page
 // ============================================================
 
-import { getConfigWithSource, saveConfig, DEFAULT_CONFIG } from './config.js?v=8';
-import { calcItemCost, fmt, fmtMl, fmtHours } from './calculator.js?v=7';
+import { getConfigWithSource, saveConfig, DEFAULT_CONFIG } from './config.js?v=15';
+import { calcItemCost, fmt, fmtMl, fmtHours } from './calculator.js?v=15';
 import { icon, applyStaticIcons } from './icons.js?v=1';
 
 let config;

@@ -11,7 +11,7 @@ import { icon, applyStaticIcons } from './icons.js?v=1';
 import {
   calcItemCost, calcGroupCost, calcOrderTotal, calcOrderMinimumShortfall,
   exceedsCustomQuoteThreshold, fmt, fmtMm,
-} from './calculator.js?v=14';
+} from './calculator.js?v=15';
 
 // ---- State -----------------------------------------------------------
 let config      = null;
