@@ -45,9 +45,7 @@ In Shopify Admin → Settings → Apps and sales channels → Develop apps → C
 
 Install the app, copy the **Admin API access token** (starts `shpat_`) — this is `SHOPIFY_ADMIN_API_TOKEN`. It is shown once; store it now.
 
-- [ ] **Step 3: Create the hidden "Custom 3D Print" product**
-
-In Shopify Admin → Products → Add product. Title: "Custom 3D Print (do not edit)". Set status to **Draft** (so it never appears in the storefront catalog or search). Delete its default variant's price requirement by leaving price at £0.00 — every real variant will be created per-quote by the relay with the correct price. Save, then copy the product's numeric ID from the URL (`admin/products/<ID>`) — this is `PRINT_PRODUCT_ID`.
+- [x] **Step 3: Create the hidden "Custom 3D Print" product** — DONE. Created via the Shopify MCP connector's `create-product` tool: title "Custom 3D Print (do not edit)", status Draft, default variant £0.00. `PRINT_PRODUCT_ID = 15907078340952`.
 
 - [ ] **Step 4: Write `deno.json`**
 
