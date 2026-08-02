@@ -30,20 +30,16 @@
 - Create: `supabase/functions/shopify-relay/.env.example`
 
 **Interfaces:**
-- Produces: environment variables every later task reads — `SHOPIFY_STORE_DOMAIN` (e.g. `arcane-flame.myshopify.com`), `SHOPIFY_ADMIN_API_TOKEN`, `SHOPIFY_API_VERSION` (e.g. `2025-01`), `ADMIN_PASSWORD`, `PRINT_PRODUCT_ID` (the numeric ID of the hidden "Custom 3D Print" product created in Task 2).
+- Produces: environment variables every later task reads — `SHOPIFY_STORE_DOMAIN` (e.g. `arcane-flame.myshopify.com`), `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET`, `SHOPIFY_API_VERSION` (e.g. `2025-01`), `ADMIN_PASSWORD`, `PRINT_PRODUCT_ID` (the numeric ID of the hidden "Custom 3D Print" product created in Task 2).
 
 - [x] **Step 1: Create the Supabase project (if one doesn't already exist for this)** — DONE. User created project `aqnpkvzycdjwbapfpvfl` (eu-west-1, Arcane-Flame-Software org). Relay deployed and live at `https://aqnpkvzycdjwbapfpvfl.supabase.co/functions/v1/shopify-relay` via the Supabase MCP's `deploy_edge_function` tool (no CLI auth needed). `js/config.js`'s `RELAY_BASE_URL` updated to match, verified reachable.
 
-- [ ] **Step 2: Create a private Shopify custom app for Admin API access**
-
-In Shopify Admin → Settings → Apps and sales channels → Develop apps → Create an app, name it "Print Calculator Relay". Configure Admin API scopes:
+- [x] **Step 2: Create a Shopify app for Admin API access** — DONE, but the mechanism changed from the original plan. Shopify's legacy "Develop apps" static-token flow was not reachable for this store (the store was routed into the newer Dev Dashboard app model, which does not surface a static `shpat_` token at all — it only offers OAuth-style Client ID/Client Secret via the client-credentials grant). User created app `stil-tool-relay` in the Dev Dashboard and obtained a **Client ID** and **Client Secret** (`shpss_...`). `shopify.ts` was rewritten to exchange these for a short-lived (24h) access token via `POST https://{domain}/admin/oauth/access_token` with `grant_type: client_credentials`, caching and auto-refreshing it in memory (see Task 3 below — `SHOPIFY_ADMIN_API_TOKEN` is replaced by `SHOPIFY_CLIENT_ID` + `SHOPIFY_CLIENT_SECRET`). Required scopes are configured the same way, on the app's Configuration page:
 - `write_products`, `read_products` (create the priced variant)
 - `write_files`, `read_files` (upload STL + thumbnail)
 - `write_draft_orders`, `read_draft_orders` (£150+ manual-review path)
 - `write_orders`, `read_orders` (optional now, needed by the future packing tool)
 - `write_metaobjects` is not needed — using a shop metafield, not a metaobject.
-
-Install the app, copy the **Admin API access token** (starts `shpat_`) — this is `SHOPIFY_ADMIN_API_TOKEN`. It is shown once; store it now.
 
 - [x] **Step 3: Create the hidden "Custom 3D Print" product** — DONE. Created via the Shopify MCP connector's `create-product` tool: title "Custom 3D Print (do not edit)", status Draft, default variant £0.00. `PRINT_PRODUCT_ID = 15907078340952`.
 
@@ -61,7 +57,8 @@ Install the app, copy the **Admin API access token** (starts `shpat_`) — this 
 
 ```bash
 SHOPIFY_STORE_DOMAIN=arcane-flame.myshopify.com
-SHOPIFY_ADMIN_API_TOKEN=shpat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+SHOPIFY_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+SHOPIFY_CLIENT_SECRET=shpss_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 SHOPIFY_API_VERSION=2025-01
 ADMIN_PASSWORD=change-me
 PRINT_PRODUCT_ID=1234567890
@@ -72,7 +69,8 @@ PRINT_PRODUCT_ID=1234567890
 ```bash
 supabase secrets set --project-ref <project-ref> \
   SHOPIFY_STORE_DOMAIN=arcane-flame.myshopify.com \
-  SHOPIFY_ADMIN_API_TOKEN=shpat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
+  SHOPIFY_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
+  SHOPIFY_CLIENT_SECRET=shpss_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
   SHOPIFY_API_VERSION=2025-01 \
   ADMIN_PASSWORD=<a real strong password, not admin123> \
   PRINT_PRODUCT_ID=1234567890
@@ -96,6 +94,8 @@ git commit -m "Scaffold Supabase relay function for Shopify integration"
 **Interfaces:**
 - Consumes: `Deno.env.get('SHOPIFY_STORE_DOMAIN')`, `Deno.env.get('SHOPIFY_ADMIN_API_TOKEN')`, `Deno.env.get('SHOPIFY_API_VERSION')`
 - Produces: `shopifyGraphQL<T>(query: string, variables?: Record<string, unknown>): Promise<T>` — every later task calls this exclusively rather than hand-rolling fetch calls.
+
+> **Deviation (2026-08-02):** the code sample below is the original, now-superseded version. Shopify's Dev Dashboard app model doesn't issue a static `SHOPIFY_ADMIN_API_TOKEN` — only a Client ID/Client Secret for the OAuth client-credentials grant. `shopify.ts` was updated to consume `SHOPIFY_CLIENT_ID` + `SHOPIFY_CLIENT_SECRET` instead, exchange them for a short-lived token via `POST /admin/oauth/access_token`, and cache/refresh it in memory (`getAccessToken()`, `__resetTokenCacheForTests()`). `shopify.test.ts`, `config.test.ts`, and `files.test.ts` were updated to mock the extra token-exchange call. All 29 relay tests pass after the change.
 
 - [ ] **Step 1: Write the failing test**
 

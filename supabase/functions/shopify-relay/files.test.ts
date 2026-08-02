@@ -1,15 +1,28 @@
 // supabase/functions/shopify-relay/files.test.ts
 import { assertEquals, assertRejects } from "std/testing/asserts.ts";
 import { uploadFile } from "./files.ts";
+import { __resetTokenCacheForTests } from "./shopify.ts";
 
 const STAGED_PUT_URL = "https://shopify-staged-uploads.example/put-here";
 
+function tokenResponse() {
+  return Promise.resolve(
+    new Response(
+      JSON.stringify({ access_token: "shpat_fake", expires_in: 86400 }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    ),
+  );
+}
+
 Deno.test("uploadFile stages, PUTs bytes, then calls fileCreate", async () => {
+  __resetTokenCacheForTests();
   const calls: string[] = [];
   const originalFetch = globalThis.fetch;
 
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString();
+
+    if (url.includes("/admin/oauth/access_token")) return tokenResponse();
 
     if (url === STAGED_PUT_URL) {
       calls.push("put:" + url);
@@ -82,11 +95,14 @@ Deno.test("uploadFile stages, PUTs bytes, then calls fileCreate", async () => {
 });
 
 Deno.test("uploadFile resolves resource type IMAGE for image mime types in stage request", async () => {
+  __resetTokenCacheForTests();
   const resources: string[] = [];
   const originalFetch = globalThis.fetch;
 
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString();
+
+    if (url.includes("/admin/oauth/access_token")) return tokenResponse();
 
     if (url === STAGED_PUT_URL) {
       return Promise.resolve(new Response("", { status: 201 }));
@@ -154,10 +170,13 @@ Deno.test("uploadFile resolves resource type IMAGE for image mime types in stage
 });
 
 Deno.test("uploadFile throws when staged upload PUT fails", async () => {
+  __resetTokenCacheForTests();
   const originalFetch = globalThis.fetch;
 
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString();
+
+    if (url.includes("/admin/oauth/access_token")) return tokenResponse();
 
     if (url === STAGED_PUT_URL) {
       return Promise.resolve(new Response("nope", { status: 500 }));
@@ -207,9 +226,14 @@ Deno.test("uploadFile throws when staged upload PUT fails", async () => {
 });
 
 Deno.test("uploadFile throws a clear error when stagedUploadsCreate returns no targets", async () => {
+  __resetTokenCacheForTests();
   const originalFetch = globalThis.fetch;
 
-  globalThis.fetch = ((_input: RequestInfo | URL, init?: RequestInit) => {
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString();
+
+    if (url.includes("/admin/oauth/access_token")) return tokenResponse();
+
     const body = JSON.parse((init?.body as string) ?? "{}");
     const query: string = body.query ?? "";
 
@@ -246,10 +270,13 @@ Deno.test("uploadFile throws a clear error when stagedUploadsCreate returns no t
 });
 
 Deno.test("uploadFile throws a clear error when fileCreate returns no files", async () => {
+  __resetTokenCacheForTests();
   const originalFetch = globalThis.fetch;
 
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString();
+
+    if (url.includes("/admin/oauth/access_token")) return tokenResponse();
 
     if (url === STAGED_PUT_URL) {
       return Promise.resolve(new Response("", { status: 201 }));
