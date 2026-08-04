@@ -34,7 +34,7 @@
 
 - [x] **Step 1: Create the Supabase project (if one doesn't already exist for this)** — DONE. User created project `aqnpkvzycdjwbapfpvfl` (eu-west-1, Arcane-Flame-Software org). Relay deployed and live at `https://aqnpkvzycdjwbapfpvfl.supabase.co/functions/v1/shopify-relay` via the Supabase MCP's `deploy_edge_function` tool (no CLI auth needed). `js/config.js`'s `RELAY_BASE_URL` updated to match, verified reachable.
 
-- [x] **Step 2: Create a Shopify app for Admin API access** — DONE, but the mechanism changed from the original plan. Shopify's legacy "Develop apps" static-token flow was not reachable for this store (the store was routed into the newer Dev Dashboard app model, which does not surface a static `shpat_` token at all — it only offers OAuth-style Client ID/Client Secret via the client-credentials grant). User created app `stil-tool-relay` in the Dev Dashboard and obtained a **Client ID** and **Client Secret** (`shpss_...`). `shopify.ts` was rewritten to exchange these for a short-lived (24h) access token via `POST https://{domain}/admin/oauth/access_token` with `grant_type: client_credentials`, caching and auto-refreshing it in memory (see Task 3 below — `SHOPIFY_ADMIN_API_TOKEN` is replaced by `SHOPIFY_CLIENT_ID` + `SHOPIFY_CLIENT_SECRET`). Required scopes are configured the same way, on the app's Configuration page:
+- [x] **Step 2: Create a Shopify app for Admin API access** — DONE, but the mechanism changed from the original plan, and took several failed attempts to get right. Shopify's legacy "Develop apps" static-token flow was not reachable for this store — even the store Admin's own "Develop apps" link now routes into the same newer Dev Dashboard app model, which does not surface a static `shpat_` token at all; it only offers OAuth-style Client ID/Client Secret via the client-credentials grant. Two earlier apps (`print-calculator-relay`, `stil-tool-relay`) were created and abandoned because their installs silently failed — clicking "Install app" redirected straight to the App URL with no consent screen shown, and the client-credentials grant kept failing with `app_not_installed`. What finally worked: a fresh app (`stl-calculator`) with **"Embed app in Shopify admin" unchecked**, **"Use legacy install flow" unchecked**, and both **App URL and Redirect URL pointed at the real, live relay** (not a placeholder like `example.com`) — this made Shopify show a genuine consent/permissions screen before redirecting, and installing after that screen actually registered. `shopify.ts` exchanges the resulting Client ID/Secret for a short-lived (24h) access token via `POST https://{domain}/admin/oauth/access_token` with `grant_type: client_credentials`, caching and auto-refreshing it in memory (see Task 3 below — `SHOPIFY_ADMIN_API_TOKEN` is replaced by `SHOPIFY_CLIENT_ID` + `SHOPIFY_CLIENT_SECRET`). Verified live: token exchange succeeds, `GET /config` returns 200. Required scopes configured on the app's Configuration page:
 - `write_products`, `read_products` (create the priced variant)
 - `write_files`, `read_files` (upload STL + thumbnail)
 - `write_draft_orders`, `read_draft_orders` (£150+ manual-review path)
@@ -43,7 +43,7 @@
 
 - [x] **Step 3: Create the hidden "Custom 3D Print" product** — DONE. Created via the Shopify MCP connector's `create-product` tool: title "Custom 3D Print (do not edit)", status Draft, default variant £0.00. `PRINT_PRODUCT_ID = 15907078340952`.
 
-- [ ] **Step 4: Write `deno.json`**
+- [x] **Step 4: Write `deno.json`**
 
 ```json
 {
@@ -53,7 +53,7 @@
 }
 ```
 
-- [ ] **Step 5: Write `.env.example` documenting required secrets (not the real values)**
+- [x] **Step 5: Write `.env.example` documenting required secrets (not the real values)**
 
 ```bash
 SHOPIFY_STORE_DOMAIN=arcane-flame.myshopify.com
@@ -64,7 +64,7 @@ ADMIN_PASSWORD=change-me
 PRINT_PRODUCT_ID=1234567890
 ```
 
-- [ ] **Step 6: Set the real secrets on the Supabase project**
+- [x] **Step 6: Set the real secrets on the Supabase project** — DONE via the Supabase dashboard's Edge Function Secrets UI (bulk `KEY=VALUE` paste into the **Name** field auto-splits into separate secrets — pasting into the Value field instead collapses everything into one wrongly-named secret, a mistake made and corrected once). All 6 secrets set; verified live.
 
 ```bash
 supabase secrets set --project-ref <project-ref> \
@@ -76,7 +76,7 @@ supabase secrets set --project-ref <project-ref> \
   PRINT_PRODUCT_ID=1234567890
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit** — DONE (deno.json/.env.example committed alongside Task 2, then updated again in commit `69c6a86` for the client-credentials switch).
 
 ```bash
 git add supabase/functions/shopify-relay/deno.json supabase/functions/shopify-relay/.env.example
