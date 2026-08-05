@@ -1,0 +1,190 @@
+<div class="app-wrap">
+
+  <header class="app-header">
+    <div class="app-header-left">
+      <img src="https://ik.imagekit.io/8xqqxw0sa/Arcane%20Flame%20Branding/Arcane%20Flame%20logos/Arcane%20Flame%20Logog%20-%20White%20small%20stacked.png"
+           alt="Arcane Flame" class="app-logo-img"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+      <div class="app-logo-fallback" style="display:none" data-icon-only="flame" data-icon-size="20"></div>
+      <div class="app-title">
+        <p>Resin 3D Print Price Calculator</p>
+        <span class="app-tagline">Upload your STL files — get an instant quote</span>
+      </div>
+    </div>
+    <div class="app-header-actions">
+      <button class="btn btn-ghost btn-sm" id="add-group-btn" aria-label="New Model Group">
+        <span aria-hidden="true" data-icon-only="plus" data-icon-size="16"></span><span class="btn-label">New Model Group</span>
+      </button>
+      <a href="https://samknight-design.github.io/stl-viewer-price-tool/admin.html" class="btn btn-ghost btn-sm" aria-label="Admin">
+        <span aria-hidden="true" data-icon-only="settings" data-icon-size="16"></span><span class="btn-label">Admin</span>
+      </a>
+    </div>
+  </header>
+  <hr class="brand-divider">
+
+  <div class="drop-zone" id="drop-zone" role="button" tabindex="0">
+    <div class="drop-icon" data-icon-only="upload" data-icon-size="34"></div>
+    <h3 class="drop-title-desktop">Drop STL Files Here</h3>
+    <h3 class="drop-title-touch">Tap to Browse Your Files</h3>
+    <p>or click to browse your files</p>
+    <p class="drop-hint">Supports binary &amp; ASCII .stl · Multiple files at once · .lys (Lychee Slicer) files detected — export as STL first</p>
+    <p class="ai-file-note" data-icon="bot">Using an AI-generated model? These often need cleanup (thin walls, no drain holes, poor overhangs) before they'll print cleanly — mention it in that model's notes so we can check before starting.</p>
+  </div>
+  <input type="file" id="file-input" accept=".stl,.lys" multiple hidden>
+
+  <div class="main-grid">
+    <div>
+      <div id="group-list">
+        <div id="empty-state" class="empty-state">
+          <div class="empty-icon" data-icon-only="inbox" data-icon-size="34"></div>
+          <p>No files uploaded yet.<br>Drop STL files above to get an instant quote.<br>
+          <span style="font-size:.8rem;color:var(--text-dimmer)">Group multiple parts into one model to add assembly &amp; primer options.</span></p>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-lg add-model-btn" id="add-model-btn" type="button" style="display:none">
+        <span aria-hidden="true" data-icon-only="plus" data-icon-size="16"></span><span class="btn-label">Add New Model</span>
+      </button>
+    </div>
+
+    <aside class="order-summary" id="order-summary">
+      <h2 class="summary-title">Order Summary</h2>
+      <p class="summary-empty">Upload STL files to see pricing.</p>
+    </aside>
+  </div>
+
+  <div class="mobile-summary-bar empty" id="mobile-summary-bar">
+    <div class="mobile-summary-info">
+      <span class="mobile-summary-count" id="mobile-summary-count">0 items</span>
+      <span class="mobile-summary-total" id="mobile-summary-total">—</span>
+    </div>
+    <button class="btn btn-primary btn-sm" id="mobile-summary-btn" data-icon-suffix="arrowRight">Review Order</button>
+  </div>
+
+</div><!-- /.app-wrap -->
+
+<!-- 3D Viewer Modal -->
+<div class="modal-backdrop" id="viewer-modal" role="dialog" aria-modal="true">
+  <div class="modal-panel">
+    <div class="modal-header">
+      <span class="modal-title">3D Preview</span>
+      <div class="modal-header-controls">
+        <div class="viewer-themes" id="viewer-theme-btns">
+          <button class="theme-btn active" data-theme="resin">Resin</button>
+          <button class="theme-btn" data-theme="clay">Clay</button>
+          <button class="theme-btn" data-theme="studio">Studio</button>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="modal-close" data-icon="x">Close</button>
+      </div>
+    </div>
+    <div class="modal-canvas-wrap">
+      <!-- Static thumbnail shown by default; replaced by canvas on demand -->
+      <div id="modal-static-wrap" class="modal-static-wrap" style="display:none">
+        <img id="modal-static-img" class="modal-static-img" alt="Model preview">
+        <button class="btn btn-primary" id="modal-load-3d-btn" data-icon="eye">Load Interactive 3D Preview</button>
+        <p class="modal-static-note" id="modal-perf-note"></p>
+      </div>
+      <canvas id="modal-canvas" style="display:none"></canvas>
+      <div class="modal-hint" data-icon="mousePointer">Drag to rotate · Scroll to zoom · Right-click to pan</div>
+    </div>
+  </div>
+</div>
+
+<!-- Order / Quote Form Overlay -->
+<div class="order-overlay" id="order-overlay" role="dialog" aria-modal="true">
+  <div class="order-panel">
+    <div class="order-panel-header">
+      <h2 id="order-panel-title">Review Your Order</h2>
+      <button class="btn btn-ghost btn-sm" id="order-close" data-icon-only="x" data-icon-size="16"></button>
+    </div>
+    <div class="order-panel-body">
+
+      <!-- Step 1 — Review -->
+      <div id="order-review-wrap" style="display:none">
+        <div class="review-ref-row">
+          <span class="review-ref-label">Quote Reference</span>
+          <span class="quote-stamp"><strong id="review-order-number" class="quote-stamp-value">—</strong></span>
+        </div>
+        <div id="review-groups-container"><!-- populated by JS --></div>
+        <div class="order-total-row">
+          <span>Grand Total (estimated)</span>
+          <span id="review-order-total">—</span>
+        </div>
+        <p class="review-custom-quote-note" id="review-custom-quote-note" style="display:none" data-icon="info">
+          Orders over £150 are personally reviewed before we confirm pricing — we'll be in touch if anything needs adjusting.
+        </p>
+        <p class="review-minimum-note" id="review-minimum-note" style="display:none"></p>
+        <p class="review-disclaimer-note" data-icon="alertTriangle">
+          Please review your order carefully before continuing.
+          Ensure all scales, quantities, and material choices are correct.
+          All orders are reviewed by hand before we confirm — you're welcome to cancel at that point if anything needs changing.
+        </p>
+        <div class="form-actions">
+          <button class="btn btn-primary btn-lg" id="review-continue-btn" data-icon-suffix="arrowRight">Continue to Contact Details</button>
+        </div>
+      </div>
+
+      <!-- Step 2 — Contact form -->
+      <div id="order-form-wrap" style="display:none">
+        <div class="review-back-row">
+          <button class="btn btn-ghost btn-sm" id="order-back-btn" data-icon="arrowLeft">Back to Review</button>
+          <span class="review-back-ref">Ref: <strong id="form-order-ref">—</strong></span>
+        </div>
+
+        <form id="order-form" novalidate>
+          <div class="form-field">
+            <label for="cust-name">Your name *</label>
+            <input type="text" id="cust-name" name="cust-name" required placeholder="Jane Smith">
+          </div>
+          <div class="form-field">
+            <label for="cust-email">Email address *</label>
+            <input type="email" id="cust-email" name="cust-email" required placeholder="jane@example.com">
+          </div>
+          <div class="form-field">
+            <label for="cust-notes">Additional notes</label>
+            <textarea id="cust-notes" name="cust-notes"
+              placeholder="Colour preferences, deadline, special requirements…"></textarea>
+          </div>
+
+          <div class="form-field disclaimer-field">
+            <label class="checkbox-row">
+              <input type="checkbox" name="disclaimer" id="disclaimer-check" required>
+              <span>I confirm that all information provided (file scale, material selection,
+                supports, and quantity) is accurate to the best of my knowledge. I understand
+                that submitting incorrect information may result in my order being
+                <strong>delayed or cancelled</strong> while Arcane Flame contacts me to
+                resolve the issue before proceeding.</span>
+            </label>
+          </div>
+
+          <p style="font-size:.75rem;color:var(--text-dimmer);margin-bottom:14px;line-height:1.5">
+            * Estimate only — final price confirmed after file review.
+            STL files are not uploaded; only dimensions and volume are used for pricing.
+          </p>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-lg" data-icon-suffix="arrowRight">Submit Quote Request</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Step 3 — Success -->
+      <div class="order-success" id="order-success-wrap" style="display:none">
+        <div class="success-icon" data-icon-only="flame" data-icon-size="40"></div>
+        <h3>Quote Submitted!</h3>
+        <p>We'll review your files and send a confirmation to<br>
+           <strong id="order-success-email" style="color:var(--accent)"></strong></p>
+        <p class="success-ref">Your reference</p>
+        <span class="quote-stamp quote-stamp-lg"><strong id="order-success-number" class="quote-stamp-value">—</strong></span>
+        <p style="font-size:.8rem">Our team typically responds within 1 business day.</p>
+        <button class="btn btn-secondary"
+                onclick="document.getElementById('order-overlay').classList.remove('open')">Close</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById('add-group-btn').addEventListener('click', () => {
+    document.dispatchEvent(new CustomEvent('add-group'));
+  });
+</script>

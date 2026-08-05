@@ -1,0 +1,22 @@
+{% comment %} sections/print-calculator.liquid {% endcomment %}
+<div class="print-calculator-embed">
+  {% render 'print-calculator-markup' %}
+</div>
+
+{{ 'print-calc-style.css' | asset_url | stylesheet_tag }}
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="{{ 'print-calc-main.js' | asset_url }}"></script>
+
+{% schema %}
+{
+  "name": "3D Print Calculator",
+  "settings": []
+}
+{% endschema %}

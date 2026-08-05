@@ -1,0 +1,8 @@
+{
+  "sections": {
+    "main": {
+      "type": "print-calculator"
+    }
+  },
+  "order": ["main"]
+}
