@@ -1,17 +1,11 @@
-<div class="app-wrap">
+<div class="app-wrap page-width">
 
-  <header class="app-header">
-    <div class="app-header-left">
-      <img src="https://ik.imagekit.io/8xqqxw0sa/Arcane%20Flame%20Branding/Arcane%20Flame%20logos/Arcane%20Flame%20Logog%20-%20White%20small%20stacked.png"
-           alt="Arcane Flame" class="app-logo-img"
-           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-      <div class="app-logo-fallback" style="display:none" data-icon-only="flame" data-icon-size="20"></div>
-      <div class="app-title">
-        <p>Resin 3D Print Price Calculator</p>
-        <span class="app-tagline">Upload your STL files — get an instant quote</span>
-      </div>
+  <div class="calc-page-header">
+    <div>
+      <h1 class="calc-page-title">Resin 3D Print Price Calculator</h1>
+      <p class="calc-page-tagline">Upload your STL files — get an instant quote</p>
     </div>
-    <div class="app-header-actions">
+    <div class="calc-actions-row">
       <button class="btn btn-ghost btn-sm" id="add-group-btn" aria-label="New Model Group">
         <span aria-hidden="true" data-icon-only="plus" data-icon-size="16"></span><span class="btn-label">New Model Group</span>
       </button>
@@ -19,8 +13,7 @@
         <span aria-hidden="true" data-icon-only="settings" data-icon-size="16"></span><span class="btn-label">Admin</span>
       </a>
     </div>
-  </header>
-  <hr class="brand-divider">
+  </div>
 
   <div class="drop-zone" id="drop-zone" role="button" tabindex="0">
     <div class="drop-icon" data-icon-only="upload" data-icon-size="34"></div>

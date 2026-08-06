@@ -66,71 +66,50 @@ img { display: block; max-width: 100%; }
 .icon { flex-shrink: 0; vertical-align: -3px; }
 .label-icon-row { display: inline-flex; align-items: center; gap: 6px; }
 
-/* ---- Layout -------------------------------------------------------- */
-.app-wrap { max-width: 1280px; margin: 0 auto; padding: 0 16px 60px; }
+/* ---- Layout -------------------------------------------------------------
+   Horizontal width/padding comes from the theme's own .page-width class
+   (applied alongside app-wrap in the markup) so this matches the rest of
+   the site's content width exactly, instead of a hardcoded max-width that
+   drifts out of sync with the theme's own container. Only vertical
+   spacing is set here. */
+.app-wrap { padding-bottom: 60px; }
 @media (min-width: 960px) {
-  .app-wrap { padding: 0 24px 80px; }
+  .app-wrap { padding-bottom: 80px; }
 }
 
-/* ---- Header -------------------------------------------------------- */
-.app-header {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 10px;
-  padding: 12px 16px; margin: 0 -16px;
-  background:
-    radial-gradient(ellipse 480px 140px at 10% 0%, rgba(232,102,10,.16), transparent 70%),
-    #1b2f3e;
-  border-bottom: 3px solid var(--flame);
+/* ---- Header ---------------------------------------------------------
+   Plain, unbranded header — this page is embedded inside the store's own
+   theme, which already has its own nav/branding above it, so this avoids
+   duplicating logo/site-title chrome the way the standalone tool's own
+   header does. */
+.calc-page-header {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 20px 0 16px; margin-bottom: 20px;
+  border-bottom: 1px solid var(--card-border);
 }
-.app-header-left { display: flex; align-items: center; gap: 12px; width: 100%; }
-
-.app-logo-img {
-  height: 40px; width: auto; display: block; flex-shrink: 0;
-}
-.app-logo-fallback {
-  width: 36px; height: 36px;
-  background: linear-gradient(135deg, #7a2e05 0%, #e8660a 60%, #ff9a40 100%);
-  border-radius: var(--radius-sm);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 1.2rem; box-shadow: 0 0 16px rgba(232,102,10,.35); flex-shrink: 0;
-}
-.app-title p {
+.calc-page-title {
   font-family: var(--heading-font);
-  font-size: .92rem; letter-spacing: .04em;
-  color: rgba(255,255,255,.85);
+  font-size: 1.25rem; letter-spacing: .04em; color: var(--text);
 }
-.app-title .app-tagline {
-  font-size: .7rem; color: rgba(255,255,255,.6);
-  display: block; margin-top: 1px; font-family: var(--body-font);
+.calc-page-tagline {
+  font-size: .8rem; color: var(--text-dim); margin-top: 2px;
 }
-
-.app-header .btn-ghost {
-  color: rgba(255,255,255,.75); border-color: rgba(255,255,255,.2); background: transparent;
-}
-.app-header .btn-ghost:hover {
-  background: rgba(255,255,255,.1); color: #fff; border-color: rgba(255,255,255,.38);
-}
-.brand-divider { height: 0; border: none; margin-bottom: 28px; }
-
-.app-header-actions { display: flex; gap: 8px; width: 100%; }
-.app-header-actions .btn {
+.calc-actions-row { display: flex; gap: 8px; }
+.calc-actions-row .btn {
   flex: 0 0 44px; width: 44px; height: 44px; padding: 0;
   justify-content: center;
 }
-.app-header-actions .btn-label { display: none; }
+.calc-actions-row .btn-label { display: none; }
 
 @media (min-width: 768px) {
-  .app-header {
+  .calc-page-header {
     flex-direction: row; align-items: center; justify-content: space-between;
-    padding: 14px 28px; margin: 0 -24px;
+    padding: 24px 0 20px;
   }
-  .app-header-left { width: auto; gap: 20px; }
-  .app-logo-img { height: 52px; }
-  .app-logo-fallback { width: 44px; height: 44px; font-size: 1.4rem; }
-  .app-title p { font-size: 1rem; }
-  .app-title .app-tagline { font-size: .72rem; }
-  .app-header-actions { width: auto; }
-  .app-header-actions .btn { flex: 0 0 auto; width: auto; height: auto; padding: 9px 18px; }
-  .app-header-actions .btn-label { display: inline; margin-left: 2px; }
+  .calc-page-title { font-size: 1.4rem; }
+  .calc-page-tagline { font-size: .85rem; }
+  .calc-actions-row .btn { flex: 0 0 auto; width: auto; height: auto; padding: 9px 18px; }
+  .calc-actions-row .btn-label { display: inline; margin-left: 2px; }
 }
 
 /* ---- Buttons ------------------------------------------------------- */
