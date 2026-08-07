@@ -85,3 +85,33 @@ export async function uploadFile(
   const file = files[0];
   return { id: file.id, url: file.preview?.image?.url ?? null };
 }
+
+const RESOLVE_FILE_QUERY = `
+  query ResolveFileUrl($id: ID!) {
+    node(id: $id) {
+      ... on GenericFile { url }
+      ... on MediaImage { image { url } }
+    }
+  }
+`;
+
+// Shopify processes uploaded files asynchronously — a file created moments
+// ago may not have a resolved download URL yet. Two short retries (not a
+// long poll) cover the common case without meaningfully delaying quote
+// creation; if still unresolved, the caller falls back to referencing the
+// file by its Shopify GID instead of a clickable link (see index.ts).
+const FILE_URL_RETRY_DELAYS_MS = [500, 500];
+
+export async function resolveFileUrl(fileId: string): Promise<string | null> {
+  for (let attempt = 0; attempt <= FILE_URL_RETRY_DELAYS_MS.length; attempt++) {
+    const data = await shopifyGraphQL<{
+      node: { url?: string | null; image?: { url: string } | null } | null;
+    }>(RESOLVE_FILE_QUERY, { id: fileId });
+    const url = data.node?.url ?? data.node?.image?.url ?? null;
+    if (url) return url;
+    if (attempt < FILE_URL_RETRY_DELAYS_MS.length) {
+      await new Promise((resolve) => setTimeout(resolve, FILE_URL_RETRY_DELAYS_MS[attempt]));
+    }
+  }
+  return null;
+}

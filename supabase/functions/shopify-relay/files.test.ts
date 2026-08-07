@@ -1,6 +1,6 @@
 // supabase/functions/shopify-relay/files.test.ts
 import { assertEquals, assertRejects } from "std/testing/asserts.ts";
-import { uploadFile } from "./files.ts";
+import { uploadFile, resolveFileUrl } from "./files.ts";
 import { __resetTokenCacheForTests } from "./shopify.ts";
 
 const STAGED_PUT_URL = "https://shopify-staged-uploads.example/put-here";
@@ -332,6 +332,128 @@ Deno.test("uploadFile throws a clear error when fileCreate returns no files", as
       Error,
       "Shopify did not return a created file",
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("resolveFileUrl returns the url immediately for a GenericFile that's already processed", async () => {
+  __resetTokenCacheForTests();
+  const originalFetch = globalThis.fetch;
+  let callCount = 0;
+
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString();
+    if (url.includes("/admin/oauth/access_token")) return tokenResponse();
+
+    const body = JSON.parse((init?.body as string) ?? "{}");
+    if (body.query.includes("node(id:")) {
+      callCount++;
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ data: { node: { url: "https://cdn.example/part.stl" } } }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    }
+    throw new Error("unexpected query: " + body.query);
+  }) as typeof fetch;
+
+  try {
+    const result = await resolveFileUrl("gid://shopify/GenericFile/1");
+    assertEquals(result, "https://cdn.example/part.stl");
+    assertEquals(callCount, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("resolveFileUrl reads image.url for a MediaImage node", async () => {
+  __resetTokenCacheForTests();
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString();
+    if (url.includes("/admin/oauth/access_token")) return tokenResponse();
+
+    const body = JSON.parse((init?.body as string) ?? "{}");
+    if (body.query.includes("node(id:")) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ data: { node: { image: { url: "https://cdn.example/thumb.png" } } } }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    }
+    throw new Error("unexpected query: " + body.query);
+  }) as typeof fetch;
+
+  try {
+    const result = await resolveFileUrl("gid://shopify/MediaImage/2");
+    assertEquals(result, "https://cdn.example/thumb.png");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("resolveFileUrl retries when the file is still processing, then returns the url once ready", async () => {
+  __resetTokenCacheForTests();
+  const originalFetch = globalThis.fetch;
+  let callCount = 0;
+
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString();
+    if (url.includes("/admin/oauth/access_token")) return tokenResponse();
+
+    const body = JSON.parse((init?.body as string) ?? "{}");
+    if (body.query.includes("node(id:")) {
+      callCount++;
+      const nodeResult = callCount < 2 ? { url: null } : { url: "https://cdn.example/ready.stl" };
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ data: { node: nodeResult } }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    }
+    throw new Error("unexpected query: " + body.query);
+  }) as typeof fetch;
+
+  try {
+    const result = await resolveFileUrl("gid://shopify/GenericFile/3");
+    assertEquals(result, "https://cdn.example/ready.stl");
+    assertEquals(callCount, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("resolveFileUrl gives up and returns null after exhausting retries", async () => {
+  __resetTokenCacheForTests();
+  const originalFetch = globalThis.fetch;
+  let callCount = 0;
+
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString();
+    if (url.includes("/admin/oauth/access_token")) return tokenResponse();
+
+    const body = JSON.parse((init?.body as string) ?? "{}");
+    if (body.query.includes("node(id:")) {
+      callCount++;
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ data: { node: { url: null } } }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    }
+    throw new Error("unexpected query: " + body.query);
+  }) as typeof fetch;
+
+  try {
+    const result = await resolveFileUrl("gid://shopify/GenericFile/4");
+    assertEquals(result, null);
+    assertEquals(callCount, 3); // initial attempt + 2 retries
   } finally {
     globalThis.fetch = originalFetch;
   }
