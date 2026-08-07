@@ -57,7 +57,7 @@ const PATHS = {
 export function icon(name, { size = 16, className = '' } = {}) {
   const inner = PATHS[name];
   if (!inner) return '';
-  return `<svg class="icon${className ? ' ' + className : ''}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${inner}</svg>`;
+  return `<svg class="pc-icon${className ? ' ' + className : ''}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${inner}</svg>`;
 }
 
 /**
