@@ -544,6 +544,11 @@ details[open] > summary::before { transform: rotate(90deg); }
 .form-field label { display: block; font-size: .82rem; color: var(--text-dim); margin-bottom: 5px; font-weight: 500; }
 .form-field textarea { resize: vertical; min-height: 85px; }
 
+.marketing-consent-block { margin-bottom: 16px; }
+.consent-note {
+  font-size: .78rem; color: var(--text-dim); line-height: 1.5; margin-bottom: 8px;
+}
+
 .disclaimer-field {
   background: rgba(28,109,87,.04); border: 1px solid rgba(28,109,87,.18);
   border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 16px;

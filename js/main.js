@@ -1264,8 +1264,11 @@ function openOrderForm() {
   const grandTotal = calcOrderTotal(activeGroups, config);
   const minimumShortfall = calcOrderMinimumShortfall(activeGroups, config);
 
+  const isQuote = exceedsCustomQuoteThreshold(grandTotal, config);
   const quoteNoteEl = document.getElementById('review-custom-quote-note');
-  if (quoteNoteEl) quoteNoteEl.style.display = exceedsCustomQuoteThreshold(grandTotal, config) ? 'block' : 'none';
+  if (quoteNoteEl) quoteNoteEl.style.display = isQuote ? 'block' : 'none';
+  const marketingBlockEl = document.getElementById('marketing-consent-block');
+  if (marketingBlockEl) marketingBlockEl.style.display = isQuote ? 'block' : 'none';
 
   const minNoteEl = document.getElementById('review-minimum-note');
   if (minNoteEl) {
@@ -1298,10 +1301,11 @@ function closeOrderForm() {
 async function submitOrder(e) {
   e.preventDefault();
   const form       = e.target;
-  const name       = form.querySelector('[name="cust-name"]').value.trim();
-  const email      = form.querySelector('[name="cust-email"]').value.trim();
-  const notes      = form.querySelector('[name="cust-notes"]').value.trim();
-  const disclaimer = form.querySelector('[name="disclaimer"]').checked;
+  const name             = form.querySelector('[name="cust-name"]').value.trim();
+  const email            = form.querySelector('[name="cust-email"]').value.trim();
+  const notes            = form.querySelector('[name="cust-notes"]').value.trim();
+  const disclaimer       = form.querySelector('[name="disclaimer"]').checked;
+  const marketingConsent = form.querySelector('[name="marketing-consent"]')?.checked ?? false;
 
   if (!name || !email) { showToast('Please fill in your name and email.', 'error'); return; }
   if (!disclaimer)     { showToast('Please tick the confirmation checkbox to continue.', 'error'); return; }
@@ -1362,6 +1366,7 @@ async function submitOrder(e) {
     body: JSON.stringify({
       customerEmail: email,
       customerName: name,
+      marketingConsent,
       grandTotal,
       thresholdExceeded,
       lineItems,
@@ -1372,8 +1377,8 @@ async function submitOrder(e) {
       return r.json();
     })
     .then(result => {
-      if (result.mode === 'draft-order') {
-        window.location.href = result.invoiceUrl;
+      if (result.mode === 'quote') {
+        showQuoteSuccess(email);
         return;
       }
       // mode === 'cart' — add the priced variant to the real Shopify cart, then go to checkout.
@@ -1407,6 +1412,19 @@ async function submitOrder(e) {
       showToast('Something went wrong submitting your order — please try again or contact us.', 'error');
       if (submitBtn) submitBtn.disabled = false;
     });
+}
+
+/** Shows the success step in place — no navigation. `mode === 'quote'` never redirects the customer anywhere (no payment page, since the order is a draft awaiting manual review). */
+function showQuoteSuccess(email) {
+  const emailEl  = document.getElementById('order-success-email');
+  if (emailEl) emailEl.textContent = email;
+  const numberEl = document.getElementById('order-success-number');
+  if (numberEl) numberEl.textContent = _orderNumber ?? '—';
+
+  document.getElementById('order-review-wrap').style.display  = 'none';
+  document.getElementById('order-form-wrap').style.display    = 'none';
+  document.getElementById('order-success-wrap').style.display = 'flex';
+  document.querySelector('.order-panel')?.scrollTo(0, 0);
 }
 
 // ---- Utilities -------------------------------------------------------
