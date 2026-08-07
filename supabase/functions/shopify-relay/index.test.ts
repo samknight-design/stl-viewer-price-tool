@@ -24,6 +24,15 @@ function fakeDeps(overrides: Partial<RelayDeps>): RelayDeps {
     createDraftOrder: () => {
       throw new Error("createDraftOrder not stubbed");
     },
+    findOrCreateCustomer: () => {
+      throw new Error("findOrCreateCustomer not stubbed");
+    },
+    resolveFileUrl: () => {
+      throw new Error("resolveFileUrl not stubbed");
+    },
+    sendQuoteNotification: () => {
+      throw new Error("sendQuoteNotification not stubbed");
+    },
     ...overrides,
   };
 }
@@ -149,10 +158,81 @@ Deno.test("POST /checkout below threshold creates a priced variant and returns f
   });
 });
 
-Deno.test("POST /checkout above threshold creates a draft order", async () => {
+Deno.test("POST /checkout above threshold creates a customer, a linked draft order, sends a notification, and returns quote mode", async () => {
+  let customerCalled = false;
+  let draftOrderCalled = false;
+  let notificationCalled = false;
   const deps = fakeDeps({
     getShopConfig: () => Promise.resolve(null),
-    createDraftOrder: () => Promise.resolve({ invoiceUrl: "https://example.com/invoice" }),
+    findOrCreateCustomer: (input) => {
+      customerCalled = true;
+      assertEquals(input.email, "jane@example.com");
+      assertEquals(input.name, "Jane Smith");
+      assertEquals(input.marketingConsent, true);
+      return Promise.resolve({ id: "gid://shopify/Customer/1" });
+    },
+    resolveFileUrl: () => Promise.resolve("https://cdn.example/part.stl"),
+    createDraftOrder: (input) => {
+      draftOrderCalled = true;
+      assertEquals(input.customerId, "gid://shopify/Customer/1");
+      assertEquals(input.tags.includes("quote"), true);
+      return Promise.resolve({ draftOrderId: "999" });
+    },
+    sendQuoteNotification: (input) => {
+      notificationCalled = true;
+      assertEquals(input.draftOrderId, "999");
+      return Promise.resolve();
+    },
+  });
+  const res = await handleRequest(
+    new Request("https://relay.test/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        customerEmail: "jane@example.com",
+        customerName: "Jane Smith",
+        marketingConsent: true,
+        grandTotal: 180,
+        thresholdExceeded: true,
+        lineItems: [{
+          title: "Model 1",
+          price: "180.00",
+          quantity: 1,
+          properties: [
+            { name: "_quote_ref", value: "AF-20260807-XYZ" },
+            {
+              name: "_files_json",
+              value: JSON.stringify([{
+                filename: "part.stl",
+                fileId: "gid://shopify/GenericFile/1",
+                thumbnailId: null,
+                quantity: 1,
+              }]),
+            },
+          ],
+        }],
+      }),
+    }),
+    deps,
+  );
+  assertEquals(res.status, 200);
+  assertEquals(await res.json(), {
+    mode: "quote",
+    quoteRef: "AF-20260807-XYZ",
+    draftOrderId: "999",
+  });
+  assertEquals(customerCalled, true);
+  assertEquals(draftOrderCalled, true);
+  assertEquals(notificationCalled, true);
+});
+
+Deno.test("POST /checkout still creates the quote when a file URL fails to resolve", async () => {
+  const deps = fakeDeps({
+    getShopConfig: () => Promise.resolve(null),
+    findOrCreateCustomer: () => Promise.resolve({ id: "gid://shopify/Customer/1" }),
+    resolveFileUrl: () => Promise.resolve(null), // simulates a still-processing file
+    createDraftOrder: () => Promise.resolve({ draftOrderId: "999" }),
+    sendQuoteNotification: () => Promise.resolve(),
   });
   const res = await handleRequest(
     new Request("https://relay.test/checkout", {
@@ -163,13 +243,30 @@ Deno.test("POST /checkout above threshold creates a draft order", async () => {
         customerName: "Jane Smith",
         grandTotal: 180,
         thresholdExceeded: true,
-        lineItems: [{ title: "Model 1", price: "180.00", quantity: 1, properties: [] }],
+        lineItems: [{
+          title: "Model 1",
+          price: "180.00",
+          quantity: 1,
+          properties: [
+            { name: "_quote_ref", value: "AF-1" },
+            {
+              name: "_files_json",
+              value: JSON.stringify([{
+                filename: "part.stl",
+                fileId: "gid://shopify/GenericFile/1",
+                thumbnailId: null,
+                quantity: 1,
+              }]),
+            },
+          ],
+        }],
       }),
     }),
     deps,
   );
   assertEquals(res.status, 200);
-  assertEquals(await res.json(), { mode: "draft-order", invoiceUrl: "https://example.com/invoice" });
+  const body = await res.json();
+  assertEquals(body.mode, "quote");
 });
 
 Deno.test("POST /checkout rejects a grandTotal that doesn't match the line items' price*quantity", async () => {
@@ -224,10 +321,13 @@ Deno.test("POST /checkout forces a draft order server-side when grandTotal excee
   let variantCalled = false;
   const deps = fakeDeps({
     getShopConfig: () => Promise.resolve({ customQuoteOrderThreshold: 150 }),
+    findOrCreateCustomer: () => Promise.resolve({ id: "gid://shopify/Customer/1" }),
+    resolveFileUrl: () => Promise.resolve(null),
     createDraftOrder: () => {
       draftOrderCalled = true;
-      return Promise.resolve({ invoiceUrl: "https://example.com/invoice" });
+      return Promise.resolve({ draftOrderId: "999" });
     },
+    sendQuoteNotification: () => Promise.resolve(),
     createPricedVariant: () => {
       variantCalled = true;
       return Promise.resolve({ variantId: 999 });
@@ -248,7 +348,9 @@ Deno.test("POST /checkout forces a draft order server-side when grandTotal excee
     deps,
   );
   assertEquals(res.status, 200);
-  assertEquals(await res.json(), { mode: "draft-order", invoiceUrl: "https://example.com/invoice" });
+  const body = await res.json();
+  assertEquals(body.mode, "quote");
+  assertEquals(body.draftOrderId, "999");
   assertEquals(draftOrderCalled, true);
   assertEquals(variantCalled, false);
 });

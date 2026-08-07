@@ -1,8 +1,10 @@
 // supabase/functions/shopify-relay/index.ts
 import { getShopConfig, saveShopConfig } from "./config.ts";
-import { uploadFile } from "./files.ts";
+import { uploadFile, resolveFileUrl } from "./files.ts";
 import { createPricedVariant } from "./variant.ts";
 import { createDraftOrder, type QuoteLineItem } from "./draftOrder.ts";
+import { findOrCreateCustomer } from "./customer.ts";
+import { sendQuoteNotification } from "./notify.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -31,6 +33,65 @@ async function readJsonBody(req: Request): Promise<any> {
   }
 }
 
+/** One uploaded file's record as sent by the frontend in a line item's `_files_json` property. */
+interface QuoteFileRecord {
+  filename: string;
+  fileId: string | null;
+  thumbnailId: string | null;
+  quantity: number;
+}
+
+/**
+ * Resolves clickable download URLs for every file referenced in a line
+ * item's `_files_json` property, returning a new line item with that
+ * property's value replaced by the enriched (fileUrl/thumbnailUrl added)
+ * JSON. Non-`_files_json` properties, and line items with no `_files_json`
+ * property, pass through unchanged. A file whose URL can't be resolved
+ * (still processing) gets `fileUrl: null` rather than blocking the quote.
+ */
+async function enrichLineItemWithFileUrls(
+  lineItem: QuoteLineItem,
+  resolveFileUrlFn: typeof resolveFileUrl,
+): Promise<QuoteLineItem> {
+  const properties = await Promise.all(lineItem.properties.map(async (p) => {
+    if (p.name !== "_files_json") return p;
+    let files: QuoteFileRecord[];
+    try {
+      files = JSON.parse(p.value);
+    } catch {
+      return p;
+    }
+    const enriched = await Promise.all(files.map(async (f) => ({
+      ...f,
+      fileUrl: f.fileId ? await resolveFileUrlFn(f.fileId) : null,
+      thumbnailUrl: f.thumbnailId ? await resolveFileUrlFn(f.thumbnailId) : null,
+    })));
+    return { name: p.name, value: JSON.stringify(enriched) };
+  }));
+  return { ...lineItem, properties };
+}
+
+/** Human-scannable file list for the draft order's note, so the whole quote is readable without opening every line item's custom attributes. */
+function buildFileSummaryLines(lineItems: QuoteLineItem[]): string[] {
+  return lineItems.flatMap((li) => {
+    const filesProp = li.properties.find((p) => p.name === "_files_json");
+    if (!filesProp) return [];
+    let files: Array<{ filename: string; fileUrl: string | null }>;
+    try {
+      files = JSON.parse(filesProp.value);
+    } catch {
+      return [];
+    }
+    return files.map((f) =>
+      `  - ${f.filename}: ${f.fileUrl ?? "(still processing — check Shopify Files)"}`
+    );
+  });
+}
+
+function extractQuoteRef(lineItems: QuoteLineItem[]): string {
+  return lineItems[0]?.properties.find((p) => p.name === "_quote_ref")?.value ?? "";
+}
+
 /**
  * Dependencies the router dispatches to. Exposed as a parameter (rather than
  * imported directly at call sites) so tests can substitute fakes without
@@ -42,6 +103,9 @@ export interface RelayDeps {
   uploadFile: typeof uploadFile;
   createPricedVariant: typeof createPricedVariant;
   createDraftOrder: typeof createDraftOrder;
+  findOrCreateCustomer: typeof findOrCreateCustomer;
+  resolveFileUrl: typeof resolveFileUrl;
+  sendQuoteNotification: typeof sendQuoteNotification;
 }
 
 const defaultDeps: RelayDeps = {
@@ -50,6 +114,9 @@ const defaultDeps: RelayDeps = {
   uploadFile,
   createPricedVariant,
   createDraftOrder,
+  findOrCreateCustomer,
+  resolveFileUrl,
+  sendQuoteNotification,
 };
 
 export async function handleRequest(
@@ -86,6 +153,7 @@ export async function handleRequest(
       const body = await readJsonBody(req) as {
         customerEmail: string;
         customerName: string;
+        marketingConsent?: boolean;
         grandTotal: number;
         thresholdExceeded: boolean;
         lineItems: QuoteLineItem[];
@@ -137,8 +205,47 @@ export async function handleRequest(
         body.grandTotal >= configThreshold;
 
       if (serverThresholdExceeded) {
-        const { invoiceUrl } = await deps.createDraftOrder(body);
-        return json({ mode: "draft-order", invoiceUrl });
+        // 1. Find-or-create the customer, with GDPR-compliant marketing consent.
+        const customer = await deps.findOrCreateCustomer({
+          email: body.customerEmail,
+          name: body.customerName,
+          marketingConsent: Boolean(body.marketingConsent),
+        });
+
+        // 2. Resolve clickable file URLs for every uploaded STL/thumbnail
+        //    referenced in the line items, so the draft order is
+        //    self-contained for review (no need to hunt through Shopify's
+        //    Files library by GID).
+        const enrichedLineItems = await Promise.all(
+          body.lineItems.map((li) => enrichLineItemWithFileUrls(li, deps.resolveFileUrl)),
+        );
+
+        // 3. Build the draft order — customer-linked, tagged, unsent.
+        const quoteRef = extractQuoteRef(body.lineItems);
+        const note = [
+          `Quote ${quoteRef} for ${body.customerName} (${body.customerEmail}) — review before sending invoice.`,
+          "",
+          "Files:",
+          ...buildFileSummaryLines(enrichedLineItems),
+        ].join("\n");
+
+        const { draftOrderId } = await deps.createDraftOrder({
+          customerId: customer.id,
+          note,
+          tags: ["quote", `quote-ref:${quoteRef}`],
+          lineItems: enrichedLineItems,
+        });
+
+        // 4. Best-effort notify the shop owner — never blocks/fails the quote.
+        await deps.sendQuoteNotification({
+          quoteRef,
+          customerName: body.customerName,
+          customerEmail: body.customerEmail,
+          grandTotal: body.grandTotal,
+          draftOrderId,
+        });
+
+        return json({ mode: "quote", quoteRef, draftOrderId });
       }
 
       const totalTitle = body.lineItems.map((li) => li.title).join(", ").slice(0, 250);
