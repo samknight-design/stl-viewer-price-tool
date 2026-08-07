@@ -243,6 +243,61 @@ Deno.test("findOrCreateCustomer does not call customerUpdate when marketingConse
   }
 });
 
+Deno.test("findOrCreateCustomer recovers when the search index hasn't caught up with a just-created customer", async () => {
+  __resetTokenCacheForTests();
+  const originalFetch = globalThis.fetch;
+  let findCalls = 0;
+  let createCalls = 0;
+
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString();
+    if (url.includes("/admin/oauth/access_token")) return tokenResponse();
+
+    const body = JSON.parse((init?.body as string) ?? "{}");
+    if (body.query.includes("customers(")) {
+      findCalls += 1;
+      // First find (before create) and first retry find both miss; second
+      // retry find finally sees the customer the index has caught up on.
+      if (findCalls < 3) return jsonResponse({ data: { customers: { nodes: [] } } });
+      return jsonResponse({
+        data: {
+          customers: {
+            nodes: [{
+              id: "gid://shopify/Customer/999",
+              emailMarketingConsent: { marketingState: "NOT_SUBSCRIBED" },
+            }],
+          },
+        },
+      });
+    }
+    if (body.query.includes("customerCreate")) {
+      createCalls += 1;
+      return jsonResponse({
+        data: {
+          customerCreate: {
+            customer: null,
+            userErrors: [{ field: ["email"], message: "Email has already been taken" }],
+          },
+        },
+      });
+    }
+    throw new Error("unexpected query: " + body.query);
+  }) as typeof fetch;
+
+  try {
+    const result = await findOrCreateCustomer({
+      email: "racey@example.com",
+      name: "Racey Customer",
+      marketingConsent: false,
+    });
+    assertEquals(result.id, "gid://shopify/Customer/999");
+    assertEquals(createCalls, 1);
+    assertEquals(findCalls, 3);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 Deno.test("findOrCreateCustomer splits a single-word name into firstName only", async () => {
   __resetTokenCacheForTests();
   const originalFetch = globalThis.fetch;

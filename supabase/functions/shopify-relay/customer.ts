@@ -56,6 +56,33 @@ function consentInput(marketingConsent: boolean) {
   };
 }
 
+type FoundCustomer = { id: string; emailMarketingConsent: { marketingState: string } | null };
+
+async function findCustomerByEmail(email: string): Promise<FoundCustomer | null> {
+  const escapedEmail = email.replace(/"/g, '\\"');
+  const found = await shopifyGraphQL<{ customers: { nodes: FoundCustomer[] } }>(
+    FIND_CUSTOMER_QUERY,
+    { query: `email:"${escapedEmail}"` },
+  );
+  return found.customers.nodes[0] ?? null;
+}
+
+async function upgradeConsentIfNeeded(customer: FoundCustomer, marketingConsent: boolean): Promise<void> {
+  const alreadySubscribed = customer.emailMarketingConsent?.marketingState === "SUBSCRIBED";
+  if (marketingConsent && !alreadySubscribed) {
+    await shopifyGraphQL(UPDATE_CUSTOMER_CONSENT_MUTATION, {
+      input: { id: customer.id, emailMarketingConsent: consentInput(true) },
+    });
+  }
+}
+
+// Shopify's customer search index can lag a moment behind writes, so a
+// customer created moments ago (e.g. by an earlier quote from the same
+// person) may not show up in FIND_CUSTOMER_QUERY yet, causing
+// customerCreate to fail with "Email has already been taken" below. Retry
+// the find with backoff instead of failing the whole quote in that case.
+const EMAIL_TAKEN_RETRY_DELAYS_MS = [500, 1000];
+
 /**
  * Finds an existing Shopify customer by email, or creates one. Existing
  * customers are never duplicated (avoids Shopify's "email taken" error on
@@ -67,38 +94,41 @@ function consentInput(marketingConsent: boolean) {
 export async function findOrCreateCustomer(
   input: FindOrCreateCustomerInput,
 ): Promise<CustomerResult> {
-  const escapedEmail = input.email.replace(/"/g, '\\"');
-  const found = await shopifyGraphQL<{
-    customers: {
-      nodes: Array<{ id: string; emailMarketingConsent: { marketingState: string } | null }>;
-    };
-  }>(FIND_CUSTOMER_QUERY, { query: `email:"${escapedEmail}"` });
-
-  const existing = found.customers.nodes[0];
+  const existing = await findCustomerByEmail(input.email);
   if (existing) {
-    const alreadySubscribed = existing.emailMarketingConsent?.marketingState === "SUBSCRIBED";
-    if (input.marketingConsent && !alreadySubscribed) {
-      await shopifyGraphQL(UPDATE_CUSTOMER_CONSENT_MUTATION, {
-        input: { id: existing.id, emailMarketingConsent: consentInput(true) },
-      });
-    }
+    await upgradeConsentIfNeeded(existing, input.marketingConsent);
     return { id: existing.id };
   }
 
   const { firstName, lastName } = splitName(input.name);
-  const created = await shopifyGraphQL<{
-    customerCreate: { customer: { id: string } | null };
-  }>(CREATE_CUSTOMER_MUTATION, {
-    input: {
-      email: input.email,
-      firstName,
-      lastName,
-      emailMarketingConsent: consentInput(input.marketingConsent),
-    },
-  });
+  try {
+    const created = await shopifyGraphQL<{
+      customerCreate: { customer: { id: string } | null };
+    }>(CREATE_CUSTOMER_MUTATION, {
+      input: {
+        email: input.email,
+        firstName,
+        lastName,
+        emailMarketingConsent: consentInput(input.marketingConsent),
+      },
+    });
 
-  if (!created.customerCreate.customer) {
-    throw new Error("Shopify did not return a created customer");
+    if (!created.customerCreate.customer) {
+      throw new Error("Shopify did not return a created customer");
+    }
+    return { id: created.customerCreate.customer.id };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (!/already been taken/i.test(message)) throw err;
+
+    for (const delayMs of EMAIL_TAKEN_RETRY_DELAYS_MS) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      const retryFound = await findCustomerByEmail(input.email);
+      if (retryFound) {
+        await upgradeConsentIfNeeded(retryFound, input.marketingConsent);
+        return { id: retryFound.id };
+      }
+    }
+    throw err;
   }
-  return { id: created.customerCreate.customer.id };
 }
