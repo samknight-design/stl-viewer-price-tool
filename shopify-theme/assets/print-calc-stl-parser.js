@@ -24,11 +24,11 @@ export function parseSTLBuffer(buffer, filename = '') {
 
   return {
     filename,
-    triangles,           // Array<[[x,y,z],[x,y,z],[x,y,z]]>
+    triangles,           // Flat Float32Array: 9 floats/triangle (v1xyz,v2xyz,v3xyz)
     volumeMm3,
     volumeMl: volumeMm3 / 1000,   // cm³ = mL
     dimensions,          // { x, y, z } in mm
-    triangleCount: triangles.length,
+    triangleCount: triangles.length / 9,
     isAscii,
   };
 }
@@ -48,6 +48,15 @@ function detectAscii(buffer) {
 }
 
 // ---- Binary STL parser -------------------------------------------------
+// Parses straight into a flat Float32Array (9 floats/triangle) rather than
+// nested JS arrays (`[[x,y,z],[x,y,z],[x,y,z]]`). The nested form costs many
+// times the raw file size in memory — V8 pays a per-array object overhead
+// four times over for every triangle — so a real-world multi-million-
+// triangle STL (tens of MB on disk) could balloon to gigabytes and take the
+// browser tab out with an out-of-memory crash, especially with several such
+// files loaded in the same session. A typed array stores exactly the 36
+// bytes/triangle it needs and fails fast with a catchable RangeError if a
+// file is genuinely too large, instead of silently exhausting memory.
 function parseBinary(buffer) {
   const view = new DataView(buffer);
   if (buffer.byteLength < 84) throw new Error('Not a valid STL file (too small)');
@@ -58,54 +67,56 @@ function parseBinary(buffer) {
     throw new Error(`STL truncated: expected ${expected} bytes, got ${buffer.byteLength}`);
   }
 
-  const triangles = new Array(numTri);
-  let o = 84;
+  const positions = new Float32Array(numTri * 9);
+  let o = 84, idx = 0;
   for (let i = 0; i < numTri; i++) {
     o += 12; // skip normal
-    triangles[i] = [
-      [view.getFloat32(o,    true), view.getFloat32(o+4,  true), view.getFloat32(o+8,  true)],
-      [view.getFloat32(o+12, true), view.getFloat32(o+16, true), view.getFloat32(o+20, true)],
-      [view.getFloat32(o+24, true), view.getFloat32(o+28, true), view.getFloat32(o+32, true)],
-    ];
-    o += 36 + 2; // 3 vertices + attribute bytes
+    for (let k = 0; k < 9; k++) {
+      positions[idx++] = view.getFloat32(o, true);
+      o += 4;
+    }
+    o += 2; // attribute byte count
   }
-  return triangles;
+  return positions;
 }
 
 // ---- ASCII STL parser --------------------------------------------------
 function parseAscii(text) {
-  const triangles = [];
+  const positions = [];
   const vertexRe = /vertex\s+([\d.eE+\-]+)\s+([\d.eE+\-]+)\s+([\d.eE+\-]+)/g;
-  let vertices = [];
   let m;
   while ((m = vertexRe.exec(text)) !== null) {
-    vertices.push([parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3])]);
-    if (vertices.length === 3) {
-      triangles.push([...vertices]);
-      vertices = [];
-    }
+    positions.push(parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3]));
   }
-  return triangles;
+  return Float32Array.from(positions);
 }
 
 // ---- Volume & bounding box via divergence theorem ---------------------
-function calcVolumeAndBounds(triangles) {
+function calcVolumeAndBounds(positions) {
   let vol = 0;
   let mnX = Infinity, mnY = Infinity, mnZ = Infinity;
   let mxX = -Infinity, mxY = -Infinity, mxZ = -Infinity;
 
-  for (const [v1, v2, v3] of triangles) {
+  for (let i = 0; i < positions.length; i += 9) {
+    const v1x = positions[i],   v1y = positions[i+1], v1z = positions[i+2];
+    const v2x = positions[i+3], v2y = positions[i+4], v2z = positions[i+5];
+    const v3x = positions[i+6], v3y = positions[i+7], v3z = positions[i+8];
+
     // Signed volume of tetrahedron from origin
     vol +=
-      v1[0] * (v2[1] * v3[2] - v2[2] * v3[1]) +
-      v1[1] * (v2[2] * v3[0] - v2[0] * v3[2]) +
-      v1[2] * (v2[0] * v3[1] - v2[1] * v3[0]);
+      v1x * (v2y * v3z - v2z * v3y) +
+      v1y * (v2z * v3x - v2x * v3z) +
+      v1z * (v2x * v3y - v2y * v3x);
 
-    for (const v of [v1, v2, v3]) {
-      if (v[0] < mnX) mnX = v[0]; if (v[0] > mxX) mxX = v[0];
-      if (v[1] < mnY) mnY = v[1]; if (v[1] > mxY) mxY = v[1];
-      if (v[2] < mnZ) mnZ = v[2]; if (v[2] > mxZ) mxZ = v[2];
-    }
+    if (v1x < mnX) mnX = v1x; if (v1x > mxX) mxX = v1x;
+    if (v1y < mnY) mnY = v1y; if (v1y > mxY) mxY = v1y;
+    if (v1z < mnZ) mnZ = v1z; if (v1z > mxZ) mxZ = v1z;
+    if (v2x < mnX) mnX = v2x; if (v2x > mxX) mxX = v2x;
+    if (v2y < mnY) mnY = v2y; if (v2y > mxY) mxY = v2y;
+    if (v2z < mnZ) mnZ = v2z; if (v2z > mxZ) mxZ = v2z;
+    if (v3x < mnX) mnX = v3x; if (v3x > mxX) mxX = v3x;
+    if (v3y < mnY) mnY = v3y; if (v3y > mxY) mxY = v3y;
+    if (v3z < mnZ) mnZ = v3z; if (v3z > mxZ) mxZ = v3z;
   }
 
   return {
@@ -126,23 +137,23 @@ function readFileAsBuffer(file, onProgress) {
 }
 
 /**
- * Build a Float32Array suitable for THREE.BufferGeometry from parsed triangles.
- * Optionally decimates for viewer performance (keeps every Nth triangle).
+ * Build a Float32Array suitable for THREE.BufferGeometry from parsed
+ * triangles (already a flat Float32Array). Optionally decimates for viewer
+ * performance (keeps every Nth triangle). Returns the input array unchanged
+ * (no copy) when no decimation is needed.
  */
 export function trianglesToPositions(triangles, maxTriangles = 200_000) {
-  const step = triangles.length > maxTriangles
-    ? Math.ceil(triangles.length / maxTriangles)
-    : 1;
+  const triCount = triangles.length / 9;
+  if (triCount <= maxTriangles) return triangles;
 
-  const count = Math.ceil(triangles.length / step);
-  const positions = new Float32Array(count * 9);
+  const step = Math.ceil(triCount / maxTriangles);
+  const keepCount = Math.ceil(triCount / step);
+  const positions = new Float32Array(keepCount * 9);
   let idx = 0;
 
-  for (let i = 0; i < triangles.length; i += step) {
-    const [v1, v2, v3] = triangles[i];
-    positions[idx++] = v1[0]; positions[idx++] = v1[1]; positions[idx++] = v1[2];
-    positions[idx++] = v2[0]; positions[idx++] = v2[1]; positions[idx++] = v2[2];
-    positions[idx++] = v3[0]; positions[idx++] = v3[1]; positions[idx++] = v3[2];
+  for (let t = 0; t < triCount; t += step) {
+    const o = t * 9;
+    for (let k = 0; k < 9; k++) positions[idx++] = triangles[o + k];
   }
 
   return positions.subarray(0, idx);
