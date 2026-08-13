@@ -51,12 +51,14 @@ Deno.test("createDraftOrder returns the numeric draft order id and sends custome
     assertEquals(capturedInput?.customerId, "gid://shopify/Customer/555");
     assertEquals(capturedInput?.tags, ["quote", "quote-ref:AF-20260802-ABCD"]);
     assertEquals(
-      capturedInput?.note2,
+      capturedInput?.note,
       "Quote AF-20260802-ABCD for Jane Smith (jane@example.com) — review before sending invoice.",
     );
     const lineItems = capturedInput?.lineItems as Array<Record<string, unknown>>;
     assertEquals(lineItems[0].title, "Model 1");
     assertEquals(lineItems[0].originalUnitPrice, "180.00");
+    const customAttributes = lineItems[0].customAttributes as Array<Record<string, unknown>>;
+    assertEquals(customAttributes[0], { key: "_quote_ref", value: "AF-20260802-ABCD" });
   } finally {
     globalThis.fetch = originalFetch;
   }

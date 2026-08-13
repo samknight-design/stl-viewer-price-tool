@@ -38,7 +38,7 @@ export async function createDraftOrder(
   }>(CREATE_DRAFT_ORDER_MUTATION, {
     input: {
       customerId: input.customerId,
-      note2: input.note,
+      note: input.note,
       tags: input.tags,
       lineItems: input.lineItems.map((li) => ({
         title: li.title,
@@ -46,7 +46,10 @@ export async function createDraftOrder(
         quantity: li.quantity,
         requiresShipping: true,
         taxable: true,
-        customAttributes: li.properties,
+        // AttributeInput uses `key`, not `name` — li.properties keeps the
+        // `name` shape because that's what the frontend/relay contract and
+        // the rest of this codebase (index.ts, _quote_ref etc.) use.
+        customAttributes: li.properties.map((p) => ({ key: p.name, value: p.value })),
       })),
     },
   });
