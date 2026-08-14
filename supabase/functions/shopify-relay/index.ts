@@ -203,6 +203,8 @@ export async function handleRequest(
       const serverThresholdExceeded = Boolean(body.thresholdExceeded) ||
         body.grandTotal >= configThreshold;
 
+      const quoteRef = extractQuoteRef(body.lineItems);
+
       if (serverThresholdExceeded) {
         // 1. Find-or-create the customer, with GDPR-compliant marketing consent.
         const customer = await deps.findOrCreateCustomer({
@@ -215,7 +217,6 @@ export async function handleRequest(
         //    URLs already arrived resolved in _files_json (Supabase Storage
         //    gives back a permanent public URL at upload time — no async
         //    resolution step needed the way Shopify Files required).
-        const quoteRef = extractQuoteRef(body.lineItems);
         const note = [
           `Quote ${quoteRef} for ${body.customerName} (${body.customerEmail}) — review before sending invoice.`,
           "",
@@ -241,9 +242,17 @@ export async function handleRequest(
         return json({ mode: "quote", quoteRef, draftOrderId });
       }
 
-      const totalTitle = body.lineItems.map((li) => li.title).join(", ").slice(0, 250);
+      const totalTitle = body.lineItems.map((li) => li.title).join(", ").slice(0, 200);
+      // Every checkout adds a new variant to PRINT_PRODUCT_ID, and the title
+      // becomes that variant's option value — Shopify rejects a
+      // productVariantsBulkCreate call whose option value already exists on
+      // the product (e.g. two orders both left the default "Model 1" name),
+      // which surfaced as a 500 on /checkout. Appending the per-order quote
+      // ref (falling back to a random token on the rare empty-ref case)
+      // guarantees a unique option value every time.
+      const uniqueSuffix = quoteRef || crypto.randomUUID().slice(0, 8);
       const { variantId } = await deps.createPricedVariant({
-        title: totalTitle || "Custom 3D Print",
+        title: `${totalTitle || "Custom 3D Print"} · ${uniqueSuffix}`,
         price: body.grandTotal.toFixed(2),
       });
 

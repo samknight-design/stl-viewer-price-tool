@@ -1290,6 +1290,13 @@ function openOrderForm() {
   const marketingBlockEl = document.getElementById('marketing-consent-block');
   if (marketingBlockEl) marketingBlockEl.style.display = isQuote ? 'block' : 'none';
 
+  // Below the custom-quote threshold this order goes straight to cart +
+  // checkout, not manual review — the submit button should say so.
+  const submitLabelEl = document.getElementById('order-submit-label');
+  if (submitLabelEl) submitLabelEl.textContent = isQuote ? 'Submit Quote Request' : 'Add to Cart';
+  const submitIconEl = document.getElementById('order-submit-icon');
+  if (submitIconEl) submitIconEl.innerHTML = icon(isQuote ? 'arrowRight' : 'cart', { size: 15 });
+
   const minNoteEl = document.getElementById('review-minimum-note');
   if (minNoteEl) {
     minNoteEl.style.display = minimumShortfall > 0 ? 'block' : 'none';
@@ -1359,7 +1366,11 @@ async function submitOrder(e) {
   const activeGroups = groups.filter(g => g.items.some(i => i.status === 'ready'));
 
   const submitBtn = form.querySelector('button[type="submit"]');
-  const submitBtnOriginalText = submitBtn?.textContent;
+  // Swap only the label span's text while uploads are in flight, not the
+  // whole button's textContent — that used to wipe out the button's icon
+  // span too (textContent replaces all child nodes) and it never came back.
+  const submitLabelEl = document.getElementById('order-submit-label');
+  const submitBtnOriginalText = submitLabelEl?.textContent;
   if (submitBtn) submitBtn.disabled = true;
 
   // Wait for any file uploads still in flight for priceable items in this
@@ -1375,9 +1386,9 @@ async function submitOrder(e) {
     .filter(i => i.status === 'ready' && i.cost?.priceable && i.uploadPromise)
     .map(i => i.uploadPromise);
   if (pendingUploads.length) {
-    if (submitBtn) submitBtn.textContent = 'Uploading files…';
+    if (submitLabelEl) submitLabelEl.textContent = 'Uploading files…';
     await Promise.all(pendingUploads);
-    if (submitBtn) submitBtn.textContent = submitBtnOriginalText;
+    if (submitLabelEl) submitLabelEl.textContent = submitBtnOriginalText;
   }
 
   const grandTotal   = calcOrderTotal(activeGroups, config);

@@ -372,6 +372,38 @@ Deno.test("POST /checkout accepts a grandTotal bumped up to the configured minim
   assertEquals(await res.json(), { mode: "cart", variantId: 999, properties: {} });
 });
 
+Deno.test("POST /checkout appends the quote ref to the priced variant's title so repeat default model names (e.g. 'Model 1') never collide as Shopify option values", async () => {
+  let capturedTitle: string | undefined;
+  const deps = fakeDeps({
+    getShopConfig: () => Promise.resolve(null),
+    createPricedVariant: (input) => {
+      capturedTitle = input.title;
+      return Promise.resolve({ variantId: 999 });
+    },
+  });
+  const res = await handleRequest(
+    new Request("https://relay.test/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        customerEmail: "jane@example.com",
+        customerName: "Jane Smith",
+        grandTotal: 8.40,
+        thresholdExceeded: false,
+        lineItems: [{
+          title: "Model 1",
+          price: "8.40",
+          quantity: 1,
+          properties: [{ name: "_quote_ref", value: "AF-20260814-H2JP" }],
+        }],
+      }),
+    }),
+    deps,
+  );
+  assertEquals(res.status, 200);
+  assertEquals(capturedTitle, "Model 1 · AF-20260814-H2JP");
+});
+
 Deno.test("POST /checkout forces a draft order server-side when grandTotal exceeds the configured threshold, even if thresholdExceeded is false", async () => {
   let draftOrderCalled = false;
   let variantCalled = false;

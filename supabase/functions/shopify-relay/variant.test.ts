@@ -45,7 +45,34 @@ Deno.test("createPricedVariant throws on empty variant response", async () => {
     await assertRejects(
       () => createPricedVariant({ title: "Quote AF-20260802-ABCD", price: "17.68" }),
       Error,
-      "Shopify did not return a created variant",
+      "Shopify did not create a variant: no productVariants returned",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("createPricedVariant surfaces Shopify's userErrors (e.g. a duplicate option value) instead of a generic message", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = () =>
+    Promise.resolve(
+      new Response(JSON.stringify({
+        data: {
+          productVariantsBulkCreate: {
+            productVariants: [],
+            userErrors: [{ field: ["variants", "0", "optionValues"], message: "Option value 'Model 1' already exists" }],
+          },
+        },
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+  try {
+    await assertRejects(
+      () => createPricedVariant({ title: "Model 1", price: "17.68" }),
+      Error,
+      "Option value 'Model 1' already exists",
     );
   } finally {
     globalThis.fetch = originalFetch;
