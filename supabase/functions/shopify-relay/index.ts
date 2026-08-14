@@ -1,6 +1,6 @@
 // supabase/functions/shopify-relay/index.ts
 import { getShopConfig, saveShopConfig } from "./config.ts";
-import { finalizeUpload, resolveFileUrl, stageUpload } from "./files.ts";
+import { stageUpload } from "./files.ts";
 import { createPricedVariant } from "./variant.ts";
 import { createDraftOrder, type QuoteLineItem } from "./draftOrder.ts";
 import { findOrCreateCustomer } from "./customer.ts";
@@ -31,44 +31,6 @@ async function readJsonBody(req: Request): Promise<any> {
   } catch {
     throw new BadJsonError("Malformed JSON request body");
   }
-}
-
-/** One uploaded file's record as sent by the frontend in a line item's `_files_json` property. */
-interface QuoteFileRecord {
-  filename: string;
-  fileId: string | null;
-  thumbnailId: string | null;
-  quantity: number;
-}
-
-/**
- * Resolves clickable download URLs for every file referenced in a line
- * item's `_files_json` property, returning a new line item with that
- * property's value replaced by the enriched (fileUrl/thumbnailUrl added)
- * JSON. Non-`_files_json` properties, and line items with no `_files_json`
- * property, pass through unchanged. A file whose URL can't be resolved
- * (still processing) gets `fileUrl: null` rather than blocking the quote.
- */
-async function enrichLineItemWithFileUrls(
-  lineItem: QuoteLineItem,
-  resolveFileUrlFn: typeof resolveFileUrl,
-): Promise<QuoteLineItem> {
-  const properties = await Promise.all(lineItem.properties.map(async (p) => {
-    if (p.name !== "_files_json") return p;
-    let files: QuoteFileRecord[];
-    try {
-      files = JSON.parse(p.value);
-    } catch {
-      return p;
-    }
-    const enriched = await Promise.all(files.map(async (f) => ({
-      ...f,
-      fileUrl: f.fileId ? await resolveFileUrlFn(f.fileId) : null,
-      thumbnailUrl: f.thumbnailId ? await resolveFileUrlFn(f.thumbnailId) : null,
-    })));
-    return { name: p.name, value: JSON.stringify(enriched) };
-  }));
-  return { ...lineItem, properties };
 }
 
 const PRIMER_LABELS: Record<string, string> = {
@@ -115,7 +77,7 @@ function buildModelSummaryLines(lineItems: QuoteLineItem[]): string[] {
     if (notes) lines.push(`  Notes: ${notes}`);
     lines.push("  Files:");
     lines.push(...files.map((f) =>
-      `    - ${f.filename} (x${f.quantity}): ${f.fileUrl ?? "(still processing — check Shopify Files)"}`
+      `    - ${f.filename} (x${f.quantity}): ${f.fileUrl ?? "(upload failed — ask the customer to resend this file)"}`
     ));
     lines.push("");
     return lines;
@@ -135,11 +97,9 @@ export interface RelayDeps {
   getShopConfig: typeof getShopConfig;
   saveShopConfig: typeof saveShopConfig;
   stageUpload: typeof stageUpload;
-  finalizeUpload: typeof finalizeUpload;
   createPricedVariant: typeof createPricedVariant;
   createDraftOrder: typeof createDraftOrder;
   findOrCreateCustomer: typeof findOrCreateCustomer;
-  resolveFileUrl: typeof resolveFileUrl;
   sendQuoteNotification: typeof sendQuoteNotification;
 }
 
@@ -147,11 +107,9 @@ const defaultDeps: RelayDeps = {
   getShopConfig,
   saveShopConfig,
   stageUpload,
-  finalizeUpload,
   createPricedVariant,
   createDraftOrder,
   findOrCreateCustomer,
-  resolveFileUrl,
   sendQuoteNotification,
 };
 
@@ -179,20 +137,15 @@ export async function handleRequest(
       return json({ ok: true });
     }
 
-    // The browser uploads the file's actual bytes directly to the URL this
-    // returns — this endpoint only exchanges small JSON with Shopify, so it
-    // works the same regardless of file size (see files.ts's doc comment on
-    // finalizeUpload for why that matters).
+    // The browser uploads the file's actual bytes directly to the signed
+    // URL this returns (Supabase Storage) — this endpoint only exchanges
+    // small JSON, so it works the same regardless of file size. Unlike the
+    // old Shopify-Files-based flow, the returned publicUrl is immediately
+    // valid — no separate finalize/resolve round trip needed.
     if (url.pathname.endsWith("/files/stage") && req.method === "POST") {
-      const { filename, mimeType } = await readJsonBody(req);
-      const target = await deps.stageUpload({ filename, mimeType });
+      const { filename, mimeType, fileSize } = await readJsonBody(req);
+      const target = await deps.stageUpload({ filename, mimeType, fileSize });
       return json(target);
-    }
-
-    if (url.pathname.endsWith("/files/finalize") && req.method === "POST") {
-      const { resourceUrl, filename, mimeType } = await readJsonBody(req);
-      const file = await deps.finalizeUpload({ resourceUrl, filename, mimeType });
-      return json(file);
     }
 
     if (url.pathname.endsWith("/checkout") && req.method === "POST") {
@@ -258,30 +211,25 @@ export async function handleRequest(
           marketingConsent: Boolean(body.marketingConsent),
         });
 
-        // 2. Resolve clickable file URLs for every uploaded STL/thumbnail
-        //    referenced in the line items, so the draft order is
-        //    self-contained for review (no need to hunt through Shopify's
-        //    Files library by GID).
-        const enrichedLineItems = await Promise.all(
-          body.lineItems.map((li) => enrichLineItemWithFileUrls(li, deps.resolveFileUrl)),
-        );
-
-        // 3. Build the draft order — customer-linked, tagged, unsent.
+        // 2. Build the draft order — customer-linked, tagged, unsent. File
+        //    URLs already arrived resolved in _files_json (Supabase Storage
+        //    gives back a permanent public URL at upload time — no async
+        //    resolution step needed the way Shopify Files required).
         const quoteRef = extractQuoteRef(body.lineItems);
         const note = [
           `Quote ${quoteRef} for ${body.customerName} (${body.customerEmail}) — review before sending invoice.`,
           "",
-          ...buildModelSummaryLines(enrichedLineItems),
+          ...buildModelSummaryLines(body.lineItems),
         ].join("\n");
 
         const { draftOrderId } = await deps.createDraftOrder({
           customerId: customer.id,
           note,
           tags: ["quote", `quote-ref:${quoteRef}`],
-          lineItems: enrichedLineItems,
+          lineItems: body.lineItems,
         });
 
-        // 4. Best-effort notify the shop owner — never blocks/fails the quote.
+        // 3. Best-effort notify the shop owner — never blocks/fails the quote.
         await deps.sendQuoteNotification({
           quoteRef,
           customerName: body.customerName,

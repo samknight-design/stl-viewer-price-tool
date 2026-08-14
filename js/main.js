@@ -897,22 +897,21 @@ async function addFileToGroup(file, targetGroup) {
     recomputeGroup(targetGroup);
 
     // Fire-and-forget from the pricing UI's point of view: upload the STL +
-    // thumbnail to Shopify Files in the background so pricing doesn't wait
-    // on the round trip. Non-fatal if it fails — pricing still works without
-    // the Shopify-side file copy, the packing tool just won't have a
+    // thumbnail to Supabase Storage in the background so pricing doesn't
+    // wait on the round trip. Non-fatal if it fails — pricing still works
+    // without the hosted copy, the packing tool just won't have a
     // file/thumbnail reference for this part. The promise itself is kept on
     // the item (not truly discarded) so submitOrder() can await any still-
-    // in-flight uploads before reading item.shopifyFileId/shopifyThumbnailId
-    // — otherwise a fast submit could race the upload and silently ship
-    // null file ids (see uploadItemToShopify's own doc comment).
+    // in-flight uploads before reading item.fileUrl/thumbnailUrl —
+    // otherwise a fast submit could race the upload and silently ship null
+    // file URLs (see uploadItemToShopify's own doc comment).
     //
-    // Queued (not fired concurrently): each upload base64-encodes the file
-    // and wraps it in a JSON body, which costs roughly 2-3× the raw file
-    // size in string memory. Firing every file's upload at once — which is
-    // exactly what a multi-file drop used to do — piles all of those copies
-    // up simultaneously and can exhaust the tab's memory on its own, even
-    // with STL parsing itself already fixed to be memory-efficient. Chaining
-    // onto _uploadChain caps that to one file's worth at a time.
+    // Queued (not fired concurrently): firing every file's upload at once —
+    // exactly what a multi-file drop used to do under the old base64-relay
+    // approach — piled multiple in-memory copies up simultaneously and
+    // could exhaust the tab's memory on its own. Uploads now go straight to
+    // storage with no base64 copy, but chaining onto _uploadChain still caps
+    // this to one file's worth of in-flight request at a time.
     // uploadItemToShopify() never rejects (it catches its own errors), so
     // chaining is safe — one slow/failed upload can't break the queue.
     _uploadChain = _uploadChain.then(() => uploadItemToShopify(item, file));
@@ -924,8 +923,8 @@ async function addFileToGroup(file, targetGroup) {
   renderAll();
 }
 
-const RELAY_TIMEOUT_MS = 15_000;    // small JSON round trips to the relay (stage/finalize)
-const FILE_PUT_TIMEOUT_MS = 60_000; // the actual file transfer, direct to Shopify's storage
+const RELAY_TIMEOUT_MS = 15_000;    // small JSON round trip to the relay (stage)
+const FILE_PUT_TIMEOUT_MS = 60_000; // the actual file transfer, direct to storage
 
 /** fetch() with a hard timeout — without this, a stalled request could hang
  *  uploadItemToShopify()'s promise forever, which would in turn block
@@ -938,58 +937,53 @@ function fetchWithTimeout(url, options, timeoutMs = RELAY_TIMEOUT_MS) {
 }
 
 /**
- * Uploads a file straight to Shopify's storage instead of routing its bytes
- * through the relay. Three steps: (1) ask the relay for a staged-upload
- * target — a small JSON exchange regardless of file size; (2) POST the raw
- * file directly to that target, bypassing the relay entirely for the actual
- * bytes; (3) ask the relay to register it with Shopify Files (fileCreate)
- * using the returned resourceUrl. This replaces the old base64-encode-and-
- * relay approach, which loaded the whole file into a JS string (roughly
- * 1.3× its size) and routed it through a resource-constrained Supabase
- * Edge Function — real customer STL files (tens of MB) routinely exceeded
- * that function's limits and silently failed to attach.
+ * Uploads a file straight to Supabase Storage instead of routing its bytes
+ * through the relay. Two steps: (1) ask the relay for a signed upload URL —
+ * a small JSON exchange regardless of file size; (2) PUT the raw file
+ * directly to that URL, bypassing the relay entirely for the actual bytes.
+ * The returned publicUrl is immediately valid, no separate finalize step.
+ *
+ * Previously this uploaded to Shopify Files, but Shopify's Admin API
+ * hard-caps generic FILE-resource uploads at 20MB regardless of any size
+ * hint we send — real STL files routinely exceed that. Supabase Storage's
+ * own signed-upload-URL pattern is the same direct-from-browser
+ * architecture, just pointed at a bucket we control (50MB cap on this
+ * project's free plan; raised on Pro).
  */
 async function uploadFileDirect(fileOrBlob, filename, mimeType) {
   const stageRes = await fetchWithTimeout(`${RELAY_BASE_URL}/files/stage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filename, mimeType }),
+    body: JSON.stringify({ filename, mimeType, fileSize: fileOrBlob.size }),
   });
   if (!stageRes.ok) throw new Error(`Stage upload failed: HTTP ${stageRes.status}`);
-  const { url, resourceUrl, parameters } = await stageRes.json();
+  const { uploadUrl, publicUrl } = await stageRes.json();
 
-  const form = new FormData();
-  for (const p of parameters) form.append(p.name, p.value);
-  form.append('file', fileOrBlob, filename);
-  const putRes = await fetchWithTimeout(url, { method: 'POST', body: form }, FILE_PUT_TIMEOUT_MS);
+  const putRes = await fetchWithTimeout(uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': mimeType },
+    body: fileOrBlob,
+  }, FILE_PUT_TIMEOUT_MS);
   if (!putRes.ok) throw new Error(`Direct upload failed: HTTP ${putRes.status}`);
 
-  const finalizeRes = await fetchWithTimeout(`${RELAY_BASE_URL}/files/finalize`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ resourceUrl, filename, mimeType }),
-  });
-  if (!finalizeRes.ok) throw new Error(`Finalize upload failed: HTTP ${finalizeRes.status}`);
-  return finalizeRes.json(); // { id, url }
+  return publicUrl;
 }
 
-/** Upload an item's STL bytes + thumbnail to Shopify Files, without
- *  blocking the caller. Sets item.shopifyFileId / item.shopifyThumbnailId
- *  on success and re-renders. No size cap needed — uploads go straight to
- *  Shopify's storage (see uploadFileDirect), so the relay never holds the
- *  file in memory regardless of how large it is. */
+/** Upload an item's STL bytes + thumbnail to Supabase Storage, without
+ *  blocking the caller. Sets item.fileUrl / item.thumbnailUrl on success and
+ *  re-renders. No size cap needed here — uploads go straight to storage
+ *  (see uploadFileDirect), so the relay never holds the file in memory
+ *  regardless of how large it is. */
 async function uploadItemToShopify(item, file) {
   try {
-    const stlUpload = await uploadFileDirect(file, item.name, 'model/stl');
-    item.shopifyFileId = stlUpload.id;
+    item.fileUrl = await uploadFileDirect(file, item.name, 'model/stl');
 
     if (item.thumbnail) {
       const thumbBlob = await (await fetch(item.thumbnail)).blob();
-      const thumbUpload = await uploadFileDirect(thumbBlob, item.name.replace(/\.stl$/i, '.png'), 'image/png');
-      item.shopifyThumbnailId = thumbUpload.id;
+      item.thumbnailUrl = await uploadFileDirect(thumbBlob, item.name.replace(/\.stl$/i, '.png'), 'image/png');
     }
   } catch (err) {
-    console.warn('Shopify file upload failed for', item.name, err);
+    console.warn('File upload failed for', item.name, err);
   } finally {
     renderAll();
   }
@@ -1368,13 +1362,13 @@ async function submitOrder(e) {
   const submitBtnOriginalText = submitBtn?.textContent;
   if (submitBtn) submitBtn.disabled = true;
 
-  // Wait for any Shopify file uploads still in flight for priceable items in
-  // this order. Uploads run fire-and-forget from addFileToGroup() so pricing
-  // never blocks on them, but submitOrder reads item.shopifyFileId/
-  // shopifyThumbnailId below — without this await, a fast submit could beat
-  // an in-flight upload and silently ship null file/thumbnail ids (the
-  // future packing tool needs those). uploadItemToShopify() catches its own
-  // errors internally (including timeouts — see fetchWithTimeout) and always
+  // Wait for any file uploads still in flight for priceable items in this
+  // order. Uploads run fire-and-forget from addFileToGroup() so pricing
+  // never blocks on them, but submitOrder reads item.fileUrl/thumbnailUrl
+  // below — without this await, a fast submit could beat an in-flight
+  // upload and silently ship null file/thumbnail URLs (the future packing
+  // tool needs those). uploadItemToShopify() catches its own errors
+  // internally (including timeouts — see fetchWithTimeout) and always
   // resolves, so this never rejects/hangs indefinitely.
   const pendingUploads = activeGroups
     .flatMap(g => g.items)
@@ -1394,8 +1388,8 @@ async function submitOrder(e) {
       .filter(i => i.status === 'ready' && i.cost?.priceable)
       .map(i => ({
         filename: i.name,
-        fileId: i.shopifyFileId ?? null,
-        thumbnailId: i.shopifyThumbnailId ?? null,
+        fileUrl: i.fileUrl ?? null,
+        thumbnailUrl: i.thumbnailUrl ?? null,
         quantity: i.settings.quantity,
       }));
     return {

@@ -18,9 +18,6 @@ function fakeDeps(overrides: Partial<RelayDeps>): RelayDeps {
     stageUpload: () => {
       throw new Error("stageUpload not stubbed");
     },
-    finalizeUpload: () => {
-      throw new Error("finalizeUpload not stubbed");
-    },
     createPricedVariant: () => {
       throw new Error("createPricedVariant not stubbed");
     },
@@ -29,9 +26,6 @@ function fakeDeps(overrides: Partial<RelayDeps>): RelayDeps {
     },
     findOrCreateCustomer: () => {
       throw new Error("findOrCreateCustomer not stubbed");
-    },
-    resolveFileUrl: () => {
-      throw new Error("resolveFileUrl not stubbed");
     },
     sendQuoteNotification: () => {
       throw new Error("sendQuoteNotification not stubbed");
@@ -110,48 +104,22 @@ Deno.test("POST /files/stage returns the staged upload target", async () => {
   const deps = fakeDeps({
     stageUpload: (input) =>
       Promise.resolve({
-        url: `https://staged.example/${input.filename}`,
-        resourceUrl: "https://staged.example/resource",
-        parameters: [{ name: "key", value: "tmp/abc" }],
+        uploadUrl: `https://project-ref.supabase.co/storage/v1/object/upload/sign/quote-uploads/abc123/${input.filename}?token=fake-token`,
+        publicUrl: `https://project-ref.supabase.co/storage/v1/object/public/quote-uploads/abc123/${input.filename}`,
       }),
   });
   const res = await handleRequest(
     new Request("https://relay.test/files/stage", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ filename: "model.png", mimeType: "image/png" }),
+      body: JSON.stringify({ filename: "model.stl", mimeType: "model/stl", fileSize: 1024 }),
     }),
     deps,
   );
   assertEquals(res.status, 200);
   assertEquals(await res.json(), {
-    url: "https://staged.example/model.png",
-    resourceUrl: "https://staged.example/resource",
-    parameters: [{ name: "key", value: "tmp/abc" }],
-  });
-});
-
-Deno.test("POST /files/finalize returns file id/url", async () => {
-  const deps = fakeDeps({
-    finalizeUpload: (input) =>
-      Promise.resolve({ id: `gid://shopify/File/1-${input.filename}`, url: "https://cdn.example.com/f.png" }),
-  });
-  const res = await handleRequest(
-    new Request("https://relay.test/files/finalize", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        resourceUrl: "https://staged.example/resource",
-        filename: "model.png",
-        mimeType: "image/png",
-      }),
-    }),
-    deps,
-  );
-  assertEquals(res.status, 200);
-  assertEquals(await res.json(), {
-    id: "gid://shopify/File/1-model.png",
-    url: "https://cdn.example.com/f.png",
+    uploadUrl: "https://project-ref.supabase.co/storage/v1/object/upload/sign/quote-uploads/abc123/model.stl?token=fake-token",
+    publicUrl: "https://project-ref.supabase.co/storage/v1/object/public/quote-uploads/abc123/model.stl",
   });
 });
 
@@ -203,7 +171,6 @@ Deno.test("POST /checkout above threshold creates a customer, a linked draft ord
       assertEquals(input.marketingConsent, true);
       return Promise.resolve({ id: "gid://shopify/Customer/1" });
     },
-    resolveFileUrl: () => Promise.resolve("https://cdn.example/part.stl"),
     createDraftOrder: (input) => {
       draftOrderCalled = true;
       assertEquals(input.customerId, "gid://shopify/Customer/1");
@@ -236,8 +203,8 @@ Deno.test("POST /checkout above threshold creates a customer, a linked draft ord
               name: "_files_json",
               value: JSON.stringify([{
                 filename: "part.stl",
-                fileId: "gid://shopify/GenericFile/1",
-                thumbnailId: null,
+                fileUrl: "https://project-ref.supabase.co/storage/v1/object/public/quote-uploads/abc/part.stl",
+                thumbnailUrl: null,
                 quantity: 1,
               }]),
             },
@@ -263,7 +230,6 @@ Deno.test("POST /checkout builds a human-readable note with print method, primer
   const deps = fakeDeps({
     getShopConfig: () => Promise.resolve(null),
     findOrCreateCustomer: () => Promise.resolve({ id: "gid://shopify/Customer/1" }),
-    resolveFileUrl: () => Promise.resolve("https://cdn.example/part.stl"),
     createDraftOrder: (input) => {
       capturedNote = input.note;
       return Promise.resolve({ draftOrderId: "999" });
@@ -294,8 +260,8 @@ Deno.test("POST /checkout builds a human-readable note with print method, primer
               name: "_files_json",
               value: JSON.stringify([{
                 filename: "dragon.stl",
-                fileId: "gid://shopify/GenericFile/1",
-                thumbnailId: null,
+                fileUrl: "https://project-ref.supabase.co/storage/v1/object/public/quote-uploads/abc/dragon.stl",
+                thumbnailUrl: null,
                 quantity: 2,
               }]),
             },
@@ -309,14 +275,18 @@ Deno.test("POST /checkout builds a human-readable note with print method, primer
   assertEquals(capturedNote.includes("Dragon Miniature (Resin, Black Primer):"), true);
   assertEquals(capturedNote.includes("Assembly: Yes — assemble together"), true);
   assertEquals(capturedNote.includes("Notes: Please paint eyes red"), true);
-  assertEquals(capturedNote.includes("dragon.stl (x2): https://cdn.example/part.stl"), true);
+  assertEquals(
+    capturedNote.includes(
+      "dragon.stl (x2): https://project-ref.supabase.co/storage/v1/object/public/quote-uploads/abc/dragon.stl",
+    ),
+    true,
+  );
 });
 
-Deno.test("POST /checkout still creates the quote when a file URL fails to resolve", async () => {
+Deno.test("POST /checkout still creates the quote when a file failed to upload (fileUrl null)", async () => {
   const deps = fakeDeps({
     getShopConfig: () => Promise.resolve(null),
     findOrCreateCustomer: () => Promise.resolve({ id: "gid://shopify/Customer/1" }),
-    resolveFileUrl: () => Promise.resolve(null), // simulates a still-processing file
     createDraftOrder: () => Promise.resolve({ draftOrderId: "999" }),
     sendQuoteNotification: () => Promise.resolve(),
   });
@@ -339,8 +309,8 @@ Deno.test("POST /checkout still creates the quote when a file URL fails to resol
               name: "_files_json",
               value: JSON.stringify([{
                 filename: "part.stl",
-                fileId: "gid://shopify/GenericFile/1",
-                thumbnailId: null,
+                fileUrl: null, // simulates a failed upload
+                thumbnailUrl: null,
                 quantity: 1,
               }]),
             },
@@ -408,7 +378,6 @@ Deno.test("POST /checkout forces a draft order server-side when grandTotal excee
   const deps = fakeDeps({
     getShopConfig: () => Promise.resolve({ customQuoteOrderThreshold: 150 }),
     findOrCreateCustomer: () => Promise.resolve({ id: "gid://shopify/Customer/1" }),
-    resolveFileUrl: () => Promise.resolve(null),
     createDraftOrder: () => {
       draftOrderCalled = true;
       return Promise.resolve({ draftOrderId: "999" });
