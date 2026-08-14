@@ -1324,6 +1324,32 @@ function closeOrderForm() {
   document.getElementById('order-overlay')?.classList.remove('open');
 }
 
+// A variant freshly created by createPricedVariant (relay-side, via
+// productVariantsBulkCreate) is occasionally not yet visible to the
+// storefront cart API for a moment after creation — the same kind of
+// propagation lag already documented in customer.ts's
+// findOrCreateCustomer, just for a different Shopify index. Without a
+// retry, a fast submit can hit a transient 422 "sold out" for a variant
+// that in fact exists and is for sale.
+const CART_ADD_RETRY_DELAYS_MS = [500, 1000, 2000];
+
+async function addVariantToCart(variantId, properties) {
+  let lastError;
+  for (let attempt = 0; attempt <= CART_ADD_RETRY_DELAYS_MS.length; attempt++) {
+    const res = await fetch('/cart/add.js', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: [{ id: variantId, quantity: 1, properties }] }),
+    });
+    if (res.ok) return;
+    lastError = new Error(`Add to cart failed: HTTP ${res.status}`);
+    if (attempt < CART_ADD_RETRY_DELAYS_MS.length) {
+      await new Promise(resolve => setTimeout(resolve, CART_ADD_RETRY_DELAYS_MS[attempt]));
+    }
+  }
+  throw lastError;
+}
+
 async function submitOrder(e) {
   e.preventDefault();
   const form       = e.target;
@@ -1420,18 +1446,7 @@ async function submitOrder(e) {
         _quote_ref: _orderNumber ?? '',
         _customer_notes: notes,
       };
-      return fetch('/cart/add.js', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items: [{
-            id: result.variantId,
-            quantity: 1,
-            properties: cartProperties,
-          }],
-        }),
-      }).then(r => {
-        if (!r.ok) throw new Error(`Add to cart failed: HTTP ${r.status}`);
+      return addVariantToCart(result.variantId, cartProperties).then(() => {
         window.location.href = '/checkout';
       });
     })
