@@ -801,6 +801,11 @@ function handleGroupInput(e, group) {
 // Track which group the next file batch should go into
 let _pendingGroupId = null;
 
+// Chain background Shopify-file uploads one after another instead of
+// letting a multi-file drop fire them all concurrently — see the comment
+// at its use in addFileToGroup().
+let _uploadChain = Promise.resolve();
+
 async function handleFilesForGroup(files) {
   const targetGroupId = _pendingGroupId;
   _pendingGroupId     = null;
@@ -900,7 +905,18 @@ async function addFileToGroup(file, targetGroup) {
     // in-flight uploads before reading item.shopifyFileId/shopifyThumbnailId
     // — otherwise a fast submit could race the upload and silently ship
     // null file ids (see uploadItemToShopify's own doc comment).
-    item.uploadPromise = uploadItemToShopify(item, file);
+    //
+    // Queued (not fired concurrently): each upload base64-encodes the file
+    // and wraps it in a JSON body, which costs roughly 2-3× the raw file
+    // size in string memory. Firing every file's upload at once — which is
+    // exactly what a multi-file drop used to do — piles all of those copies
+    // up simultaneously and can exhaust the tab's memory on its own, even
+    // with STL parsing itself already fixed to be memory-efficient. Chaining
+    // onto _uploadChain caps that to one file's worth at a time.
+    // uploadItemToShopify() never rejects (it catches its own errors), so
+    // chaining is safe — one slow/failed upload can't break the queue.
+    _uploadChain = _uploadChain.then(() => uploadItemToShopify(item, file));
+    item.uploadPromise = _uploadChain;
   } catch (err) {
     item.status   = 'error';
     item.errorMsg = err.message;
@@ -931,10 +947,21 @@ function bytesToBase64(bytes) {
   return btoa(binary);
 }
 
+// Base64-encoding + JSON-wrapping a file costs roughly 2-3× its raw size in
+// string memory (see bytesToBase64 and the request body below). Above this
+// size that cost stops being worth it for what's just a background
+// convenience copy — pricing and quote submission both work fine without
+// it (see the doc comment on this function's only caller).
+const MAX_UPLOAD_FILE_SIZE_BYTES = 75 * 1024 * 1024; // 75 MB
+
 /** Upload an item's STL bytes + thumbnail to the relay's Shopify Files
  *  endpoint, without blocking the caller. Sets item.shopifyFileId /
  *  item.shopifyThumbnailId on success and re-renders. */
 async function uploadItemToShopify(item, file) {
+  if (file.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
+    console.warn(`Skipping Shopify file upload for ${item.name} — too large (${(file.size / 1048576).toFixed(0)} MB) to encode safely in-browser. Pricing is unaffected.`);
+    return;
+  }
   try {
     const fileBuffer = await file.arrayBuffer();
     const base64Data = bytesToBase64(new Uint8Array(fileBuffer));
