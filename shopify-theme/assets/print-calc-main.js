@@ -1266,6 +1266,39 @@ function setupOrderForm() {
   });
 }
 
+/**
+ * Returns the submit button's label and icon slots, creating them when the
+ * rendered markup predates them.
+ *
+ * The label and the icon have to be separate child elements so each can be
+ * updated without destroying the other, but the theme snippet that declares
+ * them deploys independently of this file. A theme carrying an older snippet
+ * would otherwise leave the button stuck on its hardcoded "Submit Quote
+ * Request" text — which reads as a broken quote flow when the order is
+ * actually headed for the cart. Rebuilding the slots here keeps the button
+ * correct regardless of which snippet version the theme happens to serve.
+ */
+function ensureSubmitButtonParts() {
+  const btn = document.getElementById('order-submit-btn')
+    || document.querySelector('#order-form button[type="submit"]');
+  if (!btn) return {};
+
+  let label = document.getElementById('order-submit-label');
+  let iconSlot = document.getElementById('order-submit-icon');
+  if (!label || !iconSlot) {
+    // Drop the static-icon hook as well, so a later applyStaticIcons pass
+    // can't append a second, stale icon beside the one managed here.
+    btn.removeAttribute('data-icon-suffix');
+    btn.textContent = '';
+    label = document.createElement('span');
+    label.id = 'order-submit-label';
+    iconSlot = document.createElement('span');
+    iconSlot.id = 'order-submit-icon';
+    btn.append(label, iconSlot);
+  }
+  return { btn, label, iconSlot };
+}
+
 function openOrderForm() {
   const activeGroups = groups.filter(g => g.items.some(i => i.status === 'ready'));
   if (!activeGroups.length) { showToast('No valid files to quote.', 'error'); return; }
@@ -1292,9 +1325,8 @@ function openOrderForm() {
 
   // Below the custom-quote threshold this order goes straight to cart +
   // checkout, not manual review — the submit button should say so.
-  const submitLabelEl = document.getElementById('order-submit-label');
+  const { label: submitLabelEl, iconSlot: submitIconEl } = ensureSubmitButtonParts();
   if (submitLabelEl) submitLabelEl.textContent = isQuote ? 'Submit Quote Request' : 'Add to Cart';
-  const submitIconEl = document.getElementById('order-submit-icon');
   if (submitIconEl) submitIconEl.innerHTML = icon(isQuote ? 'arrowRight' : 'cart', { size: 15 });
 
   const minNoteEl = document.getElementById('review-minimum-note');
@@ -1369,7 +1401,7 @@ async function submitOrder(e) {
   // Swap only the label span's text while uploads are in flight, not the
   // whole button's textContent — that used to wipe out the button's icon
   // span too (textContent replaces all child nodes) and it never came back.
-  const submitLabelEl = document.getElementById('order-submit-label');
+  const { label: submitLabelEl } = ensureSubmitButtonParts();
   const submitBtnOriginalText = submitLabelEl?.textContent;
   if (submitBtn) submitBtn.disabled = true;
 
