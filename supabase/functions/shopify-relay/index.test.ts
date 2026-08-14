@@ -15,8 +15,11 @@ function fakeDeps(overrides: Partial<RelayDeps>): RelayDeps {
     saveShopConfig: () => {
       throw new Error("saveShopConfig not stubbed");
     },
-    uploadFile: () => {
-      throw new Error("uploadFile not stubbed");
+    stageUpload: () => {
+      throw new Error("stageUpload not stubbed");
+    },
+    finalizeUpload: () => {
+      throw new Error("finalizeUpload not stubbed");
     },
     createPricedVariant: () => {
       throw new Error("createPricedVariant not stubbed");
@@ -103,16 +106,45 @@ Deno.test("POST /config with correct password saves and returns ok", async () =>
   }
 });
 
-Deno.test("POST /files uploads and returns file id/url", async () => {
+Deno.test("POST /files/stage returns the staged upload target", async () => {
   const deps = fakeDeps({
-    uploadFile: (input) =>
+    stageUpload: (input) =>
+      Promise.resolve({
+        url: `https://staged.example/${input.filename}`,
+        resourceUrl: "https://staged.example/resource",
+        parameters: [{ name: "key", value: "tmp/abc" }],
+      }),
+  });
+  const res = await handleRequest(
+    new Request("https://relay.test/files/stage", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ filename: "model.png", mimeType: "image/png" }),
+    }),
+    deps,
+  );
+  assertEquals(res.status, 200);
+  assertEquals(await res.json(), {
+    url: "https://staged.example/model.png",
+    resourceUrl: "https://staged.example/resource",
+    parameters: [{ name: "key", value: "tmp/abc" }],
+  });
+});
+
+Deno.test("POST /files/finalize returns file id/url", async () => {
+  const deps = fakeDeps({
+    finalizeUpload: (input) =>
       Promise.resolve({ id: `gid://shopify/File/1-${input.filename}`, url: "https://cdn.example.com/f.png" }),
   });
   const res = await handleRequest(
-    new Request("https://relay.test/files", {
+    new Request("https://relay.test/files/finalize", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ filename: "model.png", mimeType: "image/png", base64Data: "AAAA" }),
+      body: JSON.stringify({
+        resourceUrl: "https://staged.example/resource",
+        filename: "model.png",
+        mimeType: "image/png",
+      }),
     }),
     deps,
   );
@@ -224,6 +256,60 @@ Deno.test("POST /checkout above threshold creates a customer, a linked draft ord
   assertEquals(customerCalled, true);
   assertEquals(draftOrderCalled, true);
   assertEquals(notificationCalled, true);
+});
+
+Deno.test("POST /checkout builds a human-readable note with print method, primer, assembly, notes, and file links", async () => {
+  let capturedNote = "";
+  const deps = fakeDeps({
+    getShopConfig: () => Promise.resolve(null),
+    findOrCreateCustomer: () => Promise.resolve({ id: "gid://shopify/Customer/1" }),
+    resolveFileUrl: () => Promise.resolve("https://cdn.example/part.stl"),
+    createDraftOrder: (input) => {
+      capturedNote = input.note;
+      return Promise.resolve({ draftOrderId: "999" });
+    },
+    sendQuoteNotification: () => Promise.resolve(),
+  });
+  const res = await handleRequest(
+    new Request("https://relay.test/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        customerEmail: "jane@example.com",
+        customerName: "Jane Smith",
+        grandTotal: 180,
+        thresholdExceeded: true,
+        lineItems: [{
+          title: "Model 1",
+          price: "180.00",
+          quantity: 1,
+          properties: [
+            { name: "_quote_ref", value: "AF-1" },
+            { name: "_model_name", value: "Dragon Miniature" },
+            { name: "_print_method", value: "resin" },
+            { name: "_primer", value: "black" },
+            { name: "_assembly", value: "true" },
+            { name: "_notes", value: "Please paint eyes red" },
+            {
+              name: "_files_json",
+              value: JSON.stringify([{
+                filename: "dragon.stl",
+                fileId: "gid://shopify/GenericFile/1",
+                thumbnailId: null,
+                quantity: 2,
+              }]),
+            },
+          ],
+        }],
+      }),
+    }),
+    deps,
+  );
+  assertEquals(res.status, 200);
+  assertEquals(capturedNote.includes("Dragon Miniature (Resin, Black Primer):"), true);
+  assertEquals(capturedNote.includes("Assembly: Yes — assemble together"), true);
+  assertEquals(capturedNote.includes("Notes: Please paint eyes red"), true);
+  assertEquals(capturedNote.includes("dragon.stl (x2): https://cdn.example/part.stl"), true);
 });
 
 Deno.test("POST /checkout still creates the quote when a file URL fails to resolve", async () => {

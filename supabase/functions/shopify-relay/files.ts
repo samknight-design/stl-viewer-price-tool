@@ -22,26 +22,28 @@ const FILE_CREATE_MUTATION = `
   }
 `;
 
-interface UploadFileInput {
+interface StageUploadInput {
   filename: string;
   mimeType: string;
-  /** Raw file bytes, base64-encoded (frontend sends this over JSON). */
-  base64Data: string;
 }
 
-export async function uploadFile(
-  input: UploadFileInput,
-): Promise<{ id: string; url: string | null }> {
-  const bytes = Uint8Array.from(atob(input.base64Data), (c) => c.charCodeAt(0));
+export interface StagedUploadTarget {
+  /** The URL the browser should POST the raw file bytes to directly. */
+  url: string;
+  /** Passed back to finalizeUpload() once the direct upload completes. */
+  resourceUrl: string;
+  /** Form fields the browser must include (in order) alongside the file in that POST. */
+  parameters: Array<{ name: string; value: string }>;
+}
 
+/**
+ * Requests a Shopify staged-upload target for a file the browser will
+ * upload directly (see finalizeUpload's doc comment for why). This call
+ * only exchanges small JSON with Shopify — it never sees the file's bytes.
+ */
+export async function stageUpload(input: StageUploadInput): Promise<StagedUploadTarget> {
   const staged = await shopifyGraphQL<{
-    stagedUploadsCreate: {
-      stagedTargets: Array<{
-        url: string;
-        resourceUrl: string;
-        parameters: Array<{ name: string; value: string }>;
-      }>;
-    };
+    stagedUploadsCreate: { stagedTargets: StagedUploadTarget[] };
   }>(STAGE_MUTATION, {
     input: [{
       filename: input.filename,
@@ -51,21 +53,38 @@ export async function uploadFile(
     }],
   });
 
-  const targets = staged.stagedUploadsCreate.stagedTargets;
-  if (!targets?.length) {
+  const target = staged.stagedUploadsCreate.stagedTargets?.[0];
+  if (!target) {
     throw new Error("Shopify did not return a staged upload target");
   }
-  const target = targets[0];
+  return target;
+}
 
-  const form = new FormData();
-  for (const p of target.parameters) form.append(p.name, p.value);
-  form.append("file", new Blob([bytes], { type: input.mimeType }), input.filename);
+interface FinalizeUploadInput {
+  /** The resourceUrl returned by stageUpload(), after the browser has POSTed the file there. */
+  resourceUrl: string;
+  filename: string;
+  mimeType: string;
+}
 
-  const putRes = await fetch(target.url, { method: "POST", body: form });
-  if (!putRes.ok) {
-    throw new Error(`Staged upload PUT failed: HTTP ${putRes.status}`);
-  }
-
+/**
+ * Registers an already-uploaded file with Shopify Files, returning its GID
+ * and (if available yet) a preview URL.
+ *
+ * Together, stageUpload()+the browser's direct POST+finalizeUpload() replace
+ * a single uploadFile() that used to receive the file as base64 JSON and
+ * relay it to Shopify itself. Routing large STL files (tens of MB) through
+ * this Edge Function that way meant base64-decoding and re-uploading the
+ * whole thing inside a resource-constrained function — real customer files
+ * routinely exceeded its CPU/memory limits and crashed with a 546
+ * WORKER_LIMIT error, silently losing the file. Uploading straight from the
+ * browser to the signed URL Shopify provides is the standard pattern for
+ * exactly this reason: this function's involvement is now two small GraphQL
+ * calls, regardless of file size.
+ */
+export async function finalizeUpload(
+  input: FinalizeUploadInput,
+): Promise<{ id: string; url: string | null }> {
   const created = await shopifyGraphQL<{
     fileCreate: {
       files: Array<{ id: string; preview: { image: { url: string } | null } | null }>;
@@ -74,7 +93,7 @@ export async function uploadFile(
     files: [{
       alt: input.filename,
       contentType: input.mimeType.startsWith("image/") ? "IMAGE" : "FILE",
-      originalSource: target.resourceUrl,
+      originalSource: input.resourceUrl,
     }],
   });
 

@@ -924,69 +924,68 @@ async function addFileToGroup(file, targetGroup) {
   renderAll();
 }
 
-const UPLOAD_TIMEOUT_MS = 25_000;
+const RELAY_TIMEOUT_MS = 15_000;    // small JSON round trips to the relay (stage/finalize)
+const FILE_PUT_TIMEOUT_MS = 60_000; // the actual file transfer, direct to Shopify's storage
 
-/** fetch() with a hard timeout — without this, a stalled relay request could
- *  hang uploadItemToShopify()'s promise forever, which would in turn block
+/** fetch() with a hard timeout — without this, a stalled request could hang
+ *  uploadItemToShopify()'s promise forever, which would in turn block
  *  submitOrder() (it awaits any still-in-flight upload) with no way out
  *  short of reloading the page. */
-function fetchWithTimeout(url, options) {
+function fetchWithTimeout(url, options, timeoutMs = RELAY_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
 }
 
-/** Base64-encode bytes in chunks — avoids the call-stack/perf blowup of
- *  spreading or reduce()-ing very large typed arrays one byte at a time. */
-function bytesToBase64(bytes) {
-  const CHUNK_SIZE = 8192;
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK_SIZE));
-  }
-  return btoa(binary);
+/**
+ * Uploads a file straight to Shopify's storage instead of routing its bytes
+ * through the relay. Three steps: (1) ask the relay for a staged-upload
+ * target — a small JSON exchange regardless of file size; (2) POST the raw
+ * file directly to that target, bypassing the relay entirely for the actual
+ * bytes; (3) ask the relay to register it with Shopify Files (fileCreate)
+ * using the returned resourceUrl. This replaces the old base64-encode-and-
+ * relay approach, which loaded the whole file into a JS string (roughly
+ * 1.3× its size) and routed it through a resource-constrained Supabase
+ * Edge Function — real customer STL files (tens of MB) routinely exceeded
+ * that function's limits and silently failed to attach.
+ */
+async function uploadFileDirect(fileOrBlob, filename, mimeType) {
+  const stageRes = await fetchWithTimeout(`${RELAY_BASE_URL}/files/stage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, mimeType }),
+  });
+  if (!stageRes.ok) throw new Error(`Stage upload failed: HTTP ${stageRes.status}`);
+  const { url, resourceUrl, parameters } = await stageRes.json();
+
+  const form = new FormData();
+  for (const p of parameters) form.append(p.name, p.value);
+  form.append('file', fileOrBlob, filename);
+  const putRes = await fetchWithTimeout(url, { method: 'POST', body: form }, FILE_PUT_TIMEOUT_MS);
+  if (!putRes.ok) throw new Error(`Direct upload failed: HTTP ${putRes.status}`);
+
+  const finalizeRes = await fetchWithTimeout(`${RELAY_BASE_URL}/files/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ resourceUrl, filename, mimeType }),
+  });
+  if (!finalizeRes.ok) throw new Error(`Finalize upload failed: HTTP ${finalizeRes.status}`);
+  return finalizeRes.json(); // { id, url }
 }
 
-// Base64-encoding + JSON-wrapping a file costs roughly 2-3× its raw size in
-// string memory (see bytesToBase64 and the request body below). Above this
-// size that cost stops being worth it for what's just a background
-// convenience copy — pricing and quote submission both work fine without
-// it (see the doc comment on this function's only caller).
-const MAX_UPLOAD_FILE_SIZE_BYTES = 75 * 1024 * 1024; // 75 MB
-
-/** Upload an item's STL bytes + thumbnail to the relay's Shopify Files
- *  endpoint, without blocking the caller. Sets item.shopifyFileId /
- *  item.shopifyThumbnailId on success and re-renders. */
+/** Upload an item's STL bytes + thumbnail to Shopify Files, without
+ *  blocking the caller. Sets item.shopifyFileId / item.shopifyThumbnailId
+ *  on success and re-renders. No size cap needed — uploads go straight to
+ *  Shopify's storage (see uploadFileDirect), so the relay never holds the
+ *  file in memory regardless of how large it is. */
 async function uploadItemToShopify(item, file) {
-  if (file.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
-    console.warn(`Skipping Shopify file upload for ${item.name} — too large (${(file.size / 1048576).toFixed(0)} MB) to encode safely in-browser. Pricing is unaffected.`);
-    return;
-  }
   try {
-    const fileBuffer = await file.arrayBuffer();
-    const base64Data = bytesToBase64(new Uint8Array(fileBuffer));
-    const stlRes = await fetchWithTimeout(`${RELAY_BASE_URL}/files`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename: item.name, mimeType: 'model/stl', base64Data }),
-    });
-    if (!stlRes.ok) throw new Error(`STL upload failed: HTTP ${stlRes.status}`);
-    const stlUpload = await stlRes.json();
+    const stlUpload = await uploadFileDirect(file, item.name, 'model/stl');
     item.shopifyFileId = stlUpload.id;
 
     if (item.thumbnail) {
-      const thumbBase64 = item.thumbnail.split(',')[1]; // strip "data:image/png;base64,"
-      const thumbRes = await fetchWithTimeout(`${RELAY_BASE_URL}/files`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filename: item.name.replace(/\.stl$/i, '.png'),
-          mimeType: 'image/png',
-          base64Data: thumbBase64,
-        }),
-      });
-      if (!thumbRes.ok) throw new Error(`Thumbnail upload failed: HTTP ${thumbRes.status}`);
-      const thumbUpload = await thumbRes.json();
+      const thumbBlob = await (await fetch(item.thumbnail)).blob();
+      const thumbUpload = await uploadFileDirect(thumbBlob, item.name.replace(/\.stl$/i, '.png'), 'image/png');
       item.shopifyThumbnailId = thumbUpload.id;
     }
   } catch (err) {
@@ -1381,6 +1380,8 @@ async function submitOrder(e) {
         { name: '_quote_ref', value: _orderNumber ?? '' },
         { name: '_model_name', value: g.name },
         { name: '_print_method', value: g.settings.printMethod },
+        { name: '_primer', value: g.settings.primer },
+        { name: '_assembly', value: String(Boolean(g.settings.assembly)) },
         { name: '_notes', value: g.settings.notes || '' },
         { name: '_files_json', value: JSON.stringify(files) },
       ],

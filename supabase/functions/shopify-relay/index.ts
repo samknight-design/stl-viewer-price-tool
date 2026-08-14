@@ -1,6 +1,6 @@
 // supabase/functions/shopify-relay/index.ts
 import { getShopConfig, saveShopConfig } from "./config.ts";
-import { uploadFile, resolveFileUrl } from "./files.ts";
+import { finalizeUpload, resolveFileUrl, stageUpload } from "./files.ts";
 import { createPricedVariant } from "./variant.ts";
 import { createDraftOrder, type QuoteLineItem } from "./draftOrder.ts";
 import { findOrCreateCustomer } from "./customer.ts";
@@ -71,20 +71,54 @@ async function enrichLineItemWithFileUrls(
   return { ...lineItem, properties };
 }
 
-/** Human-scannable file list for the draft order's note, so the whole quote is readable without opening every line item's custom attributes. */
-function buildFileSummaryLines(lineItems: QuoteLineItem[]): string[] {
+const PRIMER_LABELS: Record<string, string> = {
+  unprimed: "Unprimed",
+  black: "Black Primer",
+  grey: "Grey Primer",
+  white: "White Primer",
+};
+
+const PRINT_METHOD_LABELS: Record<string, string> = {
+  resin: "Resin",
+  pla: "PLA",
+};
+
+/**
+ * Human-readable per-model breakdown for the draft order's note — the shop
+ * owner reviewing this in Admin needs print method, primer, assembly, and
+ * notes at a glance, plus every uploaded file with a clickable link,
+ * without having to decode each line item's raw custom-attribute JSON.
+ */
+function buildModelSummaryLines(lineItems: QuoteLineItem[]): string[] {
   return lineItems.flatMap((li) => {
-    const filesProp = li.properties.find((p) => p.name === "_files_json");
-    if (!filesProp) return [];
-    let files: Array<{ filename: string; fileUrl: string | null }>;
+    const get = (name: string) => li.properties.find((p) => p.name === name)?.value ?? "";
+
+    const modelName = get("_model_name") || li.title;
+    const printMethod = PRINT_METHOD_LABELS[get("_print_method")] ?? get("_print_method") ?? "—";
+    const primer = PRIMER_LABELS[get("_primer")] ?? get("_primer") ?? "—";
+    const assembly = get("_assembly") === "true"
+      ? "Yes — assemble together"
+      : "No — supply as separate parts";
+    const notes = get("_notes");
+
+    let files: Array<{ filename: string; fileUrl: string | null; quantity: number }> = [];
     try {
-      files = JSON.parse(filesProp.value);
+      files = JSON.parse(get("_files_json"));
     } catch {
-      return [];
+      files = [];
     }
-    return files.map((f) =>
-      `  - ${f.filename}: ${f.fileUrl ?? "(still processing — check Shopify Files)"}`
-    );
+
+    const lines = [
+      `${modelName} (${printMethod}, ${primer}):`,
+      `  Assembly: ${assembly}`,
+    ];
+    if (notes) lines.push(`  Notes: ${notes}`);
+    lines.push("  Files:");
+    lines.push(...files.map((f) =>
+      `    - ${f.filename} (x${f.quantity}): ${f.fileUrl ?? "(still processing — check Shopify Files)"}`
+    ));
+    lines.push("");
+    return lines;
   });
 }
 
@@ -100,7 +134,8 @@ function extractQuoteRef(lineItems: QuoteLineItem[]): string {
 export interface RelayDeps {
   getShopConfig: typeof getShopConfig;
   saveShopConfig: typeof saveShopConfig;
-  uploadFile: typeof uploadFile;
+  stageUpload: typeof stageUpload;
+  finalizeUpload: typeof finalizeUpload;
   createPricedVariant: typeof createPricedVariant;
   createDraftOrder: typeof createDraftOrder;
   findOrCreateCustomer: typeof findOrCreateCustomer;
@@ -111,7 +146,8 @@ export interface RelayDeps {
 const defaultDeps: RelayDeps = {
   getShopConfig,
   saveShopConfig,
-  uploadFile,
+  stageUpload,
+  finalizeUpload,
   createPricedVariant,
   createDraftOrder,
   findOrCreateCustomer,
@@ -143,9 +179,19 @@ export async function handleRequest(
       return json({ ok: true });
     }
 
-    if (url.pathname.endsWith("/files") && req.method === "POST") {
-      const { filename, mimeType, base64Data } = await readJsonBody(req);
-      const file = await deps.uploadFile({ filename, mimeType, base64Data });
+    // The browser uploads the file's actual bytes directly to the URL this
+    // returns — this endpoint only exchanges small JSON with Shopify, so it
+    // works the same regardless of file size (see files.ts's doc comment on
+    // finalizeUpload for why that matters).
+    if (url.pathname.endsWith("/files/stage") && req.method === "POST") {
+      const { filename, mimeType } = await readJsonBody(req);
+      const target = await deps.stageUpload({ filename, mimeType });
+      return json(target);
+    }
+
+    if (url.pathname.endsWith("/files/finalize") && req.method === "POST") {
+      const { resourceUrl, filename, mimeType } = await readJsonBody(req);
+      const file = await deps.finalizeUpload({ resourceUrl, filename, mimeType });
       return json(file);
     }
 
@@ -225,8 +271,7 @@ export async function handleRequest(
         const note = [
           `Quote ${quoteRef} for ${body.customerName} (${body.customerEmail}) — review before sending invoice.`,
           "",
-          "Files:",
-          ...buildFileSummaryLines(enrichedLineItems),
+          ...buildModelSummaryLines(enrichedLineItems),
         ].join("\n");
 
         const { draftOrderId } = await deps.createDraftOrder({
