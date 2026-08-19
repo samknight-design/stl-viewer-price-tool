@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>3D Print Price Calculator — Arcane Flame</title>
-  <link rel="stylesheet" href="css/style.css?v=14">
+  <link rel="stylesheet" href="css/style.css?v=17">
   <script type="importmap">
   {
     "imports": {
@@ -28,39 +28,55 @@
         <span class="app-tagline">Upload your STL files — get an instant quote</span>
       </div>
     </div>
-    <div class="app-header-actions">
-      <button class="btn btn-ghost btn-sm" id="add-group-btn" aria-label="New Model Group">
-        <span aria-hidden="true" data-icon-only="plus" data-icon-size="16"></span><span class="btn-label">New Model Group</span>
-      </button>
-      <a href="admin.html" class="btn btn-ghost btn-sm" aria-label="Admin">
-        <span aria-hidden="true" data-icon-only="settings" data-icon-size="16"></span><span class="btn-label">Admin</span>
-      </a>
-    </div>
   </header>
   <hr class="brand-divider">
 
-  <div class="drop-zone" id="drop-zone" role="button" tabindex="0">
-    <div class="drop-icon" data-icon-only="upload" data-icon-size="34"></div>
-    <h3 class="drop-title-desktop">Drop STL Files Here</h3>
-    <h3 class="drop-title-touch">Tap to Browse Your Files</h3>
-    <p>or click to browse your files</p>
-    <p class="drop-hint">Supports binary &amp; ASCII .stl · Multiple files at once · .lys (Lychee Slicer) files detected — export as STL first</p>
-    <p class="ai-file-note" data-icon="bot">Using an AI-generated model? These often need cleanup (thin walls, no drain holes, poor overhangs) before they'll print cleanly — mention it in that model's notes so we can check before starting.</p>
+  <!-- Empty state — the two ways in. Shown only before anything is uploaded. -->
+  <div class="start-zone" id="start-zone">
+    <div class="start-head">
+      <div class="start-icon" data-icon-only="upload" data-icon-size="26"></div>
+      <div>
+        <h3>Upload your STL files</h3>
+        <p class="start-sub">Pick how your files fit together and we'll price them straight away.</p>
+      </div>
+    </div>
+
+    <div class="start-choices">
+      <button type="button" class="choice-card" id="start-single" data-intent="single">
+        <span class="choice-icon" data-icon-only="file" data-icon-size="20"></span>
+        <span class="choice-text">
+          <strong>Add a single file</strong>
+          <span>One STL printed on its own. Most orders are this.</span>
+        </span>
+      </button>
+      <button type="button" class="choice-card" id="start-model" data-intent="model">
+        <span class="choice-icon" data-icon-only="puzzle" data-icon-size="20"></span>
+        <span class="choice-text">
+          <strong>Add a multi-part model</strong>
+          <span>Several STLs that build one thing — we can assemble it for you.</span>
+        </span>
+      </button>
+    </div>
+
+    <p class="start-hint">Or drop files anywhere on this page · binary &amp; ASCII .stl · Lychee .lys files need exporting as STL first</p>
   </div>
+
   <input type="file" id="file-input" accept=".stl,.lys" multiple hidden>
 
   <div class="main-grid">
     <div>
-      <div id="group-list">
-        <div id="empty-state" class="empty-state">
-          <div class="empty-icon" data-icon-only="inbox" data-icon-size="34"></div>
-          <p>No files uploaded yet.<br>Drop STL files above to get an instant quote.<br>
-          <span style="font-size:.8rem;color:var(--text-dimmer)">Group multiple parts into one model to add assembly &amp; primer options.</span></p>
-        </div>
+      <div id="group-list"></div>
+
+      <!-- Persistent add row — replaces the old header/footer add buttons -->
+      <div class="add-row" id="add-row" style="display:none">
+        <button type="button" class="btn btn-secondary" data-intent="single">
+          <span aria-hidden="true" data-icon-only="plus" data-icon-size="15"></span><span class="btn-label">Add a single file</span>
+        </button>
+        <button type="button" class="btn btn-secondary" data-intent="model">
+          <span aria-hidden="true" data-icon-only="puzzle" data-icon-size="15"></span><span class="btn-label">Add a multi-part model</span>
+        </button>
+        <span class="add-row-hint">or drop files anywhere</span>
       </div>
-      <button class="btn btn-primary btn-lg add-model-btn" id="add-model-btn" type="button" style="display:none">
-        <span aria-hidden="true" data-icon-only="plus" data-icon-size="16"></span><span class="btn-label">Add New Model</span>
-      </button>
     </div>
 
     <aside class="order-summary" id="order-summary">
@@ -122,13 +138,11 @@
           <span class="quote-stamp"><strong id="review-order-number" class="quote-stamp-value">—</strong></span>
         </div>
         <div id="review-groups-container"><!-- populated by JS --></div>
+        <p class="review-custom-quote-note" id="review-custom-quote-note" style="display:none"></p>
         <div class="order-total-row">
-          <span>Grand Total (estimated)</span>
+          <span id="review-total-label">Grand total (estimated)</span>
           <span id="review-order-total">—</span>
         </div>
-        <p class="review-custom-quote-note" id="review-custom-quote-note" style="display:none" data-icon="info">
-          Orders over £150 are personally reviewed before we confirm pricing — we'll be in touch if anything needs adjusting.
-        </p>
         <p class="review-minimum-note" id="review-minimum-note" style="display:none"></p>
         <p class="review-disclaimer-note" data-icon="alertTriangle">
           Please review your order carefully before continuing.
@@ -189,7 +203,7 @@
              style="display:none;color:var(--red);font-size:.85em;font-weight:600;margin-bottom:10px;text-align:center"></p>
           <div class="form-actions">
             <button type="submit" id="order-submit-btn" class="btn btn-primary btn-lg">
-              <span id="order-submit-label">Submit Quote Request</span>
+              <span id="order-submit-label">Send quote request</span>
               <span id="order-submit-icon"></span>
             </button>
           </div>
@@ -213,11 +227,15 @@
   </div>
 </div>
 
-<script type="module" src="js/main.js?v=16"></script>
-<script>
-  document.getElementById('add-group-btn').addEventListener('click', () => {
-    document.dispatchEvent(new CustomEvent('add-group'));
-  });
-</script>
+<!-- Page-wide drag target — the page stays droppable for the whole session -->
+<div class="drop-overlay" id="drop-overlay" aria-hidden="true">
+  <div class="drop-overlay-inner">
+    <div data-icon-only="upload" data-icon-size="30"></div>
+    <strong>Drop to add as a new model</strong>
+    <span>Drop several files together and they'll become one multi-part model</span>
+  </div>
+</div>
+
+<script type="module" src="js/main.js?v=17"></script>
 </body>
 </html>

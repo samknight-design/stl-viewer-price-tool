@@ -65,13 +65,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   config = await getConfig();
   applyStaticIcons();
   setupDropZone();
+  setupAddButtons();
   setupFileInput();
   setupModal();
   setupOrderForm();
   document.getElementById('mobile-summary-btn')?.addEventListener('click', openOrderForm);
-  document.getElementById('add-model-btn')?.addEventListener('click', () => { addGroup(); });
   setupGroupList();   // Single delegated listener — no duplicates across re-renders
-  document.addEventListener('add-group', () => { addGroup(); });
   renderAll();
 });
 
@@ -97,7 +96,11 @@ function defaultGroupSettings() {
 }
 
 function createGroup(name) {
-  return { id: gId(), name, settings: defaultGroupSettings(), items: [], groupCost: null, collapsed: false };
+  return {
+    id: gId(), name, settings: defaultGroupSettings(), items: [], groupCost: null,
+    settingsOpen: false,   // model settings disclosure
+    justUnlocked: false,   // set when assembly first becomes available, for a one-shot highlight
+  };
 }
 
 function ensureGroup() {
@@ -107,31 +110,65 @@ function ensureGroup() {
 
 // ---- Drop zone -------------------------------------------------------
 
+// The whole page is a drop target for the whole session — the most natural
+// way to add a file shouldn't stop working the moment you have one.
+// A drop of several files at once reads as "these belong together", so it
+// lands as one multi-part model; a single file gets its own model.
+
 function setupDropZone() {
-  const zone = document.getElementById('drop-zone');
-  if (!zone) return;
-  zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
-  zone.addEventListener('dragleave', e => { if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over'); });
-  zone.addEventListener('drop', e => {
+  const overlay = document.getElementById('drop-overlay');
+  let depth = 0;
+
+  const hasFiles = e => [...(e.dataTransfer?.types || [])].includes('Files');
+
+  window.addEventListener('dragenter', e => {
+    if (!hasFiles(e)) return;
     e.preventDefault();
-    zone.classList.remove('drag-over');
+    depth++;
+    overlay?.classList.add('active');
+  });
+
+  window.addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
+
+  window.addEventListener('dragleave', e => {
+    if (!hasFiles(e)) return;
+    depth = Math.max(0, depth - 1);
+    if (depth === 0) overlay?.classList.remove('active');
+  });
+
+  window.addEventListener('drop', e => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    depth = 0;
+    overlay?.classList.remove('active');
+
     const files = [...e.dataTransfer.files].filter(f => {
       const n = f.name.toLowerCase();
       return n.endsWith('.stl') || n.endsWith('.lys');
     });
-    if (files.length) {
-      // Top drop zone: create a new model group if one already exists
-      if (groups.length > 0) _pendingGroupId = 'new';
-      handleFilesForGroup(files);
-    } else {
+    if (!files.length) {
       showToast('Please drop .stl or .lys files.', 'error');
+      return;
     }
+    // Several files dropped together = one multi-part model.
+    _uploadIntent = files.length > 1 ? 'model' : 'single';
+    handleFilesForGroup(files);
   });
-  zone.addEventListener('click', () => {
-    // Top button: create a new model group if one already exists
-    _pendingGroupId = groups.length > 0 ? 'new' : null;
-    document.getElementById('file-input').click();
-  });
+}
+
+/** Open the file picker with a stated intent. */
+function pickFiles(intent) {
+  _uploadIntent = intent;
+  document.getElementById('file-input').click();
+}
+
+function setupAddButtons() {
+  for (const id of ['start-zone', 'add-row']) {
+    document.getElementById(id)?.addEventListener('click', e => {
+      const btn = e.target.closest('[data-intent]');
+      if (btn) pickFiles(btn.dataset.intent);
+    });
+  }
 }
 
 function setupFileInput() {
@@ -187,12 +224,6 @@ function recomputeGroup(group) {
 
 // ---- Group management ------------------------------------------------
 
-function addGroup() {
-  const n = groups.length + 1;
-  groups.push(createGroup(`Model ${n}`));
-  renderAll();
-}
-
 function removeGroup(groupId) {
   groups = groups.filter(g => g.id !== groupId);
   renderAll();
@@ -213,6 +244,7 @@ function moveItemToGroup(itemId, targetGroupId) {
   if (targetGroup) {
     targetGroup.items.push(movedItem);
     recomputeGroup(targetGroup);
+    checkAssemblyUnlocked(targetGroup);
   }
   if (groups.length > 1) groups = groups.filter(g => g.items.length > 0);
   renderAll();
@@ -242,15 +274,15 @@ function renderGroupList() {
   const container = document.getElementById('group-list');
   if (!container) return;
 
-  const empty    = document.getElementById('empty-state');
   const hasItems = groups.some(g => g.items.length > 0);
-  if (empty) empty.style.display = hasItems ? 'none' : 'flex';
 
-  const dropZone   = document.getElementById('drop-zone');
-  if (dropZone) dropZone.style.display = hasItems ? 'none' : '';
+  // The two-way start panel is the empty state; once anything is uploaded
+  // the same two choices live on in the persistent add row below the list.
+  const startZone = document.getElementById('start-zone');
+  if (startZone) startZone.style.display = hasItems ? 'none' : '';
 
-  const addModelBtn = document.getElementById('add-model-btn');
-  if (addModelBtn) addModelBtn.style.display = hasItems ? '' : 'none';
+  const addRow = document.getElementById('add-row');
+  if (addRow) addRow.style.display = hasItems ? '' : 'none';
 
   // Remove stale group cards
   const currentIds = new Set(groups.map(g => g.id));
@@ -271,26 +303,95 @@ function renderGroupList() {
   });
 }
 
-// ---- Group card HTML -------------------------------------------------
+// ---- Model card HTML -------------------------------------------------
+// A model is a container with a visible edge: a header bar carrying its
+// name, a one-line summary of its settings and its running total, then
+// its parts as single-line rows beneath. Settings and part detail both
+// live behind a disclosure — nothing is expanded until it's asked for.
 
 function buildGroupHTML(group) {
-  if (group.collapsed) return buildCollapsedGroupHTML(group);
-
   const sym        = config.currencySymbol;
   const gc         = group.groupCost;
   const readyItems = group.items.filter(i => i.status === 'ready' && i.cost);
+  const pricedItems = readyItems.filter(i => i.cost.priceable);
   const totalParts = readyItems.reduce((s, i) => s + i.settings.quantity, 0);
-  const canAssemble   = totalParts >= 2;
-  const assemblyActive = group.settings.assembly && canAssemble;
+  const canAssemble = totalParts >= 2;
 
-  // Print method — per-model toggle. PLA is priced by volume only (no
-  // size tiers). Colour, though, is chosen per PART (see buildItemHTML) —
-  // each part prints in exactly one colour, and the surcharge scales with
-  // that part's own size instead of being a flat per-model fee.
   const printMethod = group.settings.printMethod === 'pla' ? 'pla' : 'resin';
   const isPlaModel  = printMethod === 'pla';
+  const assemblyActive = group.settings.assembly && canAssemble;
 
-  // Primer swatches — visual, finger-size circles. Unprimed = blank circle, red slash.
+  const primerLabel = config.primerOptions.find(p => p.id === group.settings.primer)?.label || 'Unprimed';
+
+  // Summary chips — what the model's settings currently add up to, in one
+  // line, so the settings panel can stay shut without hiding the answer.
+  const chips = [
+    isPlaModel ? 'PLA' : 'Resin',
+    primerLabel,
+    canAssemble ? (assemblyActive ? 'Assembled' : 'Loose parts') : null,
+    group.settings.notes?.trim() ? 'Notes added' : null,
+  ].filter(Boolean);
+
+  const partCountLabel = group.items.length === 1
+    ? '1 part'
+    : `${group.items.length} parts`;
+
+  const itemsHTML = group.items.length
+    ? group.items.map(item => buildItemHTML(item, group, groups.length > 1)).join('')
+    : `<div class="part-empty">No files in this model yet — use <strong>Add part</strong> below.</div>`;
+
+  return `
+    <div class="model-bar ${group.settingsOpen ? 'open' : ''} ${group.justUnlocked ? 'flash' : ''}">
+      <div class="model-bar-id">
+        <span class="model-tag">Model</span>
+        <input class="model-name" value="${esc(group.name)}" data-action="rename"
+               aria-label="Model name" spellcheck="false">
+      </div>
+      <div class="model-bar-meta">
+        <span class="model-chips">${chips.map(c => `<span>${esc(c)}</span>`).join('')}</span>
+        <span class="model-count">${partCountLabel}</span>
+      </div>
+      <div class="model-bar-end">
+        <span class="model-total">${gc && pricedItems.length ? fmt(gc.groupTotal, sym) : '—'}</span>
+        <button class="model-opts-btn" data-action="toggle-model-settings"
+                aria-expanded="${group.settingsOpen ? 'true' : 'false'}">
+          <span class="btn-label">Options</span>${icon(group.settingsOpen ? 'chevronUp' : 'chevronDown', { size: 15 })}
+        </button>
+      </div>
+    </div>
+
+    ${group.settingsOpen ? buildModelSettingsHTML(group, { isPlaModel, canAssemble, assemblyActive, totalParts, gc, sym }) : ''}
+
+    <div class="group-items">${itemsHTML}</div>
+
+    <div class="model-foot">
+      <button class="btn btn-quiet btn-sm" data-action="add-files-to-group">
+        ${icon('plus', { size: 14 })} Add part
+      </button>
+      ${gc && pricedItems.length ? buildModelFootBreakdown(gc, assemblyActive, sym) : ''}
+    </div>
+  `;
+}
+
+/** The extras that made up a model's total, as a compact inline list. */
+function buildModelFootBreakdown(gc, assemblyActive, sym) {
+  const bits = [];
+  if (assemblyActive)      bits.push(`assembly +${fmt(gc.assemblyCost, sym)}`);
+  if (gc.isPrimed)         bits.push(`primer +${fmt(gc.primerTotal, sym)}`);
+  if (gc.plaColorCost > 0) bits.push(`colour +${fmt(gc.plaColorCost, sym)}`);
+  return bits.length
+    ? `<span class="model-foot-extras">Included in the model total: ${esc(bits.join(' · '))}</span>`
+    : '';
+}
+
+// ---- Model settings panel --------------------------------------------
+// Only rendered when the model bar's Options disclosure is open. Assembly
+// appears here only once the model actually has 2+ parts — a choice that
+// doesn't exist yet isn't shown as a disabled control.
+
+function buildModelSettingsHTML(group, ctx) {
+  const { isPlaModel, canAssemble, assemblyActive, totalParts, gc, sym } = ctx;
+
   const primerColors = { black: '#1a1a1a', grey: '#9a9a9a', white: '#f6f3ec' };
   const primerSwatchesHTML = config.primerOptions.map(p => {
     const active = group.settings.primer === p.id;
@@ -307,216 +408,237 @@ function buildGroupHTML(group) {
       </button>`;
   }).join('');
 
-  // Assembly description text
-  const assemblyDesc = !canAssemble
-    ? 'Upload 2 or more parts to this model to enable assembly.'
-    : assemblyActive
-      ? `We will glue and fit your ${totalParts} parts together into a single assembled model.`
-      : `Your ${totalParts} parts will be printed and supplied separately, unassembled.`;
-
-  // Cost hints
-  const primerCostHint   = (group.settings.primer !== 'unprimed' && gc)
+  const primerCostHint = (group.settings.primer !== 'unprimed' && gc)
     ? `<span class="setting-cost-hint">+${fmt(gc.primerTotal, sym)}</span>` : '';
   const assemblyCostHint = (assemblyActive && gc)
     ? ` <span class="setting-cost-hint">+${fmt(gc.assemblyCost, sym)}</span>` : '';
 
-  // Items list
-  const itemsHTML = group.items.length
-    ? group.items.map(item => buildItemHTML(item, group)).join('')
-    : `<div class="group-empty-hint">
-         <span>${icon('paperclip')} Use <strong>"Add Part to This Model"</strong> below to upload files.</span>
-       </div>`;
-
-  // Cost footer
-  const costsHTML = (gc && readyItems.length > 0) ? `
-    <div class="group-footer">
-      <div class="group-costs">
-        <span>Files subtotal</span><span>${fmt(gc.fileSubtotal, sym)}</span>
-        ${assemblyActive ? `<span>${icon('puzzle')} Assembly (${totalParts} parts)</span><span>+${fmt(gc.assemblyCost, sym)}</span>` : ''}
-        ${gc.isPrimed ? `<span>${icon('paintbrush')} ${esc(config.primerOptions.find(p => p.id === gc.primerLabel)?.label || 'Primer')}</span><span>+${fmt(gc.primerTotal, sym)}</span>` : ''}
-        ${gc.plaColorCost > 0 ? `<span>${icon('layers')} Colour surcharge</span><span>+${fmt(gc.plaColorCost, sym)}</span>` : ''}
-      </div>
-      <div class="group-total">
-        <span>Model Total</span>
-        <span>${fmt(gc.groupTotal, sym)}</span>
-      </div>
-    </div>` : '';
-
   return `
-    <div class="group-header">
-      <div class="group-name-wrap">
-        <span class="group-tag">MODEL</span>
-        <input class="group-name-input" value="${esc(group.name)}" data-action="rename"
-               title="Click to rename" aria-label="Model name">
-      </div>
-      <div class="group-header-actions">
-        ${readyItems.length > 0 ? `<button class="btn btn-primary btn-sm group-done-btn" data-action="collapse-group" title="Mark this model as done">${icon('check')} Done</button>` : ''}
-        <button class="btn btn-sm group-delete-btn ${isArmedForDelete('group', group.id) ? 'armed' : ''}"
-                data-action="delete-group" title="Delete this model" aria-label="Delete this model">
-          ${icon('trash')}${isArmedForDelete('group', group.id) ? '<span class="delete-confirm-text">Delete model?</span>' : ''}
-        </button>
-      </div>
-    </div>
+    <div class="model-settings">
 
-    <div class="group-settings">
-
-      <div class="group-setting-block print-method-block">
-        <div class="group-setting-label">
-          <span class="label-icon-row">${icon('printer')} Print Method</span>
+      <div class="mset">
+        <div class="mset-label">
+          Print method
           <span class="info-tip-wrap">
-            <button type="button" class="info-tip-btn" data-action="toggle-info" aria-label="What's the difference between Resin and PLA?" aria-expanded="false">${icon('helpCircle', { size: 14 })}</button>
+            <button type="button" class="info-tip-btn" data-action="toggle-info"
+                    aria-label="What's the difference between resin and PLA?" aria-expanded="false">${icon('helpCircle', { size: 15 })}</button>
             <span class="info-tip-content" role="tooltip">
-              <strong>Resin</strong> — highest detail, best for fine miniatures. Priced by size tier.<br><br>
-              <strong>PLA (FDM)</strong> — stronger and faster, best for larger or simpler parts. Priced by volume only.
+              <strong>Resin</strong> — highest detail, best for fine miniatures. Priced by size.<br><br>
+              <strong>PLA</strong> — stronger and faster, best for larger or simpler parts. Priced by volume, and you pick a filament colour per part.
             </span>
           </span>
         </div>
-        <div class="print-method-seg">
-          <button class="seg-btn ${!isPlaModel ? 'active' : ''}" data-action="print-method" data-val="resin">${icon('flask')} Resin</button>
-          <button class="seg-btn ${isPlaModel ? 'active-green' : ''}" data-action="print-method" data-val="pla">${icon('layers')} PLA</button>
-        </div>
-        ${isPlaModel ? `<div class="group-setting-desc">Choose each part's filament colour below — every part prints in one solid colour. Need multi-colour on a single part? We don't support that here — please request a custom quote instead.</div>` : ''}
-      </div>
-
-      <div class="group-setting-block">
-        <div class="group-setting-label"><span class="label-icon-row">${icon('paintbrush')} Primer Coating</span></div>
-        <div class="group-setting-desc">
-          A spray primer is applied to the finished model before painting.
-          Improves paint adhesion and hides layer lines for a smoother finish.
-        </div>
-        <div class="primer-row">
-          ${primerSwatchesHTML}
-          ${primerCostHint}
+        <div class="seg">
+          <button class="seg-btn ${!isPlaModel ? 'active' : ''}" data-action="print-method" data-val="resin">Resin</button>
+          <button class="seg-btn ${isPlaModel ? 'active' : ''}" data-action="print-method" data-val="pla">PLA</button>
         </div>
       </div>
 
-      <div class="group-setting-block ${!canAssemble ? 'setting-disabled' : ''}">
-        <div class="group-setting-label"><span class="label-icon-row">${icon('puzzle')} Parts Assembly</span></div>
-        <div class="group-setting-desc">${assemblyDesc}</div>
-        <div class="assembly-seg ${!canAssemble ? 'seg-disabled' : ''}">
-          <button class="seg-btn ${!assemblyActive ? 'active' : ''}"
-                  data-action="assembly" data-val="false"
-                  ${!canAssemble ? 'disabled' : ''}>
-            ${icon('package')} No — supply as separate parts
+      <div class="mset">
+        <div class="mset-label">
+          Primer coating
+          <span class="info-tip-wrap">
+            <button type="button" class="info-tip-btn" data-action="toggle-info"
+                    aria-label="What does priming do?" aria-expanded="false">${icon('helpCircle', { size: 15 })}</button>
+            <span class="info-tip-content" role="tooltip">
+              A spray primer goes on the finished model before you paint it. It helps paint stick and softens layer lines.${isPlaModel ? '<br><br>On PLA, priming covers the filament colour you choose below — pick one or the other unless you want a painting base.' : ''}
+            </span>
+          </span>
+        </div>
+        <div class="primer-row">${primerSwatchesHTML}${primerCostHint}</div>
+      </div>
+
+      ${canAssemble ? `
+      <div class="mset">
+        <div class="mset-label">Assembly</div>
+        <div class="seg">
+          <button class="seg-btn ${!assemblyActive ? 'active' : ''}" data-action="assembly" data-val="false">
+            Supply as ${totalParts} loose parts
           </button>
-          <button class="seg-btn ${assemblyActive ? 'active-green' : ''}"
-                  data-action="assembly" data-val="true"
-                  ${!canAssemble ? 'disabled' : ''}>
-            ${icon('puzzle')} Yes — assemble for me${assemblyCostHint}
+          <button class="seg-btn ${assemblyActive ? 'active' : ''}" data-action="assembly" data-val="true">
+            Glue &amp; fit together${assemblyCostHint}
           </button>
         </div>
+      </div>` : ''}
+
+      <div class="mset mset-notes">
+        <label class="mset-label" for="notes-${group.id}">Notes for this model <span class="mset-optional">optional</span></label>
+        <textarea class="mset-notes-input" id="notes-${group.id}" data-action="notes" rows="2"
+                  placeholder="Colour preferences, a deadline, anything we should know…">${esc(group.settings.notes || '')}</textarea>
+        <p class="mset-hint">Working from an AI-generated model? Tell us here — they often need thin walls, drain holes or overhangs fixed before they print cleanly, and we'll check yours first.</p>
       </div>
 
-    </div>
-
-    <div class="group-notes">
-      <label class="group-notes-label" for="notes-${group.id}"><span class="label-icon-row">${icon('note')} Notes for this model (optional)</span></label>
-      <textarea class="group-notes-input" id="notes-${group.id}" data-action="notes"
-                placeholder="Any requests or things we should know about this model…">${esc(group.settings.notes || '')}</textarea>
-    </div>
-
-    <div class="group-items">${itemsHTML}</div>
-
-    ${costsHTML}
-
-    <div class="group-actions">
-      <button class="btn btn-primary btn-lg add-part-btn" data-action="add-files-to-group">
-        ${icon('paperclip')} Add Part to This Model
-      </button>
-    </div>
-  `;
-}
-
-// ---- Collapsed ("Done") group card HTML -------------------------------
-
-function buildCollapsedGroupHTML(group) {
-  const sym        = config.currencySymbol;
-  const gc         = group.groupCost;
-  const readyItems = group.items.filter(i => i.status === 'ready' && i.cost);
-  const totalParts = readyItems.reduce((s, i) => s + i.settings.quantity, 0);
-  const priceStr   = gc ? fmt(gc.groupTotal, sym) : '—';
-
-  return `
-    <div class="group-collapsed">
-      <span class="group-collapsed-check" title="Complete" aria-hidden="true">${icon('checkCircle', { size: 20 })}</span>
-      <div class="group-collapsed-info">
-        <div class="group-collapsed-name">${esc(group.name)}</div>
-        <div class="group-collapsed-meta">${readyItems.length} file${readyItems.length === 1 ? '' : 's'} · ${totalParts} part${totalParts === 1 ? '' : 's'}</div>
+      <div class="mset-foot">
+        <button class="model-delete-btn ${isArmedForDelete('group', group.id) ? 'armed' : ''}"
+                data-action="delete-group">
+          ${icon('trash', { size: 14 })} ${isArmedForDelete('group', group.id) ? 'Tap again to delete this model' : 'Delete this model'}
+        </button>
       </div>
-      <div class="group-collapsed-price">${priceStr}</div>
-      <button class="btn btn-ghost btn-sm group-edit-btn" data-action="expand-group" title="Edit this model" aria-label="Edit this model">${icon('pencil', { size: 14 })} Edit</button>
-    </div>
-  `;
+
+    </div>`;
 }
 
-// ---- File item card HTML ---------------------------------------------
+// ---- Part row HTML ---------------------------------------------------
+// At rest a part is one line: what it is, how big, how many, how much.
+// Everything that changes it lives behind the row's own disclosure.
 
-function buildItemHTML(item, group) {
+function buildItemHTML(item, group, showMoveControl) {
   const sym = config.currencySymbol;
 
   if (item.status === 'loading') return `
-    <div class="file-card" data-id="${item.id}">
-      <div class="card-header">
-        <div class="card-thumb loading-thumb"><div class="spinner"></div><span>Analysing…</span></div>
-        <div class="card-header-text">
-          <div class="card-filename">${esc(item.name)}</div>
-          <div class="card-meta">${formatBytes(item.size)}</div>
-        </div>
-      </div>
-      <div class="card-body">
-        <div class="progress-bar"><div class="progress-fill animate"></div></div>
+    <div class="part part-loading" data-id="${item.id}">
+      <div class="part-thumb"><div class="spinner"></div></div>
+      <div class="part-main">
+        <div class="part-name">${esc(item.name)}</div>
+        <div class="part-spec">Reading file…</div>
       </div>
     </div>`;
 
   if (item.status === 'error') return `
-    <div class="file-card" data-id="${item.id}">
-      <div class="card-header">
-        <div class="card-thumb error-thumb">${icon('alertTriangle', { size: 22 })}</div>
-        <div class="card-header-text">
-          <div class="card-filename">${esc(item.name)}</div>
-          <div class="card-meta text-error">${icon('alertTriangle', { size: 13 })} ${esc(item.errorMsg || 'Could not read this file — is it a valid STL?')}</div>
-        </div>
+    <div class="part part-error" data-id="${item.id}">
+      <div class="part-thumb part-thumb-error">${icon('alertTriangle', { size: 18 })}</div>
+      <div class="part-main">
+        <div class="part-name">${esc(item.name)}</div>
+        <div class="part-spec part-spec-error">${esc(item.errorMsg || 'Could not read this file — is it a valid STL?')}</div>
       </div>
-      <div class="card-body">
-        <button class="btn btn-ghost btn-sm" data-action="remove-item" data-id="${item.id}">Remove</button>
-      </div>
+      <button class="part-remove-inline" data-action="remove-item" data-id="${item.id}">Remove</button>
     </div>`;
 
-  const d   = item.data;
-  const c   = item.cost;
-  const ps  = item.settings.presupported;
-  const dims = c ? c.scaledDims : d.dimensions;
+  const d     = item.data;
+  const c     = item.cost;
+  const ps    = item.settings.presupported;
+  const dims  = c ? c.scaledDims : d.dimensions;
+  const isPla = group.settings.printMethod === 'pla';
+  const open  = !!item.expanded;
+  const scaled = item.settings.scale !== 1;
 
   const thumbHTML = item.thumbnail
-    ? `<img src="${item.thumbnail}" alt="${esc(item.name)}" class="thumb-img" loading="lazy">`
-    : `<div class="thumb-placeholder">STL</div>`;
+    ? `<img src="${item.thumbnail}" alt="" class="thumb-img" loading="lazy">`
+    : `<span class="thumb-ph">STL</span>`;
 
-  const isPla = group.settings.printMethod === 'pla';
+  // Anything the customer must not miss stays on the collapsed row.
+  const flags = [];
+  if (c && !c.priceable) {
+    flags.push(`<span class="part-flag part-flag-error">${icon('alertTriangle', { size: 13 })} Too large to print — scale down or split into parts</span>`);
+  }
+  if (item.warning) {
+    flags.push(`<span class="part-flag part-flag-warn">${icon('alertTriangle', { size: 13 })} ${esc(item.warning)}</span>`);
+  }
 
-  const groupMoveHTML = `
-    <div class="control-row">
-      <label><span class="label-icon-row">${icon('folder', { size: 14 })} Model</span></label>
-      <select class="input-group-move" data-action="move-item" data-id="${item.id}">
+  const specBits = [];
+  if (c && c.priceable) {
+    specBits.push(`${fmtMm(dims.x)} × ${fmtMm(dims.y)} × ${fmtMm(dims.z)}`);
+    specBits.push(c.tier ? `${esc(c.tier.name)} tier` : 'priced by volume');
+    if (scaled) specBits.push(`${Math.round(item.settings.scale * 100)}% scale`);
+    if (isPla) {
+      const pc = (config.plaColors || []).find(p => p.id === item.settings.plaColor);
+      if (pc) specBits.push(esc(pc.name));
+    } else if (ps) {
+      specBits.push('pre-supported');
+    }
+  } else {
+    specBits.push(`${fmtMm(d.dimensions.x)} × ${fmtMm(d.dimensions.y)} × ${fmtMm(d.dimensions.z)}`);
+  }
+
+  const priceHTML = c && c.priceable
+    ? `<span class="part-price-val">${fmt(c.totalCost, sym)}</span>${
+         c.quantity > 1 ? `<span class="part-price-each">${fmt(c.unitCost, sym)} each</span>` : ''}`
+    : `<span class="part-price-val part-price-na">—</span>`;
+
+  return `
+    <div class="part ${open ? 'open' : ''}" data-id="${item.id}">
+      <button class="part-thumb" data-action="view3d" data-id="${item.id}"
+              aria-label="View ${esc(item.name)} in 3D">
+        ${thumbHTML}
+        <span class="part-thumb-hint">${icon('eye', { size: 13 })}</span>
+      </button>
+
+      <div class="part-main">
+        <div class="part-name" title="${esc(item.name)}">${esc(item.name)}</div>
+        <div class="part-spec">${specBits.join(' · ')}</div>
+        ${flags.join('')}
+      </div>
+
+      <div class="part-qty">
+        <label class="sr-only" for="qty-${item.id}">Quantity of ${esc(item.name)}</label>
+        <span class="part-qty-x" aria-hidden="true">Qty</span>
+        <input type="number" id="qty-${item.id}" class="input-qty" value="${item.settings.quantity}"
+               min="1" max="999" data-action="quantity" data-id="${item.id}">
+      </div>
+
+      <div class="part-price">${priceHTML}</div>
+
+      <button class="part-toggle" data-action="toggle-part" data-id="${item.id}"
+              aria-expanded="${open ? 'true' : 'false'}"
+              aria-label="${open ? 'Hide' : 'Show'} options for ${esc(item.name)}">
+        ${icon(open ? 'chevronUp' : 'chevronDown', { size: 16 })}
+      </button>
+    </div>
+
+    ${open ? buildItemDetailHTML(item, group, { isPla, ps, c, sym, showMoveControl }) : ''}
+  `;
+}
+
+// ---- Part detail (expanded) ------------------------------------------
+
+function buildItemDetailHTML(item, group, ctx) {
+  const { isPla, ps, c, sym, showMoveControl } = ctx;
+
+  const supportsHTML = !isPla ? `
+    <div class="pset">
+      <div class="pset-label">
+        Supports
+        <span class="info-tip-wrap">
+          <button type="button" class="info-tip-btn" data-action="toggle-info"
+                  aria-label="What are supports?" aria-expanded="false">${icon('helpCircle', { size: 15 })}</button>
+          <span class="info-tip-content" role="tooltip">
+            Supports are temporary scaffolding that holds up overhanging parts while they print. If your file already has them built in, say so — it saves us time and costs less. Files without them are priced with an allowance for the support material we add.
+          </span>
+        </span>
+      </div>
+      <div class="seg">
+        <button class="seg-btn ${!ps ? 'active' : ''}" data-action="presupported" data-id="${item.id}" data-val="false">We add supports</button>
+        <button class="seg-btn ${ps ? 'active' : ''}" data-action="presupported" data-id="${item.id}" data-val="true">Already supported</button>
+      </div>
+    </div>` : '';
+
+  const colorHTML = isPla ? `
+    <div class="pset">
+      <div class="pset-label">Filament colour <span class="pset-note">white, black &amp; dark grey included</span></div>
+      <div class="pla-color-row">
+        ${(config.plaColors || []).map(pc => {
+          const active = item.settings.plaColor === pc.id;
+          const pct = config.plaColorSurchargePct?.[pc.tier] ?? 0;
+          const badge = pct > 0 ? `+${pct}%` : '';
+          return `
+            <button type="button" class="pla-swatch-btn" data-action="pla-color-select" data-id="${item.id}" data-color-id="${esc(pc.id)}"
+                    title="${esc(pc.name)}${badge ? ' (' + badge + ')' : ''}" aria-label="${esc(pc.name)}" aria-pressed="${active}">
+              <span class="pla-swatch ${active ? 'active' : ''}" style="background:${esc(pc.hex)};">
+                ${active ? `<span class="primer-check">${icon('check', { size: 13 })}</span>` : ''}
+              </span>
+              <span class="pla-swatch-label">${esc(pc.name)}${badge ? `<span class="pla-swatch-badge">${badge}</span>` : ''}</span>
+            </button>`;
+        }).join('')}
+      </div>
+    </div>` : '';
+
+  const moveHTML = showMoveControl ? `
+    <div class="pset pset-inline">
+      <label class="pset-label" for="move-${item.id}">Belongs to</label>
+      <select class="input-group-move" id="move-${item.id}" data-action="move-item" data-id="${item.id}">
         ${groups.map(g => `<option value="${esc(g.id)}" ${g.id === group.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}
-        <option value="__new__">+ Move to new model…</option>
+        <option value="__new__">Move to a new model…</option>
       </select>
-    </div>`;
+    </div>` : '';
 
-  // Scale presets — data-id included so no need for closest() lookup
-  const scalePresets = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
-  const presetBtns = scalePresets.map(s =>
-    `<button class="scale-preset ${item.settings.scale === s ? 'active' : ''}"
-             data-action="scale-preset" data-scale="${s}" data-id="${item.id}">${Math.round(s * 100)}%</button>`
-  ).join('');
-
-  const breakdownHTML = config.showCostBreakdown && c && c.priceable ? `
+  const breakdownHTML = (config.showCostBreakdown && c && c.priceable) ? `
     <details class="cost-details">
-      <summary><span class="label-icon-row">${icon('lightbulb', { size: 14 })} See price breakdown</span></summary>
+      <summary>How this price is worked out</summary>
       <table class="breakdown-table">
         ${c.tier ? `
-          <tr><td>Size tier: ${esc(c.tier.name)} (model size ≤ ${c.tier.maxDimensionMm ? c.tier.maxDimensionMm + 'mm' : 'build plate'})</td><td>${fmt(c.tier.price, sym)}</td></tr>
+          <tr><td>Size tier: ${esc(c.tier.name)} (up to ${c.tier.maxDimensionMm ? c.tier.maxDimensionMm + 'mm' : 'build plate'})</td><td>${fmt(c.tier.price, sym)}</td></tr>
           ${c.surchargePct > 0 ? `<tr><td>${esc(c.materialName)} surcharge (+${c.surchargePct}%)</td><td>${fmt(c.surchargeAmount, sym)}</td></tr>` : ''}
-          ${c.supportHandlingFee > 0 ? `<tr><td>Support handling (no pre-supported file)</td><td>${fmt(c.supportHandlingFee, sym)}</td></tr>` : ''}
+          ${c.supportHandlingFee > 0 ? `<tr><td>Support handling</td><td>${fmt(c.supportHandlingFee, sym)}</td></tr>` : ''}
         ` : `
           <tr><td>PLA volume (${c.scaledVolumeMl.toFixed(2)}mL × ${fmt(config.fdm?.costPerMl ?? 0, sym)}/mL)</td><td>${fmt(c.baseCost ?? c.unitCost, sym)}</td></tr>
           ${c.colorSurchargePct > 0 ? `<tr><td>Colour surcharge (+${c.colorSurchargePct}%)</td><td>${fmt(c.colorSurchargeAmount, sym)}</td></tr>` : ''}
@@ -525,112 +647,30 @@ function buildItemHTML(item, group) {
     </details>` : '';
 
   return `
-    <div class="file-card" data-id="${item.id}">
-      <button class="card-remove-x ${isArmedForDelete('item', item.id) ? 'armed' : ''}"
-              data-action="remove-item" data-id="${item.id}" title="Delete this part" aria-label="Delete this part">
-        ${icon('trash')}${isArmedForDelete('item', item.id) ? '<span class="delete-confirm-text">Delete part?</span>' : ''}
-      </button>
+    <div class="part-detail" data-detail-for="${item.id}">
+      ${supportsHTML}
+      ${colorHTML}
 
-      <div class="card-header">
-        <div class="card-thumb" data-action="view3d" data-id="${item.id}" title="Click to view in 3D">
-          ${thumbHTML}
-          <div class="thumb-overlay">${icon('eye', { size: 14 })} View in 3D</div>
-        </div>
-        <div class="card-header-text">
-          <div class="card-filename" title="${esc(item.name)}">
-            ${esc(item.name)}
-            ${ps && !isPla ? `<span class="presupported-badge">${icon('check', { size: 12 })} Pre-Supported</span>` : ''}
-          </div>
-          <div class="card-meta">
-            <span>${formatBytes(item.size)}</span> ·
-            <span>${fmtMm(d.dimensions.x)} × ${fmtMm(d.dimensions.y)} × ${fmtMm(d.dimensions.z)}</span> ·
-            <span>${d.triangleCount.toLocaleString()} triangles</span>
-          </div>
+      <div class="pset pset-inline">
+        <label class="pset-label" for="scale-${item.id}">Print scale</label>
+        <div class="scale-ctl">
+          <input type="number" class="input-scale" id="scale-${item.id}" value="${item.settings.scale}"
+                 min="0.1" max="10" step="0.05" data-action="scale" data-id="${item.id}">
+          <span class="scale-suffix">× original</span>
+          ${item.settings.scale !== 1
+            ? `<button class="scale-reset" data-action="scale-preset" data-scale="1" data-id="${item.id}">Reset to 100%</button>`
+            : ''}
         </div>
       </div>
 
-      <div class="card-body">
-        ${item.warning ? `<div class="card-warning">${esc(item.warning)}</div>` : ''}
-        ${c && c.priceable ? `<div class="card-dims">${icon('maximize', { size: 14 })} Print size: <strong>${fmtMm(dims.x)} × ${fmtMm(dims.y)} × ${fmtMm(dims.z)}</strong> &nbsp;·&nbsp; <strong>${c.tier ? esc(c.tier.name) + ' tier' : 'PLA — priced by volume'}</strong></div>` : ''}
-        ${c && !c.priceable ? `<div class="card-warning">${icon('alertTriangle', { size: 14 })} This model is too large to fit ${isPla ? 'our FDM printer' : 'our build plate, even with the support margin'}. Please scale it down or split it into parts before requesting a quote.</div>` : ''}
+      ${moveHTML}
+      ${breakdownHTML}
 
-        <div class="card-controls">
-
-          ${!isPla ? `
-          <div class="control-block">
-            <div class="control-label"><span class="label-icon-row">${icon('construction', { size: 15 })} Support Structures</span></div>
-            <div class="control-desc">
-              Supports are temporary scaffolding automatically added to hold up overhanging parts during printing.
-              If your file already includes them, select "Pre-supported" to avoid being charged twice.
-            </div>
-            <div class="seg-control supports-seg">
-              <button class="seg-btn ${!ps ? 'active' : ''}"
-                      data-action="presupported" data-id="${item.id}" data-val="false">
-                ${icon('construction', { size: 14 })} Standard &mdash; add supports
-              </button>
-              <button class="seg-btn ${ps ? 'active-green' : ''}"
-                      data-action="presupported" data-id="${item.id}" data-val="true">
-                ${icon('check', { size: 14 })} Pre-supported &mdash; already included
-              </button>
-            </div>
-            <div class="control-hint ${ps ? 'hint-green' : ''}">
-              ${ps
-                ? `${icon('check', { size: 13 })} Marked as already supported — this saves us time, so it’s priced a little cheaper.`
-                : 'We’ll add supports during printing — a small handling fee applies, and your file’s effective size for pricing includes an allowance for the extra support material.'}
-            </div>
-          </div>` : ''}
-
-          ${isPla ? `
-          <div class="control-block">
-            <div class="control-label"><span class="label-icon-row">${icon('layers', { size: 15 })} Filament Colour</span></div>
-            <div class="control-desc">White, Black &amp; Dark Grey are included. Other colours add a % of this part's cost.</div>
-            <div class="pla-color-row">
-              ${(config.plaColors || []).map(pc => {
-                const active = item.settings.plaColor === pc.id;
-                const pct = config.plaColorSurchargePct?.[pc.tier] ?? 0;
-                const badge = pct > 0 ? `+${pct}%` : '';
-                return `
-                  <button type="button" class="pla-swatch-btn" data-action="pla-color-select" data-id="${item.id}" data-color-id="${esc(pc.id)}"
-                          title="${esc(pc.name)}${badge ? ' (' + badge + ')' : ''}" aria-label="${esc(pc.name)}" aria-pressed="${active}">
-                    <span class="pla-swatch ${active ? 'active' : ''}" style="background:${esc(pc.hex)};">
-                      ${active ? `<span class="primer-check">${icon('check', { size: 14 })}</span>` : ''}
-                    </span>
-                    <span class="pla-swatch-label">${esc(pc.name)}${badge ? `<span class="pla-swatch-badge">${badge}</span>` : ''}</span>
-                  </button>`;
-              }).join('')}
-            </div>
-          </div>` : ''}
-
-          <div class="control-block">
-            <div class="control-label"><span class="label-icon-row">${icon('maximize', { size: 15 })} Print Scale</span></div>
-            <div class="control-desc">Resize the model. 1.0 = original file size. 0.5 = half size. 2.0 = double size.</div>
-            <div class="scale-wrap">
-              <div class="scale-input-row">
-                <input type="number" class="input-scale" value="${item.settings.scale}" min="0.1" max="10" step="0.05"
-                       data-action="scale" data-id="${item.id}">
-                <span class="scale-suffix">× original size</span>
-              </div>
-              <div class="scale-presets">${presetBtns}</div>
-            </div>
-          </div>
-
-          <div class="control-row">
-            <label><span class="label-icon-row">${icon('hash', { size: 14 })} Quantity</span></label>
-            <input type="number" class="input-qty" value="${item.settings.quantity}" min="1" max="999"
-                   data-action="quantity" data-id="${item.id}">
-          </div>
-
-          ${groupMoveHTML}
-        </div>
-
-        ${breakdownHTML}
-
-        <div class="card-cost">
-          ${c && c.priceable ? `
-            <span class="unit-cost">${fmt(c.unitCost, sym)} each</span>
-            ${c.quantity > 1 ? `<span class="total-cost">${fmt(c.totalCost, sym)} for ${c.quantity}</span>` : ''}
-          ` : c && !c.priceable ? `<span class="text-error">Cannot price — too large</span>` : '—'}
-        </div>
+      <div class="pset-foot">
+        <button class="part-delete-btn ${isArmedForDelete('item', item.id) ? 'armed' : ''}"
+                data-action="remove-item" data-id="${item.id}">
+          ${icon('trash', { size: 14 })} ${isArmedForDelete('item', item.id) ? 'Tap again to remove' : 'Remove this part'}
+        </button>
       </div>
     </div>`;
 }
@@ -654,9 +694,25 @@ function handleGroupClick(e, group, card) {
       break;
 
     case 'add-files-to-group':
-      _pendingGroupId = group.id;
-      document.getElementById('file-input').click();
+      pickFiles(group.id);
       break;
+
+    case 'toggle-model-settings':
+      group.settingsOpen = !group.settingsOpen;
+      renderAll();
+      break;
+
+    case 'toggle-part': {
+      const found = findItem(id);
+      if (found) {
+        const wasOpen = found.item.expanded;
+        // One part open at a time — an expanded row is a workspace, not a list.
+        allItems().forEach(i => { i.expanded = false; });
+        found.item.expanded = !wasOpen;
+        renderAll();
+      }
+      break;
+    }
 
     case 'remove-item': {
       // Failed/error uploads have nothing to lose — remove immediately.
@@ -718,16 +774,6 @@ function handleGroupClick(e, group, card) {
       btn.setAttribute('aria-expanded', open ? 'true' : 'false');
       break;
     }
-
-    case 'collapse-group':
-      group.collapsed = true;
-      renderAll();
-      break;
-
-    case 'expand-group':
-      group.collapsed = false;
-      renderAll();
-      break;
 
     case 'presupported': {
       const found = findItem(id);
@@ -798,8 +844,13 @@ function handleGroupInput(e, group) {
   }
 }
 
-// Track which group the next file batch should go into
-let _pendingGroupId = null;
+// What the next batch of files means. Set by whichever control opened the
+// picker, so grouping is decided by what the customer asked for rather than
+// inferred from how many files they happened to select.
+//   'single'  — each file becomes its own model
+//   'model'   — all files land in one new multi-part model
+//   <groupId> — all files join that existing model
+let _uploadIntent = 'single';
 
 // Chain background Shopify-file uploads one after another instead of
 // letting a multi-file drop fire them all concurrently — see the comment
@@ -807,8 +858,8 @@ let _pendingGroupId = null;
 let _uploadChain = Promise.resolve();
 
 async function handleFilesForGroup(files) {
-  const targetGroupId = _pendingGroupId;
-  _pendingGroupId     = null;
+  const intent  = _uploadIntent;
+  _uploadIntent = 'single';
 
   const validFiles = [];
   for (const file of files) {
@@ -821,34 +872,53 @@ async function handleFilesForGroup(files) {
   }
   if (!validFiles.length) return;
 
-  const isTopLevel = targetGroupId === 'new' || !targetGroupId;
+  const firstUpload = !groups.some(g => g.items.length);
 
-  if (isTopLevel && validFiles.length > 1) {
-    // A multi-file top-level drop usually means several separate models, not
-    // several parts of the same one — give each file its own model group by
-    // default. Parts that do belong together can be merged afterwards via
-    // each file's "Model" picker.
+  if (intent === 'single') {
+    // One model per file, however many were selected.
     for (const file of validFiles) {
-      const newGroup = createGroup(`Model ${groups.length + 1}`);
-      groups.push(newGroup);
-      await addFileToGroup(file, newGroup);
+      const g = createGroup(nextModelName());
+      groups.push(g);
+      await addFileToGroup(file, g);
     }
-    return;
-  }
-
-  let targetGroup;
-  if (targetGroupId === 'new') {
-    // Top-level upload — always land in a fresh group
-    targetGroup = createGroup(`Model ${groups.length + 1}`);
-    groups.push(targetGroup);
-  } else if (targetGroupId) {
-    targetGroup = groups.find(g => g.id === targetGroupId) ?? ensureGroup();
+  } else if (intent === 'model') {
+    const g = createGroup(nextModelName());
+    groups.push(g);
+    for (const file of validFiles) await addFileToGroup(file, g);
+    checkAssemblyUnlocked(g);
   } else {
-    targetGroup = ensureGroup();
+    const g = groups.find(x => x.id === intent) ?? ensureGroup();
+    for (const file of validFiles) await addFileToGroup(file, g);
+    checkAssemblyUnlocked(g);
   }
 
-  for (const file of validFiles) {
-    await addFileToGroup(file, targetGroup);
+  // Show the controls once, on the very first part, so they're discovered
+  // rather than hidden — after that everything opens on request.
+  if (firstUpload && allItems().length === 1) {
+    const first = allItems()[0];
+    if (first.status === 'ready') first.expanded = true;
+  }
+  renderAll();
+}
+
+function nextModelName() {
+  return `Model ${groups.length + 1}`;
+}
+
+/**
+ * Assembly only exists once a model has 2+ parts. The moment it becomes
+ * available, open the model's settings and flag it for a one-shot highlight
+ * so the new option is noticed instead of silently appearing.
+ */
+function checkAssemblyUnlocked(group) {
+  const parts = group.items
+    .filter(i => i.status === 'ready' && i.cost)
+    .reduce((s, i) => s + i.settings.quantity, 0);
+  if (parts >= 2 && !group._assemblyAnnounced) {
+    group._assemblyAnnounced = true;
+    group.settingsOpen = true;
+    group.justUnlocked = true;
+    setTimeout(() => { group.justUnlocked = false; renderAll(); }, 2200);
   }
 }
 
@@ -1132,12 +1202,19 @@ function renderOrderSummary() {
     <h2 class="summary-title">Order Summary</h2>
     <div class="summary-groups">${groupLines}</div>
     <div class="summary-divider"></div>
-    <div class="summary-total"><span>Grand Total</span><span>${fmt(grandTotal, sym)}</span></div>
+    <div class="summary-total">
+      <span>${exceedsCustomQuoteThreshold(grandTotal, config) ? 'Estimate' : 'Grand total'}</span>
+      <span>${fmt(grandTotal, sym)}</span>
+    </div>
     ${minimumShortfall > 0 ? `
-      <p class="summary-min-note">${icon('sparkles', { size: 14 })} You're already covered by our ${fmt(config.minimumOrderTotal, sym)} order minimum — add up to ${fmt(minimumShortfall, sym)} more in parts at no extra cost!</p>
+      <p class="summary-min-note">${icon('sparkles', { size: 14 })} You're already covered by our ${fmt(config.minimumOrderTotal, sym)} order minimum — add up to ${fmt(minimumShortfall, sym)} more in parts at no extra cost.</p>
     ` : ''}
-    <p class="summary-note">${icon('lightbulb', { size: 14 })} Estimate only — final price confirmed after file review.</p>
-    <button class="btn btn-primary btn-lg" id="request-quote-btn">${isQuote ? 'Request a Quote' : 'Add to Cart'} ${icon(isQuote ? 'arrowRight' : 'cart', { size: 15 })}</button>
+    ${isQuote ? `
+      <p class="summary-note summary-note-quote">${icon('info', { size: 14 })} Over ${fmt(config.customQuoteOrderThreshold, sym)} we price by hand — this figure is a guide, not your final quote.</p>
+    ` : `
+      <p class="summary-note">${icon('lightbulb', { size: 14 })} Estimate only — we confirm the final price once we've checked your files.</p>
+    `}
+    <button class="btn btn-primary btn-lg" id="request-quote-btn">${isQuote ? 'Request a quote' : 'Add to cart'} ${icon(isQuote ? 'arrowRight' : 'cart', { size: 15 })}</button>
   `;
   document.getElementById('request-quote-btn')?.addEventListener('click', openOrderForm);
 
@@ -1327,16 +1404,36 @@ function openOrderForm() {
   const grandTotal = calcOrderTotal(activeGroups, config);
   const minimumShortfall = calcOrderMinimumShortfall(activeGroups, config);
 
+  // Above the threshold the order stops being a self-serve checkout and
+  // becomes a hand-priced quote, so the screen stops presenting the figure
+  // as a price: the notice leads, the total is relabelled and de-emphasised,
+  // and the button says what will actually happen.
   const isQuote = exceedsCustomQuoteThreshold(grandTotal, config);
+
+  const reviewWrap = document.getElementById('order-review-wrap');
+  reviewWrap?.classList.toggle('custom-quote', isQuote);
+
   const quoteNoteEl = document.getElementById('review-custom-quote-note');
-  if (quoteNoteEl) quoteNoteEl.style.display = isQuote ? 'block' : 'none';
+  if (quoteNoteEl) {
+    quoteNoteEl.style.display = isQuote ? 'block' : 'none';
+    if (isQuote) {
+      quoteNoteEl.innerHTML = `${icon('info', { size: 15 })} <strong>This one we price by hand.</strong>
+        Orders over ${fmt(config.customQuoteOrderThreshold, sym)} are quoted individually — the figure below is what
+        the calculator worked out, but it isn't your final price. Send it through and we'll come back with a firm
+        quote, usually within one working day.`;
+    }
+  }
+
+  const totalLabelEl = document.getElementById('review-total-label');
+  if (totalLabelEl) totalLabelEl.textContent = isQuote ? 'Calculator estimate (not final)' : 'Grand total (estimated)';
+
   const marketingBlockEl = document.getElementById('marketing-consent-block');
   if (marketingBlockEl) marketingBlockEl.style.display = isQuote ? 'block' : 'none';
 
-  // Below the custom-quote threshold this order goes straight to cart +
-  // checkout, not manual review — the submit button should say so.
+  // Write through the label/icon slots rather than the button's innerHTML —
+  // submitOrder() writes in-flight upload progress into these same nodes.
   const { label: submitLabelEl, iconSlot: submitIconEl } = ensureSubmitButtonParts();
-  if (submitLabelEl) submitLabelEl.textContent = isQuote ? 'Submit Quote Request' : 'Add to Cart';
+  if (submitLabelEl) submitLabelEl.textContent = isQuote ? 'Request a hand-priced quote' : 'Add to cart';
   if (submitIconEl) submitIconEl.innerHTML = icon(isQuote ? 'arrowRight' : 'cart', { size: 15 });
 
   const minNoteEl = document.getElementById('review-minimum-note');
