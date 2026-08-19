@@ -33,6 +33,16 @@ async function readJsonBody(req: Request): Promise<any> {
   }
 }
 
+// Fallbacks for when the shop has no saved pricing config metafield yet.
+// These MUST mirror DEFAULT_CONFIG in js/config.js, because the browser falls
+// back to those same numbers — and if the two sides disagree the relay
+// rejects perfectly ordinary orders. That is exactly what happened with the
+// whole-order minimum: the browser floored a £2.80 order up to £5.00 while
+// the relay, defaulting to no minimum at all, expected £2.80 and refused
+// every order below the floor.
+const DEFAULT_MINIMUM_ORDER_TOTAL = 5.00;
+const DEFAULT_CUSTOM_QUOTE_THRESHOLD = 150.00;
+
 const PRIMER_LABELS: Record<string, string> = {
   unprimed: "Unprimed",
   black: "Black Primer",
@@ -185,7 +195,9 @@ export async function handleRequest(
       // calcOrderTotal) and for the manual-review threshold check below.
       const shopConfig = await deps.getShopConfig();
       const configuredMinimum =
-        typeof shopConfig?.minimumOrderTotal === "number" ? shopConfig.minimumOrderTotal : 0;
+        typeof shopConfig?.minimumOrderTotal === "number"
+          ? shopConfig.minimumOrderTotal
+          : DEFAULT_MINIMUM_ORDER_TOTAL;
       const expectedTotal = Math.max(computedTotal, configuredMinimum);
 
       // Each line item's price arrives already rounded to the penny, while the
@@ -216,7 +228,7 @@ export async function handleRequest(
       const configThreshold =
         typeof shopConfig?.customQuoteOrderThreshold === "number"
           ? shopConfig.customQuoteOrderThreshold
-          : Infinity;
+          : DEFAULT_CUSTOM_QUOTE_THRESHOLD;
       const serverThresholdExceeded = Boolean(body.thresholdExceeded) ||
         body.grandTotal >= configThreshold;
 

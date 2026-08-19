@@ -325,6 +325,61 @@ Deno.test("POST /checkout still creates the quote when a file failed to upload (
   assertEquals(body.mode, "quote");
 });
 
+Deno.test("POST /checkout accepts an order floored to the whole-order minimum when the shop has no saved config", async () => {
+  // A shop that has never saved its pricing config returns null here, and the
+  // browser falls back to DEFAULT_CONFIG's £5 minimum. The relay has to fall
+  // back to the same figure, or every order under the floor is rejected.
+  const deps = fakeDeps({
+    getShopConfig: () => Promise.resolve(null),
+    createPricedVariant: () => Promise.resolve({ variantId: 999 }),
+  });
+  const res = await handleRequest(
+    new Request("https://relay.test/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        customerEmail: "jane@example.com",
+        customerName: "Jane Smith",
+        grandTotal: 5.00, // floored up from the 2.80 of actual parts
+        thresholdExceeded: false,
+        lineItems: [{ title: "Model 1", price: "2.80", quantity: 1, properties: [] }],
+      }),
+    }),
+    deps,
+  );
+  assertEquals(res.status, 200);
+});
+
+Deno.test("POST /checkout forces manual review above the default threshold when the shop has no saved config", async () => {
+  let draftOrderCalled = false;
+  const deps = fakeDeps({
+    getShopConfig: () => Promise.resolve(null),
+    findOrCreateCustomer: () => Promise.resolve({ id: "gid://shopify/Customer/1" }),
+    createDraftOrder: () => {
+      draftOrderCalled = true;
+      return Promise.resolve({ draftOrderId: "999" });
+    },
+    sendQuoteNotification: () => Promise.resolve(),
+    createPricedVariant: () => Promise.resolve({ variantId: 999 }),
+  });
+  const res = await handleRequest(
+    new Request("https://relay.test/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        customerEmail: "jane@example.com",
+        customerName: "Jane Smith",
+        grandTotal: 200,
+        thresholdExceeded: false, // client tries to skip manual review
+        lineItems: [{ title: "Model 1", price: "200.00", quantity: 1, properties: [] }],
+      }),
+    }),
+    deps,
+  );
+  assertEquals(res.status, 200);
+  assertEquals(draftOrderCalled, true);
+});
+
 Deno.test("POST /checkout accepts a multi-model order whose per-line penny rounding drifts past a flat 1p", async () => {
   const deps = fakeDeps({
     getShopConfig: () => Promise.resolve(null),
