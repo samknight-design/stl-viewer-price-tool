@@ -1,5 +1,17 @@
 # Shopify Integration Implementation Plan
 
+> ⚠️ **HISTORICAL — PARTLY SUPERSEDED. Do not rebuild from this document.**
+> This plan specifies storing uploaded STLs in **Shopify Files**. That approach
+> was abandoned on 2026-08-14: Shopify's Admin API hard-caps generic `FILE`
+> staged uploads at 20 MB, which customer STLs routinely exceed, and no request
+> parameter lifts it. Uploads now go to **Supabase Storage** via signed upload
+> URLs, and the `/files/finalize` and `resolveFileUrl` steps described below no
+> longer exist. Several pricing and deployment details have also moved on.
+>
+> **The current source of truth is `docs/shopify-integration-runbook.md`.**
+> Read that first; use this file only for historical context on the original
+> task breakdown.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Wire the existing static STL price calculator into the Arcane Flame Shopify store end-to-end — instant Add-to-Cart checkout at the exact calculated price, orders ≥£150 routed to manual-review Draft Orders, and every uploaded STL + its thumbnail stored natively in Shopify and linked to the resulting order, ready for a future packing/sorting tool to read.
