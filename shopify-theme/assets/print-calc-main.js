@@ -1402,7 +1402,12 @@ function clearFormError() {
 // findOrCreateCustomer, just for a different Shopify index. Without a
 // retry, a fast submit can hit a transient 422 "sold out" for a variant
 // that in fact exists and is for sale.
-const CART_ADD_RETRY_DELAYS_MS = [500, 1000, 2000];
+// Measured on this store: a variant created via the Admin API can take well
+// over ten seconds to become addable, and the previous 3.5s of retries
+// routinely expired first — the customer got a dead-looking button while
+// Shopify was still catching up. Verified by hand: the same variant that
+// returned 422 throughout the old window returned 200 a minute later.
+const CART_ADD_RETRY_DELAYS_MS = [500, 1000, 2000, 3000, 4000, 5000, 5000];
 
 async function addVariantToCart(variantId, properties) {
   let lastError;
@@ -1523,13 +1528,19 @@ async function submitOrder(e) {
         _quote_ref: _orderNumber ?? '',
         _customer_notes: notes,
       };
+      // Adding can spend a few seconds waiting for the new variant to reach
+      // the storefront, so say so rather than leaving the button looking dead.
+      if (submitLabelEl) submitLabelEl.textContent = 'Adding to cart…';
       return addVariantToCart(result.variantId, cartProperties).then(() => {
         window.location.href = '/checkout';
       });
     })
     .catch(err => {
       console.error(err);
-      showToast('Something went wrong submitting your order — please try again or contact us.', 'error');
+      // Report inside the modal, not via showToast — a toast at the bottom of
+      // the page is exactly how this failure stayed invisible before.
+      showFormError('Something went wrong submitting your order — please try again in a moment, or contact us if it keeps happening.');
+      if (submitLabelEl) submitLabelEl.textContent = submitBtnOriginalText;
       if (submitBtn) submitBtn.disabled = false;
     });
 }
