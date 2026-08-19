@@ -167,10 +167,10 @@ export async function handleRequest(
         !Number.isFinite(body.grandTotal) ||
         body.grandTotal <= 0
       ) {
-        return json({ error: "Invalid grandTotal" }, 400);
+        return json({ error: "Invalid grandTotal", received: body.grandTotal }, 400);
       }
       if (!Array.isArray(body.lineItems) || body.lineItems.length === 0) {
-        return json({ error: "Invalid lineItems" }, 400);
+        return json({ error: "Invalid lineItems", received: body.lineItems }, 400);
       }
 
       const computedTotal = body.lineItems.reduce(
@@ -197,7 +197,17 @@ export async function handleRequest(
       // since altering a price moves the total by whole pennies at least.
       const tolerance = 0.01 * Math.max(1, body.lineItems.length);
       if (Math.abs(expectedTotal - body.grandTotal) > tolerance) {
-        return json({ error: "grandTotal does not match line items" }, 400);
+        // Include the numbers. These are the customer's own figures, not
+        // secrets, and without them a rejection reaches the browser as an
+        // unexplained "something went wrong" that can only be diagnosed by
+        // reproducing the exact basket — which cost days on this integration.
+        return json({
+          error: "grandTotal does not match line items",
+          expected: Number(expectedTotal.toFixed(2)),
+          received: body.grandTotal,
+          lineCount: body.lineItems.length,
+          tolerance: Number(tolerance.toFixed(2)),
+        }, 400);
       }
 
       // The client can force manual review (thresholdExceeded: true) but
