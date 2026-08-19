@@ -1058,6 +1058,7 @@ function buildReviewGroupHTML(group, sym) {
 
 /** Advance from review step → contact form step */
 function showOrderForm() {
+  clearFormError();
   const ref = document.getElementById('form-order-ref');
   if (ref) ref.textContent = _orderNumber ?? '—';
   document.getElementById('order-review-wrap').style.display  = 'none';
@@ -1084,6 +1085,11 @@ function renderOrderSummary() {
 
   const grandTotal = calcOrderTotal(activeGroups, config);
   const minimumShortfall = calcOrderMinimumShortfall(activeGroups, config);
+
+  // Below the custom-quote threshold the order ends up in the cart rather than
+  // in a manual quote, so the summary's primary action shouldn't promise a
+  // quote either — it opens the same review step the submit button finishes.
+  const isQuote = exceedsCustomQuoteThreshold(grandTotal, config);
 
   const groupLines = activeGroups.map(g => {
     const gc = g.groupCost;
@@ -1131,7 +1137,7 @@ function renderOrderSummary() {
       <p class="summary-min-note">${icon('sparkles', { size: 14 })} You're already covered by our ${fmt(config.minimumOrderTotal, sym)} order minimum — add up to ${fmt(minimumShortfall, sym)} more in parts at no extra cost!</p>
     ` : ''}
     <p class="summary-note">${icon('lightbulb', { size: 14 })} Estimate only — final price confirmed after file review.</p>
-    <button class="btn btn-primary btn-lg" id="request-quote-btn">Request a Quote ${icon('arrowRight', { size: 15 })}</button>
+    <button class="btn btn-primary btn-lg" id="request-quote-btn">${isQuote ? 'Request a Quote' : 'Add to Cart'} ${icon(isQuote ? 'arrowRight' : 'cart', { size: 15 })}</button>
   `;
   document.getElementById('request-quote-btn')?.addEventListener('click', openOrderForm);
 
@@ -1253,6 +1259,10 @@ function setupOrderForm() {
   overlay?.addEventListener('click', e => { if (e.target === overlay) closeOrderForm(); });
   document.getElementById('order-close')?.addEventListener('click', closeOrderForm);
   document.getElementById('order-form')?.addEventListener('submit', submitOrder);
+  // Clear the validation message as soon as the customer acts on it, so a
+  // stale error can't sit there contradicting what they've just filled in.
+  document.getElementById('order-form')?.addEventListener('input', clearFormError);
+  document.getElementById('order-form')?.addEventListener('change', clearFormError);
 
   // Review step → form step
   document.getElementById('review-continue-btn')?.addEventListener('click', showOrderForm);
@@ -1357,6 +1367,34 @@ function closeOrderForm() {
   document.getElementById('order-overlay')?.classList.remove('open');
 }
 
+/**
+ * Shows a validation message inside the contact form, next to the button that
+ * was just pressed.
+ *
+ * These used to go through showToast(), which pins its message to the bottom
+ * of the viewport — several hundred pixels below the modal, and gone again
+ * after a few seconds. A customer who missed it saw the submit button do
+ * nothing at all and concluded the tool was broken, so the message has to
+ * live where the click happened.
+ */
+function showFormError(msg, field) {
+  const el = document.getElementById('order-form-error');
+  if (el) {
+    el.textContent = msg;
+    el.style.display = 'block';
+    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  } else {
+    // Older markup without the inline slot — better a toast than silence.
+    showToast(msg, 'error');
+  }
+  field?.focus({ preventScroll: true });
+}
+
+function clearFormError() {
+  const el = document.getElementById('order-form-error');
+  if (el) { el.textContent = ''; el.style.display = 'none'; }
+}
+
 // A variant freshly created by createPricedVariant (relay-side, via
 // productVariantsBulkCreate) is occasionally not yet visible to the
 // storefront cart API for a moment after creation — the same kind of
@@ -1392,8 +1430,10 @@ async function submitOrder(e) {
   const disclaimer       = form.querySelector('[name="disclaimer"]').checked;
   const marketingConsent = form.querySelector('[name="marketing-consent"]')?.checked ?? false;
 
-  if (!name || !email) { showToast('Please fill in your name and email.', 'error'); return; }
-  if (!disclaimer)     { showToast('Please tick the confirmation checkbox to continue.', 'error'); return; }
+  clearFormError();
+  if (!name)       return showFormError('Please enter your name.', form.querySelector('[name="cust-name"]'));
+  if (!email)      return showFormError('Please enter your email address.', form.querySelector('[name="cust-email"]'));
+  if (!disclaimer) return showFormError('Please tick the confirmation box above to continue.', form.querySelector('[name="disclaimer"]'));
 
   const activeGroups = groups.filter(g => g.items.some(i => i.status === 'ready'));
 
