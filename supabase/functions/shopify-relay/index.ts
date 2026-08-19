@@ -43,6 +43,15 @@ async function readJsonBody(req: Request): Promise<any> {
 const DEFAULT_MINIMUM_ORDER_TOTAL = 5.00;
 const DEFAULT_CUSTOM_QUOTE_THRESHOLD = 150.00;
 
+// The per-line rounding tolerance below has to be capped, and the number of
+// lines bounded. Scaling it per line without a ceiling let a crafted request
+// pad itself with hundreds of zero-priced lines until the allowed error
+// exceeded the entire order value — 600 lines bought a £0.01 variant. The
+// browser now derives its total from the same rounded prices it sends, so
+// real orders need almost no tolerance at all.
+const MAX_TOTAL_TOLERANCE = 0.10;
+const MAX_LINE_ITEMS = 50;
+
 const PRIMER_LABELS: Record<string, string> = {
   unprimed: "Unprimed",
   black: "Black Primer",
@@ -182,6 +191,13 @@ export async function handleRequest(
       if (!Array.isArray(body.lineItems) || body.lineItems.length === 0) {
         return json({ error: "Invalid lineItems", received: body.lineItems }, 400);
       }
+      if (body.lineItems.length > MAX_LINE_ITEMS) {
+        return json({
+          error: "Too many line items",
+          lineCount: body.lineItems.length,
+          max: MAX_LINE_ITEMS,
+        }, 400);
+      }
 
       const computedTotal = body.lineItems.reduce(
         (sum, li) => sum + (Number(li.price) || 0) * (Number(li.quantity) || 0),
@@ -207,7 +223,10 @@ export async function handleRequest(
       // surfaced to the customer as a bare "something went wrong". Scale with
       // the line count instead; still far too tight to let tampering through,
       // since altering a price moves the total by whole pennies at least.
-      const tolerance = 0.01 * Math.max(1, body.lineItems.length);
+      const tolerance = Math.min(
+        0.01 * Math.max(1, body.lineItems.length),
+        MAX_TOTAL_TOLERANCE,
+      );
       if (Math.abs(expectedTotal - body.grandTotal) > tolerance) {
         // Include the numbers. These are the customer's own figures, not
         // secrets, and without them a rejection reaches the browser as an

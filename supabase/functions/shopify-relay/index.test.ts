@@ -409,6 +409,71 @@ Deno.test("POST /checkout accepts a multi-model order whose per-line penny round
   assertEquals(res.status, 200);
 });
 
+Deno.test("POST /checkout rejects a payload padded with lines to inflate the rounding tolerance", async () => {
+  // Tolerance used to scale 1p per line with no ceiling, so ~600 zero-priced
+  // padding lines made the allowed error exceed the whole order and bought a
+  // £0.01 variant. Both the cap and the line limit must hold this shut.
+  let variantCalled = false;
+  const deps = fakeDeps({
+    getShopConfig: () => Promise.resolve(null),
+    createPricedVariant: () => {
+      variantCalled = true;
+      return Promise.resolve({ variantId: 999 });
+    },
+  });
+  const res = await handleRequest(
+    new Request("https://relay.test/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        customerEmail: "attacker@example.com",
+        customerName: "Attacker",
+        grandTotal: 0.01,
+        thresholdExceeded: false,
+        lineItems: Array.from({ length: 600 }, () => ({
+          title: "pad",
+          price: "0.00",
+          quantity: 1,
+          properties: [],
+        })),
+      }),
+    }),
+    deps,
+  );
+  assertEquals(res.status, 400);
+  assertEquals(variantCalled, false);
+});
+
+Deno.test("POST /checkout caps the rounding tolerance well below a penny per line at scale", async () => {
+  // 50 lines would once have allowed 50p of drift; the cap holds it to 10p.
+  const deps = fakeDeps({
+    getShopConfig: () => Promise.resolve(null),
+    createPricedVariant: () => Promise.resolve({ variantId: 999 }),
+  });
+  const res = await handleRequest(
+    new Request("https://relay.test/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        customerEmail: "attacker@example.com",
+        customerName: "Attacker",
+        // 50 lines at £1 = £50; shaving 30p is inside the old 50p allowance
+        // but outside the 10p cap.
+        grandTotal: 49.70,
+        thresholdExceeded: false,
+        lineItems: Array.from({ length: 50 }, () => ({
+          title: "m",
+          price: "1.00",
+          quantity: 1,
+          properties: [],
+        })),
+      }),
+    }),
+    deps,
+  );
+  assertEquals(res.status, 400);
+});
+
 Deno.test("POST /checkout still rejects a tampered grandTotal on a multi-model order", async () => {
   const deps = fakeDeps({
     getShopConfig: () => Promise.resolve(null),
