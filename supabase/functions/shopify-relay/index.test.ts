@@ -325,6 +325,61 @@ Deno.test("POST /checkout still creates the quote when a file failed to upload (
   assertEquals(body.mode, "quote");
 });
 
+Deno.test("POST /checkout accepts a multi-model order whose per-line penny rounding drifts past a flat 1p", async () => {
+  const deps = fakeDeps({
+    getShopConfig: () => Promise.resolve(null),
+    createPricedVariant: () => Promise.resolve({ variantId: 999 }),
+  });
+  const res = await handleRequest(
+    new Request("https://relay.test/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        customerEmail: "jane@example.com",
+        customerName: "Jane Smith",
+        // Three models, each rounded down by just under half a penny when sent
+        // as a line item, so the client's unrounded total sits 0.0149 above
+        // the sum of the prices — beyond the old flat 1p tolerance.
+        grandTotal: 25.2149,
+        thresholdExceeded: false,
+        lineItems: [
+          { title: "Model 1", price: "8.40", quantity: 1, properties: [] },
+          { title: "Model 2", price: "8.40", quantity: 1, properties: [] },
+          { title: "Model 3", price: "8.40", quantity: 1, properties: [] },
+        ],
+      }),
+    }),
+    deps,
+  );
+  assertEquals(res.status, 200);
+});
+
+Deno.test("POST /checkout still rejects a tampered grandTotal on a multi-model order", async () => {
+  const deps = fakeDeps({
+    getShopConfig: () => Promise.resolve(null),
+    createPricedVariant: () => Promise.resolve({ variantId: 999 }),
+  });
+  const res = await handleRequest(
+    new Request("https://relay.test/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        customerEmail: "jane@example.com",
+        customerName: "Jane Smith",
+        grandTotal: 1.00, // real line total is 25.20
+        thresholdExceeded: false,
+        lineItems: [
+          { title: "Model 1", price: "8.40", quantity: 1, properties: [] },
+          { title: "Model 2", price: "8.40", quantity: 1, properties: [] },
+          { title: "Model 3", price: "8.40", quantity: 1, properties: [] },
+        ],
+      }),
+    }),
+    deps,
+  );
+  assertEquals(res.status, 400);
+});
+
 Deno.test("POST /checkout rejects a grandTotal that doesn't match the line items' price*quantity", async () => {
   const deps = fakeDeps({
     getShopConfig: () => Promise.resolve(null),

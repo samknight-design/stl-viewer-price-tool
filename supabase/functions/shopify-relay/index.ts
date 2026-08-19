@@ -188,8 +188,15 @@ export async function handleRequest(
         typeof shopConfig?.minimumOrderTotal === "number" ? shopConfig.minimumOrderTotal : 0;
       const expectedTotal = Math.max(computedTotal, configuredMinimum);
 
-      // 1 cent tolerance for floating point drift, not a real fudge factor.
-      if (Math.abs(expectedTotal - body.grandTotal) > 0.01) {
+      // Each line item's price arrives already rounded to the penny, while the
+      // client totals the unrounded per-model figures — so the two legitimately
+      // disagree by up to half a penny per line. A flat 1p tolerance therefore
+      // rejected honest orders once they had three or more models, which
+      // surfaced to the customer as a bare "something went wrong". Scale with
+      // the line count instead; still far too tight to let tampering through,
+      // since altering a price moves the total by whole pennies at least.
+      const tolerance = 0.01 * Math.max(1, body.lineItems.length);
+      if (Math.abs(expectedTotal - body.grandTotal) > tolerance) {
         return json({ error: "grandTotal does not match line items" }, 400);
       }
 
