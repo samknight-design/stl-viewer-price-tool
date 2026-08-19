@@ -1468,9 +1468,6 @@ async function submitOrder(e) {
     if (submitLabelEl) submitLabelEl.textContent = submitBtnOriginalText;
   }
 
-  const grandTotal   = calcOrderTotal(activeGroups, config);
-  const thresholdExceeded = exceedsCustomQuoteThreshold(grandTotal, config);
-
   const lineItems = activeGroups.map(g => {
     const files = g.items
       .filter(i => i.status === 'ready' && i.cost?.priceable)
@@ -1495,6 +1492,18 @@ async function submitOrder(e) {
       ],
     };
   });
+
+  // Total the same rounded per-model prices the relay will re-add, rather than
+  // the unrounded figures behind the on-screen total. Those two drift by up to
+  // half a penny per model, and the relay reads a large enough gap as a
+  // tampered total and rejects the order. The whole-order minimum still
+  // applies here exactly as it does server-side.
+  const lineItemsTotal = lineItems.reduce((sum, li) => sum + Number(li.price) * li.quantity, 0);
+  const minimumOrderTotal = config?.minimumOrderTotal ?? 0;
+  const grandTotal = Number(
+    (lineItemsTotal > 0 ? Math.max(lineItemsTotal, minimumOrderTotal) : lineItemsTotal).toFixed(2),
+  );
+  const thresholdExceeded = exceedsCustomQuoteThreshold(grandTotal, config);
 
   fetch(`${RELAY_BASE_URL}/checkout`, {
     method: 'POST',
