@@ -687,30 +687,38 @@
 }
 .start-sub { font-size: .87em; color: var(--text-dim); margin-top: 3px; }
 
-.start-choices { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.start-choices { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: stretch; }
 @media (min-width: 700px) { .start-choices { grid-template-columns: 1fr 1fr; gap: 14px; } }
 
 .choice-card {
-  display: flex; align-items: flex-start; gap: 13px; text-align: left;
-  padding: 17px 18px; cursor: pointer;
+  display: flex; flex-direction: column; text-align: left;
+  padding: 0; overflow: hidden; cursor: pointer;
   background: var(--bg2); border: 1px solid var(--card-border);
-  border-radius: var(--radius); font-family: var(--body-font);
+  border-radius: var(--radius-lg); font-family: var(--body-font);
   transition: var(--transition);
 }
 .choice-card:hover, .choice-card:focus-visible {
-  border-color: var(--accent); background: var(--accent-glow2);
-  transform: translateY(-1px); box-shadow: var(--shadow-sm);
+  border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow);
 }
 .choice-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.choice-icon {
-  flex-shrink: 0; width: 38px; height: 38px; border-radius: var(--radius-sm);
+
+/* The artwork is a white knockout, so it needs its own dark ground to read
+   against — the card itself is white. */
+.choice-art {
   display: flex; align-items: center; justify-content: center;
-  background: var(--bg3); color: var(--accent); transition: var(--transition);
+  /* Fixed height, not min-height: the two illustrations have different
+     proportions, and a panel that grows to fit its art would leave the two
+     cards' titles sitting at different heights. */
+  height: 172px; padding: 14px;
+  background: linear-gradient(150deg, var(--accent), var(--accent-dim));
+  color: #fff;
 }
-.choice-card:hover .choice-icon { background: var(--accent); color: #fff; }
-.choice-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.choice-text strong { font-size: .95em; font-weight: 600; color: var(--text); }
-.choice-text span { font-size: .79em; color: var(--text-dim); line-height: 1.45; }
+.choice-art svg { display: block; }
+.choice-card:hover .choice-art { background: linear-gradient(150deg, #22836a, var(--accent)); }
+
+.choice-text { display: flex; flex-direction: column; gap: 4px; padding: 15px 17px 17px; flex: 1; }
+.choice-text strong { font-size: 1em; font-weight: 600; color: var(--text); }
+.choice-text span { font-size: .81em; color: var(--text-dim); line-height: 1.45; }
 
 .start-hint {
   margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--card-border);
@@ -1036,7 +1044,6 @@
   .info-tip-btn { width: 30px; height: 30px; }
   .part-toggle, .model-opts-btn, .part-thumb { min-height: 44px; }
   .part-toggle { width: 44px; height: 44px; }
-  .choice-card { min-height: 60px; }
 }
 
 /* ---- Utilities -------------------------------------------------------- */
