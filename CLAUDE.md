@@ -21,6 +21,13 @@ still documents uploading STLs to Shopify Files, which was **abandoned** (a hard
   (only import paths and one spinner class should differ). The same applies to
   the other `js/*.js` ↔ `shopify-theme/assets/print-calc-*.js` pairs, and to
   `index.html` ↔ `shopify-theme/snippets/print-calculator-markup.liquid`.
+- **Theme import specifiers must carry `?v=<content hash>`.** A module's own
+  relative imports never pass through Liquid's `asset_url`, so they request a
+  bare CDN URL that is cached with a long TTL — and Shopify strips unknown
+  query params, so you cannot bust it by hand. A changed sub-module will keep
+  serving its old copy while the Admin API reports the new checksum. This cost
+  a deploy on 2026-08-21: `print-calc-icons.js` shipped and verified by
+  checksum, but the storefront kept serving the previous build.
 - **Theme writes to the live/MAIN theme are blocked.** Duplicate → write → a
   human publishes. Wait for `processing: false` before writing, and verify by
   `checksumMd5`, never by reading the file back. Runbook §5.
