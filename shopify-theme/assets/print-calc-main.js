@@ -7,7 +7,7 @@
 import { getConfig, RELAY_BASE_URL } from './print-calc-config.js?v=bb5826ba86';
 import { parseSTLFile } from './print-calc-stl-parser.js?v=8ade704353';
 import { generateThumbnail, STLViewer } from './print-calc-viewer.js?v=097e779d64';
-import { icon, applyStaticIcons } from './print-calc-icons.js?v=dbcda99c8c';
+import { icon, applyStaticIcons } from './print-calc-icons.js?v=e20f3051af';
 import {
   calcItemCost, calcGroupCost, calcOrderTotal, calcOrderMinimumShortfall,
   exceedsCustomQuoteThreshold, fmt, fmtMm,

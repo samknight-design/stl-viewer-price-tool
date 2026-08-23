@@ -47,6 +47,7 @@
   --glow:      0 0 24px rgba(28,109,87,.22);
   --transition: .18s ease;
   --bg-inset: #e6e3dc;
+  --ink-art: #4a443b;
 }
 
 /* ---- Reset -----------------------------------------------------------
@@ -704,7 +705,7 @@
   transition: var(--transition);
 }
 .choice-card:hover, .choice-card:focus-visible {
-  border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow);
+  border-color: var(--accent); box-shadow: var(--shadow-sm);
 }
 .choice-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -715,12 +716,18 @@
   /* Fixed height, not min-height: the two illustrations have different
      proportions, and a panel that grows to fit its art would leave the two
      cards' titles sitting at different heights. */
-  height: 172px; padding: 14px;
-  background: linear-gradient(150deg, var(--accent), var(--accent-dim));
-  color: #fff;
+  height: 168px; padding: 14px;
+  /* Quiet ground, inked artwork. Green is the colour of the thing that takes
+     your money — spending it on two upload buttons made the empty page shout
+     before it had anything to say. */
+  background: var(--bg3);
+  border-bottom: 1px solid var(--card-border);
+  color: var(--ink-art);
+  transition: background var(--transition), color var(--transition);
 }
 .choice-art svg { display: block; }
-.choice-card:hover .choice-art { background: linear-gradient(150deg, #22836a, var(--accent)); }
+.choice-card:hover .choice-art,
+.choice-card:focus-visible .choice-art { background: var(--bg-inset); color: var(--accent); }
 
 .choice-text { display: flex; flex-direction: column; gap: 4px; padding: 15px 17px 17px; flex: 1; }
 .choice-text strong { font-size: 1em; font-weight: 600; color: var(--text); }
