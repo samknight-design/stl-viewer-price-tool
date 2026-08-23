@@ -328,7 +328,7 @@ function buildGroupHTML(group) {
   const chips = [
     isPlaModel ? 'PLA' : 'Resin',
     primerLabel,
-    canAssemble ? (assemblyActive ? 'Assembled' : 'Loose parts') : null,
+    canAssemble ? (assemblyActive ? 'Assembled' : 'Loose parts') : null,   // chip stays terse; the control carries the full wording
     group.settings.notes?.trim() ? 'Notes added' : null,
   ].filter(Boolean);
 
@@ -344,8 +344,12 @@ function buildGroupHTML(group) {
     <div class="model-bar ${group.settingsOpen ? 'open' : ''} ${group.justUnlocked ? 'flash' : ''}">
       <div class="model-bar-id">
         <span class="model-tag">Model</span>
-        <input class="model-name" value="${esc(group.name)}" data-action="rename"
-               aria-label="Model name" spellcheck="false">
+        <span class="name-edit">
+          <input class="model-name" value="${esc(group.name)}" data-action="rename"
+                 size="${Math.max(8, group.name.length)}"
+                 aria-label="Model name" spellcheck="false">
+          ${icon('pencil', { size: 12, className: 'name-edit-pencil' })}
+        </span>
       </div>
       <div class="model-bar-meta">
         <span class="model-chips">${chips.map(c => `<span>${esc(c)}</span>`).join('')}</span>
@@ -462,8 +466,8 @@ function buildModelSettingsHTML(group, ctx) {
       <div class="mset">
         <span class="mset-label">Assembly</span>
         <span class="seg seg-sm">
-          <button class="seg-btn ${!assemblyActive ? 'active' : ''}" data-action="assembly" data-val="false">Loose parts</button>
-          <button class="seg-btn ${assemblyActive ? 'active' : ''}" data-action="assembly" data-val="true">Assembled${assemblyCostHint}</button>
+          <button class="seg-btn ${!assemblyActive ? 'active' : ''}" data-action="assembly" data-val="false">Receive as loose parts</button>
+          <button class="seg-btn ${assemblyActive ? 'active' : ''}" data-action="assembly" data-val="true">Receive assembled${assemblyCostHint}</button>
         </span>
       </div>` : ''}
 
@@ -487,6 +491,11 @@ function buildModelSettingsHTML(group, ctx) {
 // ---- Part row HTML ---------------------------------------------------
 // At rest a part is one line: what it is, how big, how many, how much.
 // Everything that changes it lives behind the row's own disclosure.
+
+/** What to call a part on screen: the customer's label, else the filename. */
+function partLabel(item) {
+  return (item.label || '').trim() || item.name;
+}
 
 function buildItemHTML(item, group, showMoveControl) {
   const sym = config.currencySymbol;
@@ -560,7 +569,12 @@ function buildItemHTML(item, group, showMoveControl) {
       </button>
 
       <div class="part-main">
-        <div class="part-name" title="${esc(item.name)}">${esc(item.name)}</div>
+        <div class="name-edit">
+          <input class="part-name" value="${esc(partLabel(item))}" data-action="rename-part" data-id="${item.id}"
+                 size="${Math.max(8, partLabel(item).length)}"
+                 title="${esc(item.name)}" aria-label="Name for ${esc(item.name)}" spellcheck="false">
+          ${icon('pencil', { size: 12, className: 'name-edit-pencil' })}
+        </div>
         <div class="part-spec">${specBits.join(' · ')}</div>
         ${flags.join('')}
       </div>
@@ -839,6 +853,16 @@ function handleGroupInput(e, group) {
     renderOrderSummary();
     return;
   }
+  if (el.dataset.action === 'rename-part') {
+    const found = findItem(el.dataset.id);
+    if (found) {
+      // Clearing the field falls back to the filename rather than leaving a
+      // nameless part.
+      found.item.label = el.value;
+      renderOrderSummary();
+    }
+    return;
+  }
   if (el.dataset.action === 'notes') {
     group.settings.notes = el.value;
   }
@@ -941,6 +965,7 @@ async function addFileToGroup(file, targetGroup) {
   const item = {
     id: iId(), file, name: file.name, size: file.size,
     status: 'loading', data: null, thumbnail: null,
+    label: '',
     settings: { scale: 1.0, quantity: 1, materialId: config.materials[0].id, presupported: false, plaColor: 'black' },
     cost: null, warning: null,
   };
@@ -1085,7 +1110,7 @@ function buildReviewGroupHTML(group, sym) {
       <div class="review-file-row">
         ${thumbHTML}
         <div class="review-file-info">
-          <div class="review-file-name">${esc(shortName(i.name, 38))}</div>
+          <div class="review-file-name">${esc(shortName(partLabel(i), 38))}</div>
           <div class="review-file-meta">
             ${esc(i.cost.materialName)} &middot; ×${i.settings.quantity}
             &middot; ${i.cost.tier ? esc(i.cost.tier.name) + ' tier' : 'volume-priced'}
@@ -1169,7 +1194,7 @@ function renderOrderSummary() {
         <div class="summary-group-name">${esc(g.name)}</div>
         ${g.items.filter(i => i.status === 'ready').map(i => `
           <div class="summary-line">
-            <span class="sum-name" title="${esc(i.name)}">${esc(shortName(i.name))}</span>
+            <span class="sum-name" title="${esc(i.name)}">${esc(shortName(partLabel(i)))}</span>
             <span class="sum-qty">×${i.settings.quantity}</span>
             <span class="sum-price">${i.cost?.priceable ? fmt(i.cost.totalCost, sym) : '<span class="text-error">Too large</span>'}</span>
           </div>
@@ -1570,6 +1595,7 @@ async function submitOrder(e) {
       .filter(i => i.status === 'ready' && i.cost?.priceable)
       .map(i => ({
         filename: i.name,
+        label: (i.label || '').trim() || null,
         fileUrl: i.fileUrl ?? null,
         thumbnailUrl: i.thumbnailUrl ?? null,
         quantity: i.settings.quantity,

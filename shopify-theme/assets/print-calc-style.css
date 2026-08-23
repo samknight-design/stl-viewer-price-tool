@@ -800,7 +800,9 @@
   background: transparent; border: 1px solid transparent; border-radius: var(--radius-sm);
   color: var(--text); font-family: var(--body-font);
   font-size: .95em; font-weight: 600; padding: 4px 7px;
-  width: 100%; max-width: 220px; min-width: 90px; transition: var(--transition);
+  width: auto; max-width: 220px; min-width: 90px;
+  field-sizing: content;
+  transition: var(--transition);
 }
 .model-name:hover { border-color: var(--card-border); background: var(--bg2); }
 .model-name:focus { outline: none; border-color: var(--accent); background: var(--bg2); box-shadow: 0 0 0 3px var(--accent-glow); }
@@ -1132,4 +1134,53 @@
   .primer-swatch, .pla-swatch {
     width: 40px; height: 40px; min-width: 40px; min-height: 40px;
   }
+}
+
+/* ---- Editable names ---------------------------------------------------
+   Both the model name and each part name are editable, but as bare text in
+   a card they read as labels. A pencil that firms up on hover/focus says so
+   without adding a control to click. */
+.name-edit { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.name-edit-pencil {
+  flex-shrink: 0; color: var(--text-dimmer); opacity: .55;
+  transition: opacity var(--transition), color var(--transition);
+  pointer-events: none;
+}
+.name-edit:hover .name-edit-pencil,
+.name-edit:focus-within .name-edit-pencil { opacity: 1; color: var(--accent); }
+
+/* The part name is a filename by default; editing it sets a display label
+   and leaves the uploaded file's own name untouched. */
+.part-name {
+  background: transparent; border: 1px solid transparent; border-radius: var(--radius-sm);
+  color: var(--text); font-family: var(--body-font);
+  font-size: .89em; font-weight: 600; padding: 2px 5px;
+  width: auto; max-width: 100%; min-width: 0; text-overflow: ellipsis;
+  field-sizing: content;   /* grows as you type where supported; `size` covers the rest */
+  transition: var(--transition);
+}
+.part-name:hover { border-color: var(--card-border); background: var(--bg2); }
+.part-name:focus {
+  outline: none; border-color: var(--accent); background: var(--bg2);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.part-main .name-edit { width: 100%; }
+
+/* ---- Mobile summary bar ------------------------------------------------
+   The theme's chat activator is fixed in the bottom-right at the maximum
+   z-index, so it cannot be layered under — it has to be designed around.
+   The action moves to the left edge and the bar reserves the right, keeping
+   every tappable thing clear of the bubble. */
+@media (max-width: 959px) {
+  .mobile-summary-bar {
+    justify-content: flex-start;
+    gap: 14px;
+    padding-right: 150px;
+  }
+  .mobile-summary-bar .btn { order: -1; flex-shrink: 0; }
+  .mobile-summary-info { align-items: flex-start; }
+}
+@media (max-width: 400px) {
+  .mobile-summary-bar { padding-right: 118px; }
+  .mobile-summary-bar .btn { padding: 8px 14px; font-size: .78em; }
 }
