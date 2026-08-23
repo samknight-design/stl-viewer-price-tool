@@ -98,7 +98,7 @@ function defaultGroupSettings() {
 function createGroup(name) {
   return {
     id: gId(), name, settings: defaultGroupSettings(), items: [], groupCost: null,
-    settingsOpen: false,   // model settings disclosure
+    settingsOpen: true,    // model settings — open by default; this is the model's face, not a drawer
     justUnlocked: false,   // set when assembly first becomes available, for a one-shot highlight
   };
 }
@@ -353,9 +353,10 @@ function buildGroupHTML(group) {
       </div>
       <div class="model-bar-end">
         <span class="model-total">${gc && pricedItems.length ? fmt(gc.groupTotal, sym) : '—'}</span>
-        <button class="model-opts-btn" data-action="toggle-model-settings"
-                aria-expanded="${group.settingsOpen ? 'true' : 'false'}">
-          <span class="btn-label">Options</span>${icon(group.settingsOpen ? 'chevronUp' : 'chevronDown', { size: 15 })}
+        <button class="model-opts-btn ${group.settingsOpen ? 'open' : ''}" data-action="toggle-model-settings"
+                aria-expanded="${group.settingsOpen ? 'true' : 'false'}"
+                aria-label="${group.settingsOpen ? 'Hide' : 'Show'} options for ${esc(group.name)}">
+          ${icon(group.settingsOpen ? 'chevronUp' : 'chevronDown', { size: 16 })}
         </button>
       </div>
     </div>
@@ -389,6 +390,15 @@ function buildModelFootBreakdown(gc, assemblyActive, sym) {
 // appears here only once the model actually has 2+ parts — a choice that
 // doesn't exist yet isn't shown as a disabled control.
 
+/**
+ * Swatch captions carry the colour only — the swatch already says "primer",
+ * and the full label is still what shows on the order summary and quote.
+ */
+function shortPrimerLabel(option) {
+  if (option.id === 'unprimed') return 'None';
+  return option.label.replace(/\s*primer\s*$/i, '');
+}
+
 function buildModelSettingsHTML(group, ctx) {
   const { isPlaModel, canAssemble, assemblyActive, totalParts, gc, sym } = ctx;
 
@@ -404,7 +414,7 @@ function buildModelSettingsHTML(group, ctx) {
               ${isNone ? '' : `style="background:${color};"`}>
           ${active ? `<span class="primer-check">${icon('check', { size: 14 })}</span>` : ''}
         </span>
-        <span class="primer-swatch-label">${esc(p.label)}</span>
+        <span class="primer-swatch-label">${esc(shortPrimerLabel(p))}</span>
       </button>`;
   }).join('');
 
@@ -417,61 +427,57 @@ function buildModelSettingsHTML(group, ctx) {
     <div class="model-settings">
 
       <div class="mset">
-        <div class="mset-label">
-          Print method
+        <span class="mset-head">
+          <span class="mset-label">Material</span>
           <span class="info-tip-wrap">
             <button type="button" class="info-tip-btn" data-action="toggle-info"
-                    aria-label="What's the difference between resin and PLA?" aria-expanded="false">${icon('helpCircle', { size: 15 })}</button>
+                    aria-label="Resin or PLA?" aria-expanded="false">${icon('helpCircle', { size: 14 })}</button>
             <span class="info-tip-content" role="tooltip">
-              <strong>Resin</strong> — highest detail, best for fine miniatures. Priced by size.<br><br>
-              <strong>PLA</strong> — stronger and faster, best for larger or simpler parts. Priced by volume, and you pick a filament colour per part.
+              <strong>Resin</strong> — finest detail, best for miniatures.<br>
+              <strong>PLA</strong> — tougher and cheaper on bigger parts. You pick a colour per part.
             </span>
           </span>
-        </div>
-        <div class="seg">
+        </span>
+        <span class="seg seg-sm">
           <button class="seg-btn ${!isPlaModel ? 'active' : ''}" data-action="print-method" data-val="resin">Resin</button>
           <button class="seg-btn ${isPlaModel ? 'active' : ''}" data-action="print-method" data-val="pla">PLA</button>
-        </div>
+        </span>
       </div>
 
       <div class="mset">
-        <div class="mset-label">
-          Primer coating
+        <span class="mset-head">
+          <span class="mset-label">Primer</span>
           <span class="info-tip-wrap">
             <button type="button" class="info-tip-btn" data-action="toggle-info"
-                    aria-label="What does priming do?" aria-expanded="false">${icon('helpCircle', { size: 15 })}</button>
+                    aria-label="What is primer?" aria-expanded="false">${icon('helpCircle', { size: 14 })}</button>
             <span class="info-tip-content" role="tooltip">
-              A spray primer goes on the finished model before you paint it. It helps paint stick and softens layer lines.${isPlaModel ? '<br><br>On PLA, priming covers the filament colour you choose below — pick one or the other unless you want a painting base.' : ''}
+              A sprayed base coat, ready for you to paint. Helps paint grip and softens layer lines.
             </span>
           </span>
-        </div>
-        <div class="primer-row">${primerSwatchesHTML}${primerCostHint}</div>
+        </span>
+        <span class="primer-row">${primerSwatchesHTML}${primerCostHint}</span>
       </div>
 
       ${canAssemble ? `
       <div class="mset">
-        <div class="mset-label">Assembly</div>
-        <div class="seg">
-          <button class="seg-btn ${!assemblyActive ? 'active' : ''}" data-action="assembly" data-val="false">
-            Supply as ${totalParts} loose parts
-          </button>
-          <button class="seg-btn ${assemblyActive ? 'active' : ''}" data-action="assembly" data-val="true">
-            Glue &amp; fit together${assemblyCostHint}
-          </button>
-        </div>
+        <span class="mset-label">Assembly</span>
+        <span class="seg seg-sm">
+          <button class="seg-btn ${!assemblyActive ? 'active' : ''}" data-action="assembly" data-val="false">Loose parts</button>
+          <button class="seg-btn ${assemblyActive ? 'active' : ''}" data-action="assembly" data-val="true">Assembled${assemblyCostHint}</button>
+        </span>
       </div>` : ''}
 
       <div class="mset mset-notes">
-        <label class="mset-label" for="notes-${group.id}">Notes for this model <span class="mset-optional">optional</span></label>
+        <label class="mset-label" for="notes-${group.id}">Notes</label>
         <textarea class="mset-notes-input" id="notes-${group.id}" data-action="notes" rows="2"
-                  placeholder="Colour preferences, a deadline, anything we should know…">${esc(group.settings.notes || '')}</textarea>
-        <p class="mset-hint">Working from an AI-generated model? Tell us here — they often need thin walls, drain holes or overhangs fixed before they print cleanly, and we'll check yours first.</p>
+                  placeholder="Anything we should know about this model">${esc(group.settings.notes || '')}</textarea>
       </div>
 
       <div class="mset-foot">
+        <p class="mset-hint">Working from an AI-generated model? Mention it here &mdash; they often need thin walls or overhangs fixing before they print cleanly, and we'll check yours first.</p>
         <button class="model-delete-btn ${isArmedForDelete('group', group.id) ? 'armed' : ''}"
                 data-action="delete-group">
-          ${icon('trash', { size: 14 })} ${isArmedForDelete('group', group.id) ? 'Tap again to delete this model' : 'Delete this model'}
+          ${icon('trash', { size: 14 })} ${isArmedForDelete('group', group.id) ? 'Tap again to delete' : 'Delete model'}
         </button>
       </div>
 
@@ -559,6 +565,17 @@ function buildItemHTML(item, group, showMoveControl) {
         ${flags.join('')}
       </div>
 
+      ${!isPla ? `
+      <div class="part-supports" role="group" aria-label="Supports for ${esc(item.name)}">
+        <span class="part-supports-label">Supports</span>
+        <span class="mini-seg">
+          <button class="mini-seg-btn ${!ps ? 'active' : ''}" data-action="presupported"
+                  data-id="${item.id}" data-val="false" title="We add supports for you">We add</button>
+          <button class="mini-seg-btn ${ps ? 'active' : ''}" data-action="presupported"
+                  data-id="${item.id}" data-val="true" title="Your file already has supports built in">Pre-supported</button>
+        </span>
+      </div>` : ''}
+
       <div class="part-qty">
         <label class="sr-only" for="qty-${item.id}">Quantity of ${esc(item.name)}</label>
         <span class="part-qty-x" aria-hidden="true">Qty</span>
@@ -584,23 +601,7 @@ function buildItemHTML(item, group, showMoveControl) {
 function buildItemDetailHTML(item, group, ctx) {
   const { isPla, ps, c, sym, showMoveControl } = ctx;
 
-  const supportsHTML = !isPla ? `
-    <div class="pset">
-      <div class="pset-label">
-        Supports
-        <span class="info-tip-wrap">
-          <button type="button" class="info-tip-btn" data-action="toggle-info"
-                  aria-label="What are supports?" aria-expanded="false">${icon('helpCircle', { size: 15 })}</button>
-          <span class="info-tip-content" role="tooltip">
-            Supports are temporary scaffolding that holds up overhanging parts while they print. If your file already has them built in, say so — it saves us time and costs less. Files without them are priced with an allowance for the support material we add.
-          </span>
-        </span>
-      </div>
-      <div class="seg">
-        <button class="seg-btn ${!ps ? 'active' : ''}" data-action="presupported" data-id="${item.id}" data-val="false">We add supports</button>
-        <button class="seg-btn ${ps ? 'active' : ''}" data-action="presupported" data-id="${item.id}" data-val="true">Already supported</button>
-      </div>
-    </div>` : '';
+  // Supports now lives on the part row — see buildItemHTML.
 
   const colorHTML = isPla ? `
     <div class="pset">
@@ -648,7 +649,6 @@ function buildItemDetailHTML(item, group, ctx) {
 
   return `
     <div class="part-detail" data-detail-for="${item.id}">
-      ${supportsHTML}
       ${colorHTML}
 
       <div class="pset pset-inline">
