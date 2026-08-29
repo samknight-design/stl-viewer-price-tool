@@ -1,0 +1,20 @@
+/* shopify-theme/assets/brand-tokens.css
+   Single source of truth for colour/type/geometry — ported from
+   arcane-flame-design-system/brand.html. Change values there first,
+   then copy here; do not let this drift, it's the whole point of this file. */
+:root{
+  --af-ink-900:#070d14; --af-ink-800:#0d1520; --af-ink-700:#131d2a;
+  --af-ink-600:#182433; --af-ink-500:#213040; --af-ink-400:#2e4152;
+  --af-flame-700:#084c5f; --af-flame-500:#0a6f88; --af-flame-300:#4fd6ec; --af-flame-200:#a8f0fa;
+  --af-rust-500:#a25656; --af-rust-700:#7f2423;
+  --af-white:#ffffff; --af-paper:#f3f3f3; --af-black:#121212;
+  --af-grey-500:#8a8f98; --af-grey-600:#696d74; --af-grey-300:#d8d8d8;
+
+  --af-font-display:'Cinzel','Trajan Pro',Georgia,serif;
+  --af-font-body:'Inter',system-ui,sans-serif;
+  --af-font-mono:'IBM Plex Mono',ui-monospace,monospace;
+
+  --af-radius:0;
+  --af-ease:cubic-bezier(.22,.61,.36,1);
+  --af-maxw:1280px;
+}

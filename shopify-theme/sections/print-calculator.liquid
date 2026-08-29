@@ -3,6 +3,7 @@
   {% render 'print-calculator-markup' %}
 </div>
 
+{{ 'brand-tokens.css' | asset_url | stylesheet_tag }}
 {{ 'print-calc-style.css' | asset_url | stylesheet_tag }}
 <script type="importmap">
 {
