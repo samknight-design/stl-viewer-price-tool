@@ -91,7 +91,22 @@
   background:linear-gradient(90deg,var(--af-ink-900) 20%,rgba(8,10,18,.9) 48%,transparent 86%)}
 .svc__body{position:relative;z-index:2;max-width:330px}
 .svc__card h3{font-family:var(--af-font-display);text-transform:uppercase;font-size:27px;margin:14px 0 12px;line-height:1.1}
+/* The source's `.svc__card p{font-size:15px;color:var(--grey-500);
+   margin-bottom:24px}` has higher specificity (class+element) than
+   `.eyebrow` (single class) alone, so in option-c.html it also overrides
+   the card's own `<p class="eyebrow">Resin · MSLA</p>` — the eyebrow
+   renders muted grey inside a card, not the bright flame-300 it gets
+   everywhere else. That's the source's actual rendered behaviour (visible
+   in the approved prototype), not a bug this port should silently fix, so
+   `.svc__card p` is kept as-is to preserve it for the eyebrow.
+   The card body copy is now a <div class="svc__body-text"> instead of a
+   <p> (see home-services.liquid — richtext already emits its own <p>, so
+   wrapping it in another <p> produced invalid nested markup), which no
+   longer matches `.svc__card p`. This second rule gives it the identical
+   size/colour/spacing so the visual is unchanged from the source. */
 .svc__card p{font-size:15px;color:var(--af-grey-500);margin-bottom:24px}
+.svc__body-text{font-size:15px;color:var(--af-grey-500);margin-bottom:24px}
+.svc__body-text p{margin:0}
 .tags{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:26px}
 .tags span{font-size:11px;letter-spacing:.07em;text-transform:uppercase;
   border:1px solid rgba(255,255,255,.22);padding:5px 11px;color:var(--af-grey-300)}

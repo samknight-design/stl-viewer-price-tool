@@ -90,7 +90,18 @@
             <div class="svc__body">
               <p class="eyebrow">{{ block.settings.eyebrow }}</p>
               <h3>{{ block.settings.heading }}</h3>
-              <p>{{ block.settings.body }}</p>
+              {% comment %}
+                block.settings.body is a `richtext` setting — Shopify already
+                wraps its rendered value in <p>...</p>, so wrapping it in
+                another <p> here would produce invalid nested <p><p>...</p></p>
+                markup (browsers auto-close unpredictably). Use a <div> instead,
+                matching the pattern home-craft.liquid established for its own
+                richtext `body` field. Named .svc__body-text rather than
+                reusing the shared .lede class, since .lede's 19px/max-width
+                sizing doesn't match this card's 15px body-copy treatment —
+                see home-services.css for the matching selector.
+              {% endcomment %}
+              <div class="svc__body-text">{{ block.settings.body }}</div>
               {% if block.settings.tags != blank %}
                 <div class="tags">
                   {% assign tag_list = block.settings.tags | split: ',' %}
