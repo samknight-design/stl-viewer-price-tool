@@ -229,3 +229,35 @@ order by timestamp desc limit 30
    at the page template, publish.
 6. Smoke test all four paths: under £5, normal, multi-model, and over the
    £150 threshold. Each exercised a different bug historically.
+
+---
+
+## 10. Homepage deploy checklist (2026-08-29+)
+
+Before uploading any `shopify-theme/` change:
+
+1. `node scripts/theme-build.mjs shopify-theme/assets` — regenerates import
+   hashes and `.deploy-manifest.json`. Commit the result if anything changed.
+2. `node --test scripts/theme-build.test.mjs scripts/no-literal-hex.test.mjs`
+   — both must pass.
+3. Push to `worktree-shopify-integration` (or the active feature branch) and
+   note the commit SHA.
+4. Find or create a non-live theme: check `config/settings_data.json`,
+   templates, layout and section checksums against the live theme first — if
+   a previously-duplicated theme is still checksum-identical, reuse it
+   (saves the 20–30 min duplication wait). Confirm `theme(id:){ processing }`
+   is `false` before writing.
+5. Upload every changed file via `themeFilesUpsert` with
+   `body:{ type: URL, url: "https://raw.githubusercontent.com/samknight-design/stl-viewer-price-tool/<sha>/shopify-theme/<path>" }`.
+   Never `TEXT` for anything over ~2KB.
+6. Verify: re-query `files{ checksumMd5 }` for every uploaded file and diff
+   against `.deploy-manifest.json`'s `md5` field (assets) or a fresh local
+   `md5sum` (liquid/json files, which aren't in the JS/CSS manifest). Any
+   mismatch — stop, do not tell the user it's deployed.
+7. Load the theme preview (`?preview_theme_id=<id>`), confirm the
+   `server-timing` `theme;desc` header matches, and visually check the
+   changed section against `option-c.html` rendered locally.
+8. Only then: tell the user it's ready, and that publishing is their step.
+9. **After they publish**, clear any `preview_theme_id` cookie in your own
+   testing browser — it pins you to the old preview and will make a
+   published change look like it didn't take.
