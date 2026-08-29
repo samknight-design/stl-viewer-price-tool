@@ -1,0 +1,76 @@
+{% comment %}
+  sections/home-marquee.liquid
+  Ported from the "Arcane Flame Website Prototype" option-c.html:
+    - CSS: lines ~179-186 (.marquee, .marquee__track, .marquee__track span,
+      .marquee__track span::after, @keyframes slide) — see
+      shopify-theme/assets/home-marquee.css for the full colour-substitution
+      notes.
+    - Markup: lines ~508-514 (<div class="marquee">...</div>), the 8-item
+      scrolling claims strip between the hero and the detail/craft section.
+
+  The prototype's 8 claim strings (`<span>12K Resin Detail</span>` etc.) are
+  hardcoded markup. Here they're a repeatable `marquee_item` block (one
+  `text` setting each) so a merchant can add, remove, reorder or edit claims
+  from the theme editor. The 8 default preset blocks below reproduce the
+  prototype's current default list verbatim, in the same order.
+
+  Seamless-loop technique: the prototype duplicates the track's content at
+  runtime via JS (`mq.innerHTML += mq.innerHTML`, option-c.html line 828)
+  so `@keyframes slide{to{transform:translateX(-50%)}}` has two copies of
+  the content to slide across, landing exactly on the second copy's start
+  with no visible seam. That doubling is done here in Liquid instead — the
+  block loop below runs twice in sequence, rendering every block's markup
+  twice inside the same .marquee__track — so no JS is needed and the effect
+  works identically for merchant-edited (including short) block lists.
+  Verified with both the default 8-item list and a 3-item list; see the
+  task report for the seam-test results.
+{% endcomment %}
+<div class="marquee" aria-hidden="true">
+  <div class="marquee__track" id="Marquee-{{ section.id }}">
+    {% for block in section.blocks %}
+      <span {{ block.shopify_attributes }}>{{ block.settings.text }}</span>
+    {% endfor %}
+    {% for block in section.blocks %}
+      <span aria-hidden="true">{{ block.settings.text }}</span>
+    {% endfor %}
+  </div>
+</div>
+
+{{ 'brand-tokens.css' | asset_url | stylesheet_tag }}
+{{ 'home-base.css' | asset_url | stylesheet_tag }}
+{{ 'home-marquee.css' | asset_url | stylesheet_tag }}
+
+{% schema %}
+{
+  "name": "Marquee",
+  "blocks": [
+    {
+      "type": "marquee_item",
+      "name": "Claim",
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Claim text",
+          "default": "12K Resin Detail"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Marquee",
+      "blocks": [
+        { "type": "marquee_item", "settings": { "text": "12K Resin Detail" } },
+        { "type": "marquee_item", "settings": { "text": "Printed To Order" } },
+        { "type": "marquee_item", "settings": { "text": "Primed Or Raw" } },
+        { "type": "marquee_item", "settings": { "text": "256mm PLA Build Plate" } },
+        { "type": "marquee_item", "settings": { "text": "Licensed DM Stash Printer" } },
+        { "type": "marquee_item", "settings": { "text": "Free UK Shipping Over £50" } },
+        { "type": "marquee_item", "settings": { "text": "Instant STL Pricing" } },
+        { "type": "marquee_item", "settings": { "text": "Multi-Part Assembly" } }
+      ]
+    }
+  ]
+}
+{% endschema %}

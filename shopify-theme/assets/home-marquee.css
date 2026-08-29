@@ -1,0 +1,55 @@
+/* shopify-theme/assets/home-marquee.css
+   Ported from "Arcane Flame Website Prototype" option-c.html:
+     - lines ~179-186 (.marquee, .marquee__track, .marquee__track span,
+       .marquee__track span::after, @keyframes slide).
+
+   The prototype achieves the seamless loop with a runtime JS hack
+   (`mq.innerHTML += mq.innerHTML`, option-c.html line 828) that doubles
+   the track's DOM content after page load, then animates it with
+   `width:max-content` + `@keyframes slide{to{transform:translateX(-50%)}}`.
+   Here the doubling is done in Liquid instead (home-marquee.liquid loops
+   over section.blocks twice in the rendered markup), so no JS is needed —
+   the CSS below is otherwise a 1:1 port.
+
+   Colour substitutions (prototype value -> token):
+     var(--flame-500) -> var(--af-flame-500)
+     var(--display)   -> var(--af-font-display)
+     var(--body)      -> var(--af-font-body)
+     #fff (.marquee__track span) -> var(--af-white) (literal hex replaced
+       with the equivalent named token, same colour)
+   rgba(255,255,255,.14) (border-block) kept as rgba() per the brief's
+   stated translucency exception — no token equivalent exists for it.
+
+   Judgment call, flagged per the brief: the prototype spaces spans with
+   flex `gap:56px` on .marquee__track. Flex `gap` only inserts space
+   *between* children, never after the last one, so it doesn't apply at
+   the seam between the two duplicated halves the same way it applies
+   between ordinary items — total track width works out to
+   2 * (one copy's width) + 56 (one extra half-gap short of a true
+   double), not a clean 2x. That makes `translateX(-50%)` land ~28px
+   short of the real halfway point, a small but genuine visible snap at
+   the loop restart — present in the prototype's own CSS too (same
+   technique, same gap property), just never exercised because
+   option-c.html only ever renders 8 items and nobody watched a full
+   34s cycle for it. Measured in a test harness (not committed) with both
+   8 and 3 items: the ~28px error is constant in absolute pixels
+   regardless of item count (it's exactly half of one 56px gap), so it
+   isn't an item-count-dependent bug, but it is a real defect worth
+   fixing rather than porting forward.
+   Fixed here by replacing track-level `gap` with `margin-right:56px` on
+   every span instead: every span (including the last one in the doubled
+   list) now carries its own trailing 56px, so duplicating the sequence
+   doubles the width exactly and `translateX(-50%)` lands precisely on
+   the second copy's first span. Visual spacing is unchanged (still 56px
+   between every pair of items, including across the loop seam) — only
+   the loop math changes.
+*/
+
+.marquee{background:var(--af-flame-500);overflow:hidden;padding:15px 0;
+  border-block:1px solid rgba(255,255,255,.14)}
+.marquee__track{display:flex;width:max-content;animation:slide 34s linear infinite}
+.marquee__track span{font-family:var(--af-font-display);text-transform:uppercase;font-size:16.5px;
+  letter-spacing:.1em;color:var(--af-white);display:flex;align-items:center;gap:56px;white-space:nowrap;
+  margin-right:56px}
+.marquee__track span::after{content:"◆";font-size:8px;opacity:.6;font-family:var(--af-font-body)}
+@keyframes slide{to{transform:translateX(-50%)}}

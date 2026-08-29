@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 // Every CSS file that must source its colours exclusively from
 // brand-tokens.css var(--af-*) tokens (the one allowed exception is
 // rgba() for translucency). Add new theme CSS files here as they're built.
-const FILES = ['shopify-theme/assets/print-calc-style.css', 'shopify-theme/assets/home-nav.css', 'shopify-theme/assets/home-hero.css', 'shopify-theme/assets/home-base.css'];
+const FILES = ['shopify-theme/assets/print-calc-style.css', 'shopify-theme/assets/home-nav.css', 'shopify-theme/assets/home-hero.css', 'shopify-theme/assets/home-base.css', 'shopify-theme/assets/home-marquee.css'];
 
 function readCssWithoutComments(path) {
   const css = readFileSync(path, 'utf8');
