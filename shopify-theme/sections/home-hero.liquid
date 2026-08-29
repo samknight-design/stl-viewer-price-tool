@@ -1,0 +1,170 @@
+{% comment %}
+  sections/home-hero.liquid
+  Ported from the "Arcane Flame Website Prototype" option-c.html:
+    - CSS: lines ~106-176 (.hero, .hero__*, @keyframes float, the roundel
+      block .roundel/.roundel__*, @keyframes roundel-spin, .scrollcue and
+      @keyframes cue) — see shopify-theme/assets/home-hero.css for the
+      full colour-substitution notes.
+    - Markup: lines ~463-505 (<section class="hero">...</section>), i.e.
+      the eyebrow/h1/lede/CTA copy block, the hero__proof trust-signal row,
+      the hero art image, the roundel photo badge (added after design
+      review to signal FDM/prototyping capability without derailing the
+      miniatures-led hero art), and the scroll cue.
+  Static copy, CTA targets and both images are replaced with section
+  settings so a merchant can edit them (including swapping the roundel
+  photo seasonally) without a theme code deploy.
+
+  Judgment call: the prototype's single h1 splits across two lines with a
+  highlighted final phrase (`<span class="hl">better minis.</span>`).
+  Modelled as two settings — `heading` (the plain first line) and
+  `heading_highlight` (the highlighted line) — rather than one field, since
+  collapsing them would lose the two-tone treatment the design relies on.
+  This is one field more than the brief's literal list; flagged in the
+  task report rather than silently added.
+
+  The hero__proof trust-signal row (3 checkmarked claims) is kept as
+  static markup, matching the source 1:1 — the brief's schema list does
+  not mention it, so it's not exposed as editable settings.
+{% endcomment %}
+<section class="hero" id="Hero-{{ section.id }}">
+  <div class="hero__bg"></div>
+  <img class="hero__mark" src="{{ 'arcane-flame-logo-white.svg' | asset_url }}" alt="" aria-hidden="true" />
+  <div class="hero__grid"></div>
+  <div class="hero__vig"></div>
+  <div class="hero__in">
+    <div class="hero__copy">
+      <p class="eyebrow">{{ section.settings.subheading }}</p>
+      <h1 class="display">
+        {{ section.settings.heading }}<br />
+        <span class="hl">{{ section.settings.heading_highlight }}</span>
+      </h1>
+      <div class="lede">{{ section.settings.lede }}</div>
+      <div class="hero__cta">
+        {% if section.settings.primary_cta_text != blank %}
+          <a href="{{ section.settings.primary_cta_url }}" class="btn btn--primary">
+            {{ section.settings.primary_cta_text }} <span class="arw">→</span>
+          </a>
+        {% endif %}
+        {% if section.settings.secondary_cta_text != blank %}
+          <a href="{{ section.settings.secondary_cta_url }}" class="btn btn--ghost">{{ section.settings.secondary_cta_text }}</a>
+        {% endif %}
+      </div>
+      <div class="hero__proof">
+        <div><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg> 12K stunning detail</div>
+        <div><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg> Printed to order in the UK</div>
+        <div><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg> 100% satisfaction guarantee</div>
+      </div>
+    </div>
+    <div class="hero__art">
+      <div class="hero__glow"></div>
+      {% if section.settings.hero_image %}
+        <img
+          src="{{ section.settings.hero_image | image_url: width: 1200 }}"
+          srcset="{{ section.settings.hero_image | image_url: width: 600 }} 600w, {{ section.settings.hero_image | image_url: width: 1200 }} 1200w"
+          alt="{{ section.settings.hero_image.alt | default: section.settings.heading }}"
+          loading="eager"
+          fetchpriority="high"
+          width="{{ section.settings.hero_image.width }}"
+          height="{{ section.settings.hero_image.height }}"
+        />
+      {% endif %}
+      <div class="roundel">
+        <div class="roundel__photo">
+          {% if section.settings.roundel_image %}
+            <img
+              src="{{ section.settings.roundel_image | image_url: width: 300 }}"
+              srcset="{{ section.settings.roundel_image | image_url: width: 150 }} 150w, {{ section.settings.roundel_image | image_url: width: 300 }} 300w"
+              alt="{{ section.settings.roundel_image.alt | default: section.settings.roundel_caption }}"
+              loading="lazy"
+              width="150"
+              height="150"
+            />
+          {% endif %}
+        </div>
+        <div class="roundel__cap">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="14" rx="0"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          <span>{{ section.settings.roundel_caption }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="scrollcue"><span></span>Scroll</div>
+</section>
+
+{{ 'brand-tokens.css' | asset_url | stylesheet_tag }}
+{{ 'home-hero.css' | asset_url | stylesheet_tag }}
+
+{% schema %}
+{
+  "name": "Hero",
+  "settings": [
+    {
+      "type": "text",
+      "id": "subheading",
+      "label": "Eyebrow / subheading",
+      "default": "UK Resin & PLA 3D Printing"
+    },
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "Your table deserves"
+    },
+    {
+      "type": "text",
+      "id": "heading_highlight",
+      "label": "Heading (highlighted line)",
+      "default": "better minis."
+    },
+    {
+      "type": "richtext",
+      "id": "lede",
+      "label": "Lede",
+      "default": "<p>Upload an STL, get a real price in about a minute, and we'll print it in 12K-detail resin or tough PLA — to order, here in the UK.</p>"
+    },
+    {
+      "type": "text",
+      "id": "primary_cta_text",
+      "label": "Primary button label",
+      "default": "Get an instant quote"
+    },
+    {
+      "type": "url",
+      "id": "primary_cta_url",
+      "label": "Primary button link"
+    },
+    {
+      "type": "text",
+      "id": "secondary_cta_text",
+      "label": "Secondary button label",
+      "default": "Shop miniatures"
+    },
+    {
+      "type": "url",
+      "id": "secondary_cta_url",
+      "label": "Secondary button link"
+    },
+    {
+      "type": "image_picker",
+      "id": "hero_image",
+      "label": "Hero image"
+    },
+    {
+      "type": "image_picker",
+      "id": "roundel_image",
+      "label": "Roundel photo (FDM/prototype badge)"
+    },
+    {
+      "type": "text",
+      "id": "roundel_caption",
+      "label": "Roundel caption",
+      "default": "We also print FDM parts"
+    }
+  ],
+  "presets": [
+    {
+      "name": "Hero"
+    }
+  ]
+}
+{% endschema %}

@@ -1,0 +1,136 @@
+/* shopify-theme/assets/home-hero.css
+   Ported from "Arcane Flame Website Prototype" option-c.html:
+     - lines ~106-171 (.hero, .hero__*, @keyframes float, the hero roundel
+       block .roundel/.roundel__*, @keyframes roundel-spin, and the
+       <=900px roundel responsive rule).
+     - Plus the hero-relevant subset of two shared responsive blocks that
+       live elsewhere in the prototype and also cover unrelated sections
+       (.craft, .calc, .svc, nav, etc.) — same pattern home-nav.css used
+       for its own responsive rules. Without these, the hero keeps its
+       2-column desktop grid down to phone width instead of stacking, which
+       is what the definition of done's mobile roundel-legibility check
+       caught during verification:
+         - lines ~382-394 (<=1080px): only the .hero__in / .hero /
+           .hero__art / .hero__art img declarations pulled from that block.
+         - lines ~397-409 (<=680px): only the .hero__in / .hero h1 /
+           .hero .lede / .hero__cta .btn / .hero__proof declarations pulled
+           from that block. (.hero__cta .btn is included because without
+           it the two CTA buttons don't go full-width/stacked on phone,
+           even though the base .btn class itself is out of scope here,
+           same as home-nav.css's treatment of .btn__cta sizing.)
+   Every colour is a var(--af-*) token from brand-tokens.css; the
+   radial-gradient/linear-gradient translucency stops (rgba()) have no
+   token equivalent and are kept as rgba() per the brief's stated exception.
+
+   Colour substitutions (prototype value -> token):
+     var(--flame-300) -> var(--af-flame-300)
+     var(--grey-500)  -> var(--af-grey-500)
+     var(--ink-900)   -> var(--af-ink-900)   (roundel__photo inset ring)
+     var(--maxw)      -> var(--af-maxw)
+     #fff (.roundel__cap span) -> var(--af-white) (literal hex replaced with
+       the equivalent named token, same colour)
+     #000 (.hero__grid mask-image/-webkit-mask-image, x2) -> var(--af-ink-900)
+       — a CSS mask only reads the gradient stop's alpha channel, not its
+       hue, so swapping in the near-black ink token is visually identical
+       to the literal black while satisfying the no-literal-hex rule.
+
+   Judgment calls (no exact token match, nearest brand-tokens.css swatch used):
+     #070d14 (.hero__bg gradient, stop 1) -> var(--af-ink-900) — EXACT match.
+     #0b1520 (.hero__bg gradient, stop 2) -> var(--af-ink-800) (#0d1520) —
+       nearest token; off by 2 in the red channel (0b vs 0d), imperceptible.
+     #101e2a (.hero__bg gradient, stop 3) -> var(--af-ink-700) (#131d2a) —
+       nearest token; off by ~3 in red/green channels, imperceptible.
+   Base type/button classes referenced by the markup (.display, .eyebrow,
+   .lede, .btn, .btn--primary, .btn--ghost) are global site classes defined
+   outside this CSS range (option-c.html lines ~49-70) — same as home-nav.css,
+   this file does not redefine them; they belong to a future global/base
+   stylesheet task. */
+
+/* ---------- hero ---------- */
+.hero{position:relative;min-height:100vh;display:flex;align-items:center;overflow:hidden;padding:158px 0 82px}
+.hero__bg{position:absolute;inset:0;z-index:0;
+  background:
+    /* aqua core, low — the hottest part of the flame */
+    radial-gradient(30% 40% at 70% 82%, rgba(168,240,250,.16), transparent 68%),
+    radial-gradient(38% 54% at 71% 66%, rgba(79,214,236,.20), transparent 70%),
+    /* teal body, rising and widening */
+    radial-gradient(50% 66% at 69% 44%, rgba(14,147,176,.19), transparent 72%),
+    /* cool counter-wash, upper left */
+    radial-gradient(54% 60% at 10% 20%, rgba(11,95,117,.20), transparent 72%),
+    /* faint lift off the bottom edge */
+    radial-gradient(96% 46% at 50% 110%, rgba(79,214,236,.08), transparent 74%),
+    linear-gradient(152deg,var(--af-ink-900) 0%,var(--af-ink-800) 46%,var(--af-ink-700) 100%);
+}
+.hero__grid{position:absolute;inset:0;z-index:1;opacity:.5;
+  background-image:linear-gradient(rgba(255,255,255,.028) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(255,255,255,.028) 1px,transparent 1px);
+  background-size:76px 76px;
+  mask-image:radial-gradient(70% 70% at 50% 45%,var(--af-ink-900) 30%,transparent 100%);
+  -webkit-mask-image:radial-gradient(70% 70% at 50% 45%,var(--af-ink-900) 30%,transparent 100%);
+}
+.hero__mark{position:absolute;left:47%;top:43%;transform:translate(-50%,-50%);
+  height:min(60%,490px);width:auto;max-width:70vw;opacity:.06;
+  z-index:2;pointer-events:none;user-select:none}
+.hero__vig{position:absolute;inset:0;z-index:4;pointer-events:none;
+  box-shadow:inset 0 0 260px 70px rgba(0,0,0,.62)}
+.hero__in{position:relative;z-index:5;display:grid;grid-template-columns:1.05fr .95fr;
+  gap:40px;align-items:center;max-width:var(--af-maxw);margin:0 auto;padding:0 32px;width:100%}
+.hero__copy{max-width:620px}
+.hero h1{font-size:clamp(34px,4.3vw,60px);margin:18px 0 0}
+.hero h1 .hl{color:var(--af-flame-300);display:block}
+.hero .lede{margin-top:22px;font-size:19px}
+.hero__cta{display:flex;flex-wrap:wrap;gap:14px;margin-top:32px}
+.hero__proof{display:flex;flex-wrap:wrap;gap:9px 26px;margin-top:34px;
+  padding-top:22px;border-top:1px solid rgba(255,255,255,.1)}
+.hero__proof div{display:flex;align-items:center;gap:9px;font-size:13.5px;color:var(--af-grey-500)}
+.hero__proof svg{flex-shrink:0;color:var(--af-flame-300)}
+.hero__art{position:relative;justify-self:center}
+.hero__art img{
+  height:min(70vh,760px);width:auto;max-width:46vw;object-fit:contain;
+  filter:drop-shadow(0 50px 90px rgba(0,0,0,.85));
+  animation:float 8s ease-in-out infinite;
+}
+.hero__glow{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);
+  width:118%;aspect-ratio:1;z-index:-1;
+  background:radial-gradient(circle,rgba(79,214,236,.2),transparent 62%);filter:blur(28px)}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-16px)}}
+
+/* ---------- hero roundel — signals FDM/prototyping without derailing the mini hero art ---------- */
+.roundel{position:absolute;left:-4%;bottom:6%;z-index:6;width:172px;
+  display:flex;flex-direction:column;align-items:center;gap:10px}
+.roundel__photo{position:relative;width:150px;height:150px;border-radius:50%;overflow:hidden;
+  box-shadow:0 16px 34px rgba(0,0,0,.6),inset 0 0 0 3px var(--af-ink-900),inset 0 0 0 4px rgba(79,214,236,.7)}
+.roundel__photo img{width:100%;height:100%;object-fit:cover;object-position:50% 35%}
+.roundel__photo::before{content:"";position:absolute;inset:-8px;border-radius:50%;
+  border:1px dashed rgba(79,214,236,.5);animation:roundel-spin 26s linear infinite}
+.roundel__photo::after{content:"";position:absolute;inset:0;border-radius:50%;
+  background:linear-gradient(200deg,transparent 55%,rgba(7,13,20,.75) 100%)}
+.roundel__cap{display:flex;align-items:center;gap:7px;background:rgba(8,12,16,.88);
+  border:1px solid rgba(79,214,236,.45);padding:7px 14px;white-space:nowrap}
+.roundel__cap svg{color:var(--af-flame-300);flex-shrink:0}
+.roundel__cap span{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--af-white)}
+@keyframes roundel-spin{to{transform:rotate(360deg)}}
+@media (max-width:900px){.roundel{width:118px;left:0;bottom:1%}.roundel__photo{width:100px;height:100px}
+  .roundel__cap span{font-size:9.5px}}
+
+/* ---------- responsive (ported subset — see file header) ---------- */
+@media (max-width:1080px){
+  .hero__in{grid-template-columns:1fr;gap:52px}
+  .hero{min-height:auto;padding:120px 0 70px}
+  .hero__art{order:-1}
+  .hero__art img{height:auto;width:min(400px,62vw);max-width:none}
+}
+@media (max-width:680px){
+  .hero__in{padding:0 20px}
+  .hero h1{font-size:clamp(30px,7.6vw,42px)}
+  .hero .lede{font-size:17px}
+  .hero__cta .btn{flex:1 1 100%;justify-content:center}
+  .hero__proof{gap:8px 18px}
+  .hero__proof div{font-size:12.5px}
+}
+.scrollcue{position:absolute;bottom:30px;left:50%;transform:translateX(-50%);z-index:6;
+  display:flex;flex-direction:column;align-items:center;gap:9px;
+  font-size:10.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--af-grey-500)}
+.scrollcue span{width:1px;height:44px;background:linear-gradient(var(--af-flame-300),transparent);
+  animation:cue 2.1s ease-in-out infinite}
+@keyframes cue{0%,100%{opacity:.25;transform:scaleY(.55);transform-origin:top}50%{opacity:1;transform:scaleY(1)}}
