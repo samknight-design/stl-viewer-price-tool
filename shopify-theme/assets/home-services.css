@@ -1,0 +1,110 @@
+/* shopify-theme/assets/home-services.css
+   Ported from "Arcane Flame Website Prototype" option-c.html:
+     - lines ~227-264: .svc, .svc__card, .svc__card:hover, .svc__frame,
+       .svc__badge, .svc__badge svg, .svc__badge span, .svc__badge em,
+       .svc__card img, .svc--resin img, .svc--fdm img, .svc__card::after,
+       .svc__body, .svc__card h3, .svc__card p, .tags, .tags span,
+       .svc__link, .svc__link .arw, .svc__card:hover .svc__link .arw.
+     - Plus the .svc-relevant subset of the shared <=680px responsive
+       block (line ~397): the `.svc,.pgrid,.rev,.ladder,.foot__grid,.spec{
+       grid-template-columns:1fr}` declaration reduced to just `.svc`
+       (the other selectors belong to sections not yet ported), and the
+       `.svc__card`, `.svc__card::after`, `.svc--resin img,.svc--fdm img`
+       rules from the same breakpoint.
+
+   Judgment call — .svc--resin / .svc--fdm renamed to .svc--a / .svc--b:
+   in the source these two classes are hardcoded per fixed card and exist
+   purely to give each example photo its own absolute crop/position (the
+   paladin miniature vs. the terrain photo have different aspect ratios).
+   Now that cards come from a repeatable `service_card` block with a
+   merchant-swappable image, "resin"/"fdm" no longer describes what the
+   class does — it's really "position variant A" vs "position variant B",
+   alternated by block index in home-services.liquid. Renamed to keep the
+   CSS honest about its actual job; the declarations themselves (offsets,
+   sizing) are unchanged from the source's .svc--resin / .svc--fdm rules.
+
+   Every colour is a var(--af-*) token from brand-tokens.css; the
+   border/box-shadow/gradient rgba() translucency stops have no token
+   equivalent and are kept as rgba() per the brief's stated exception.
+
+   Colour substitutions (prototype value -> token):
+     rgba(79,214,236,.55) -> unchanged rgba()  (.svc__frame dashed border —
+       translucency stop of --af-flame-300 (#4fd6ec = rgb(79,214,236)), no
+       token covers a translucent variant, kept as rgba() per exception)
+     var(--flame-500)     -> var(--af-flame-500)  (.svc__badge background)
+     var(--ink-700)       -> var(--af-ink-700)    (.svc__card gradient start)
+     var(--ink-900)       -> var(--af-ink-900)    (.svc__card gradient end,
+       .svc__card::after gradient start)
+     var(--grey-500)      -> var(--af-grey-500)   (.svc__card p color)
+     var(--grey-300)      -> var(--af-grey-300)   (.tags span color)
+     var(--flame-300)     -> var(--af-flame-300)  (.svc__link color)
+     var(--ease)          -> var(--af-ease)       (.svc__card / .svc__link
+       .arw transitions)
+     var(--display)       -> var(--af-font-display) (.svc__card h3 font-family)
+   rgba() translucency kept as-is (no token equivalent):
+     rgba(255,255,255,.11) — .svc__card border
+     rgba(79,214,236,.5)   — .svc__card:hover border-color
+     rgba(79,214,236,.55)  — .svc__frame border
+     rgba(255,255,255,.25) — .svc__badge border
+     rgba(0,0,0,.4)        — .svc__badge box-shadow
+     rgba(255,255,255,.8)  — .svc__badge em color
+     rgba(0,0,0,.8)        — .svc__card img drop-shadow
+     rgba(8,10,18,.9)      — .svc__card::after gradient mid-stop
+     rgba(255,255,255,.22) — .tags span border
+     rgba(11,15,19,.35)    — .svc__card::after gradient (<=680px override)
+   #fff used directly for .svc__badge svg color and .svc__badge span
+   color — matches --af-white exactly; kept as the var() token instead of
+   the literal for consistency with the rest of this file (source used
+   #fff here rather than var(--white) inconsistently with its own tokens).
+
+   Base type/section classes referenced by the markup (.sec, .sec--mid,
+   .wrap, .eyebrow, .display, .lede) are defined in home-base.css and are
+   not redefined here — same convention as home-hero.css / home-craft.css. */
+
+/* ---------- service split ---------- */
+.svc{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+.svc__card{
+  position:relative;overflow:hidden;min-height:520px;display:flex;flex-direction:column;
+  justify-content:flex-end;padding:44px;border:1px solid rgba(255,255,255,.11);
+  background:linear-gradient(165deg,var(--af-ink-700),var(--af-ink-900));
+  transition:border-color .3s var(--af-ease),transform .3s var(--af-ease);
+}
+.svc__card:hover{border-color:rgba(79,214,236,.5);transform:translateY(-5px)}
+.svc__frame{position:absolute;inset:14px 14px auto 14px;height:calc(100% - 96px);z-index:2;
+  border:1px dashed rgba(79,214,236,.55);pointer-events:none}
+.svc__badge{position:absolute;left:0;top:22px;z-index:4;display:flex;align-items:center;gap:10px;
+  background:var(--af-flame-500);border:1px solid rgba(255,255,255,.25);
+  padding:9px 16px 9px 12px;box-shadow:0 8px 18px rgba(0,0,0,.4)}
+.svc__badge svg{color:var(--af-white);flex-shrink:0}
+.svc__badge span{display:block;font-size:11.5px;font-weight:700;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--af-white);line-height:1.25}
+.svc__badge em{display:block;font-style:normal;font-size:9.5px;font-weight:500;letter-spacing:.06em;
+  color:rgba(255,255,255,.8);text-transform:none}
+.svc__card img{
+  position:absolute;pointer-events:none;transition:transform .55s var(--af-ease);
+  filter:drop-shadow(0 30px 50px rgba(0,0,0,.8));
+}
+.svc__card:hover img{transform:scale(1.05) translateY(-6px)}
+.svc--a img{right:-8%;bottom:0;height:88%;width:auto}
+.svc--b img{right:-4%;bottom:18%;width:52%}
+.svc__card::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(90deg,var(--af-ink-900) 20%,rgba(8,10,18,.9) 48%,transparent 86%)}
+.svc__body{position:relative;z-index:2;max-width:330px}
+.svc__card h3{font-family:var(--af-font-display);text-transform:uppercase;font-size:27px;margin:14px 0 12px;line-height:1.1}
+.svc__card p{font-size:15px;color:var(--af-grey-500);margin-bottom:24px}
+.tags{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:26px}
+.tags span{font-size:11px;letter-spacing:.07em;text-transform:uppercase;
+  border:1px solid rgba(255,255,255,.22);padding:5px 11px;color:var(--af-grey-300)}
+.svc__link{display:inline-flex;align-items:center;gap:9px;font-weight:600;font-size:13px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--af-flame-300)}
+.svc__link .arw{transition:transform .18s var(--af-ease)}
+.svc__card:hover .svc__link .arw{transform:translateX(5px)}
+
+/* ---------- responsive (ported subset — see file header) ---------- */
+@media (max-width:680px){
+  .svc{grid-template-columns:1fr}
+  .svc__card{min-height:430px;padding:30px}
+  .svc__card::after{background:linear-gradient(180deg,rgba(11,15,19,.35) 0%,var(--af-ink-900) 62%)}
+  .svc--a img,.svc--b img{right:-18%;height:62%;width:auto;bottom:auto;top:4%}
+  .svc--b img{width:88%;height:auto;top:12%}
+}

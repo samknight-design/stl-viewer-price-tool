@@ -1,0 +1,213 @@
+{% comment %}
+  sections/home-services.liquid
+  Ported from the "Arcane Flame Website Prototype" option-c.html:
+    - CSS: lines ~227-264 (.svc, .svc__card, .svc__card:hover, .svc__frame,
+      .svc__badge + children, .svc__card img, .svc--resin img, .svc--fdm img,
+      .svc__card::after, .svc__body, .svc__card h3, .svc__card p, .tags,
+      .tags span, .svc__link, .svc__link .arw) plus the .svc-relevant slice
+      of the <=680px responsive rule (line ~397) — see
+      shopify-theme/assets/home-services.css for the full colour-
+      substitution notes.
+    - Markup: lines ~554-597 (<section class="sec sec--mid" id="services">
+      ...</section>) — the "Two ways to print" heading block (including the
+      upload-clarity sub-heading added this session) and the two service
+      cards (each with the dashed .svc__frame overlay and solid
+      .svc__badge added this session).
+
+  ** This section exists specifically to fix a user-flagged confusion **
+  (screenshotted twice): without the badge/frame/sub-heading, the two
+  photographed models read as a shop catalogue of pre-made products
+  rather than examples of customer-uploaded files. Per the task brief,
+  three elements are therefore HARDCODED directly in this file, not
+  exposed as block/section settings a merchant could edit away:
+    1. The section sub-heading line ("Examples from files customers have
+       sent us — upload your own STL below and we'll price it the same
+       way.") under the eyebrow/heading.
+    2. The .svc__frame dashed border overlay on each card (always
+       rendered, unconditional — not a toggle).
+    3. The .svc__badge "Uploaded STL / not a stock model" badge + upload
+       icon on each card (always rendered, unconditional — not a toggle).
+  Everything else per card (eyebrow, heading, body, image, tags, CTA
+  text/url) is a `service_card` block setting so a merchant can edit
+  copy, swap photos or add a third material without a code deploy.
+
+  Judgment call — tags field: the brief allows either a second nested
+  block type or a delimited text setting parsed with `| split`. Shopify
+  block settings cannot themselves contain a repeating sub-list (blocks
+  can't nest inside a block's own settings), so a second block type would
+  live as siblings of `service_card` at the section level and have to be
+  manually associated back to the right card (fragile, easy for a
+  merchant to misorder). Went with a single-line comma-separated `text`
+  setting (`tags`, e.g. "32mm heroic, 12K detail, Primed or raw") parsed
+  with `| split: ','` in the loop below — one field per card, matches the
+  source's 2-3 short tags, and merchants edit a plain text field instead
+  of managing extra blocks.
+{% endcomment %}
+<section class="sec sec--mid" id="Services-{{ section.id }}">
+  <div class="wrap">
+    <div class="sec__head">
+      <p class="eyebrow reveal">{{ section.settings.eyebrow }}</p>
+      <h2 class="display reveal" data-d="1">{{ section.settings.heading }}</h2>
+      {% comment %} Hardcoded clarifying sub-line — see file header. Not a section setting. {% endcomment %}
+      <p class="lede reveal" data-d="1" style="margin-top:14px">
+        Examples from files customers have sent us — <strong style="color:var(--af-white)">upload your own STL
+        below</strong> and we'll price it the same way.
+      </p>
+    </div>
+    <div class="svc">
+      {% for block in section.blocks %}
+        {% if block.type == 'service_card' %}
+          {% comment %}
+            The source's two fixed cards use .svc--resin / .svc--fdm modifier
+            classes purely to give each example photo its own absolute
+            crop/position (different aspect ratios). With blocks now
+            merchant-editable, alternate the same two positioning variants by
+            index (odd/even) rather than hardcoding "resin"/"fdm" — see
+            home-services.css for what each variant actually controls.
+          {% endcomment %}
+          {% assign card_variant = 'a' %}
+          {% if forloop.index0 | modulo: 2 == 1 %}
+            {% assign card_variant = 'b' %}
+          {% endif %}
+          <article class="svc__card svc--{{ card_variant }} reveal" {% if forloop.index0 > 0 %}data-d="1"{% endif %} {{ block.shopify_attributes }}>
+            {% comment %} Hardcoded dashed frame overlay — see file header. Not a block setting. {% endcomment %}
+            <div class="svc__frame"></div>
+            {% comment %} Hardcoded upload-clarity badge — see file header. Not a block setting. {% endcomment %}
+            <span class="svc__badge">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5-5 5 5"/><path d="M12 5v13"/></svg>
+              <span>Uploaded STL<br /><em>not a stock model</em></span>
+            </span>
+            {% if block.settings.image %}
+              <img
+                src="{{ block.settings.image | image_url: width: 800 }}"
+                srcset="{{ block.settings.image | image_url: width: 400 }} 400w, {{ block.settings.image | image_url: width: 800 }} 800w"
+                alt="{{ block.settings.image.alt | default: block.settings.heading }}"
+                loading="lazy"
+                width="{{ block.settings.image.width }}"
+                height="{{ block.settings.image.height }}"
+              />
+            {% endif %}
+            <div class="svc__body">
+              <p class="eyebrow">{{ block.settings.eyebrow }}</p>
+              <h3>{{ block.settings.heading }}</h3>
+              <p>{{ block.settings.body }}</p>
+              {% if block.settings.tags != blank %}
+                <div class="tags">
+                  {% assign tag_list = block.settings.tags | split: ',' %}
+                  {% for tag in tag_list %}
+                    <span>{{ tag | strip }}</span>
+                  {% endfor %}
+                </div>
+              {% endif %}
+              {% if block.settings.cta_text != blank %}
+                <a href="{{ block.settings.cta_url }}" class="svc__link">{{ block.settings.cta_text }} <span class="arw">→</span></a>
+              {% endif %}
+            </div>
+          </article>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+{{ 'brand-tokens.css' | asset_url | stylesheet_tag }}
+{{ 'home-base.css' | asset_url | stylesheet_tag }}
+{{ 'home-services.css' | asset_url | stylesheet_tag }}
+
+{% schema %}
+{
+  "name": "Services",
+  "settings": [
+    {
+      "type": "text",
+      "id": "eyebrow",
+      "label": "Eyebrow",
+      "default": "Two ways to print"
+    },
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "Pick your material, we'll handle the rest."
+    }
+  ],
+  "blocks": [
+    {
+      "type": "service_card",
+      "name": "Service card",
+      "settings": [
+        {
+          "type": "image_picker",
+          "id": "image",
+          "label": "Photo"
+        },
+        {
+          "type": "text",
+          "id": "eyebrow",
+          "label": "Eyebrow",
+          "default": "Resin · MSLA"
+        },
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Heading",
+          "default": "Miniatures & Characters"
+        },
+        {
+          "type": "richtext",
+          "id": "body",
+          "label": "Body text",
+          "default": "<p>Fine detail at small scale. Heroes, villains, monsters and busts — printed in high-detail photopolymer resin.</p>"
+        },
+        {
+          "type": "text",
+          "id": "tags",
+          "label": "Tags (comma-separated)",
+          "info": "Short attributes shown as pill labels, e.g. \"32mm heroic, 12K detail, Primed or raw\"",
+          "default": "32mm heroic, 12K detail, Primed or raw"
+        },
+        {
+          "type": "text",
+          "id": "cta_text",
+          "label": "Link text",
+          "default": "Upload for a resin quote"
+        },
+        {
+          "type": "url",
+          "id": "cta_url",
+          "label": "Link URL"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Services",
+      "blocks": [
+        {
+          "type": "service_card",
+          "settings": {
+            "eyebrow": "Resin · MSLA",
+            "heading": "Miniatures & Characters",
+            "body": "<p>Fine detail at small scale. Heroes, villains, monsters and busts — printed in high-detail photopolymer resin.</p>",
+            "tags": "32mm heroic, 12K detail, Primed or raw",
+            "cta_text": "Upload for a resin quote",
+            "cta_url": "#calculator"
+          }
+        },
+        {
+          "type": "service_card",
+          "settings": {
+            "eyebrow": "PLA · FDM",
+            "heading": "Terrain, Props & Parts",
+            "body": "<p>Bigger, tougher builds on a 256mm plate. Terrain, prototypes, gadget housings and custom components.</p>",
+            "tags": "256mm plate, 16 colours, Priced by volume",
+            "cta_text": "Upload for a PLA quote",
+            "cta_url": "#calculator"
+          }
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}
