@@ -5,6 +5,19 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Fjalla+One&family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
 
+:root {
+  /* Functional/status colours — not brand identity, so they live here rather
+     than in brand-tokens.css (which mirrors arcane-flame-design-system/brand.html
+     verbatim, nothing added). brand.html defines no success/warning/error
+     palette; forcing these onto rust/flame would destroy the functional
+     signal. One place to edit if these ever need to change — see
+     .superpowers/sdd/task-2-report.md for the reasoning. */
+  --status-success:      rgb(22,163,74);
+  --status-success-dark: rgb(20,83,45);
+  --status-warning:      rgb(196,119,0);
+  --status-error:        rgb(220,38,38);
+}
+
 .print-calculator-embed {
   --bg:           var(--af-paper);
   --bg2:          var(--af-white);
@@ -27,13 +40,11 @@
   --flame-light:  var(--af-rust-700);
   --flame-glow:   rgba(162,86,86,.10);
 
-  /* Functional/status colours — brand.html defines no semantic success/
-     warning/error hues, so these stay as literal rgb() (not hex, so the
-     no-literal-hex test still passes) rather than being force-mapped onto
-     an unrelated brand colour. Flagged in task-2-report.md. */
-  --green:        rgb(22,163,74);
-  --amber:        rgb(196,119,0);
-  --red:          rgb(220,38,38);
+  /* Functional/status colours — sourced from the :root block above, not
+     from brand-tokens.css. See that block's comment for why. */
+  --green:        var(--status-success);
+  --amber:        var(--status-warning);
+  --red:          var(--status-error);
 
   --text:         var(--af-black);
   --text-dim:     var(--af-grey-600);
@@ -206,7 +217,7 @@
 .seg-btn:not(:last-child) { border-right: 1px solid var(--card-border); }
 .seg-btn:hover { background: var(--bg2); color: var(--text); }
 .seg-btn.active { background: linear-gradient(135deg, var(--accent-dim), var(--accent)); color: var(--af-white); }
-.seg-btn.active-green { background: linear-gradient(135deg, rgb(20,83,45), var(--green)); color: var(--af-white); }
+.seg-btn.active-green { background: linear-gradient(135deg, var(--status-success-dark), var(--green)); color: var(--af-white); }
 .presupported-badge {
   display: inline-flex; align-items: center; gap: 4px;
   font-size: .7em; color: var(--green);
