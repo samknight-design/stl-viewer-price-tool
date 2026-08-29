@@ -1,0 +1,96 @@
+/* shopify-theme/assets/home-craft.css
+   Ported from "Arcane Flame Website Prototype" option-c.html:
+     - lines ~196-225: .craft, .craft__fig, .craft__fig>img, .craft__ring,
+       .pin, .pin__dot, .pin__dot::after, @keyframes ping, .pin__lbl,
+       .pin:hover .pin__lbl, .pin--r .pin__lbl, .pin--r:hover .pin__lbl,
+       .spec, .spec div, .spec dt, .spec dd, .spec dd em.
+     - Plus the .craft-relevant subset of two shared responsive blocks
+       that live elsewhere in the prototype and also cover unrelated
+       sections (.hero__in, .calc, nav, etc.) — same pattern
+       home-hero.css used for its own responsive subset:
+         - line ~383 (<=1080px): only the `.craft{grid-template-columns:
+           1fr;gap:52px}` declaration pulled from the combined
+           `.hero__in,.craft,.calc{...}` selector.
+         - line ~394 (<=1080px, same breakpoint): `.pin{display:none}` —
+           the prototype's own comment there reads "hover-only
+           affordance: remove on touch (its nowrap label also widened
+           the page)".
+         - line ~396: `@media (hover:none){ .pin{display:none} }` — a
+           second, broader touch-hiding rule outside the 1080px
+           breakpoint (covers touch devices above 1080px too, e.g. a
+           touchscreen laptop).
+       Both pin-hiding rules are ported verbatim — see the "no touch
+       fallback" note in home-craft.liquid and the task report; this is
+       the prototype's explicit choice, not a gap introduced by this
+       port.
+   Every colour is a var(--af-*) token from brand-tokens.css; the
+   radial-gradient/box-shadow/border rgba() translucency stops have no
+   token equivalent and are kept as rgba() per the brief's stated
+   exception.
+
+   Colour substitutions (prototype value -> token):
+     var(--flame-300) -> var(--af-flame-300)  (.pin__dot background,
+       .pin__dot::after border, spec dd em is a separate colour — see
+       below)
+     var(--ink-800)   -> var(--af-ink-800)    (.spec div background)
+     var(--grey-500)  -> var(--af-grey-500)   (.spec dt color, .spec dd
+       em color)
+     var(--white)     -> var(--af-white)      (.spec dd color)
+     var(--mono)      -> var(--af-font-mono)  (.spec dd font-family)
+   rgba() translucency kept as-is (no token equivalent):
+     rgba(79,214,236,.16) / transparent — .craft__ring radial-gradient
+     rgba(0,0,0,.8)        — .craft__fig>img drop-shadow
+     rgba(8,12,16,.85)     — .pin__dot border
+     rgba(8,12,16,.94)     — .pin__lbl background
+     rgba(79,214,236,.42)  — .pin__lbl border
+     rgba(255,255,255,.1)  — .spec background / border (x2)
+   No literal hex colours appear in this block of the prototype.
+
+   Base type/section classes referenced by the markup (.sec, .wrap,
+   .eyebrow, .display, h2.display, .lede) are defined in home-base.css
+   and are not redefined here — same convention as home-hero.css and
+   home-marquee.css. */
+
+/* ---------- craft / detail ---------- */
+.craft{display:grid;grid-template-columns:.95fr 1.05fr;gap:70px;align-items:center}
+.craft__fig{position:relative}
+.craft__fig>img{
+  width:100%;max-width:520px;margin:0 auto;
+  filter:drop-shadow(0 40px 70px rgba(0,0,0,.8));
+}
+.craft__ring{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:min(560px,90%);aspect-ratio:1;border-radius:50%;z-index:-1;
+  background:radial-gradient(circle,rgba(79,214,236,.16),transparent 64%);filter:blur(24px)}
+
+/* ---------- hotspot pins (hover-reveal; hidden on touch, see file header) ---------- */
+.pin{position:absolute;z-index:3}
+.pin__dot{width:15px;height:15px;border-radius:50%;background:var(--af-flame-300);
+  border:2px solid rgba(8,12,16,.85);cursor:pointer;position:relative}
+.pin__dot::after{content:"";position:absolute;inset:-9px;border-radius:50%;
+  border:1px solid var(--af-flame-300);opacity:.55;animation:ping 2.4s ease-out infinite}
+@keyframes ping{0%{transform:scale(.6);opacity:.75}100%{transform:scale(1.7);opacity:0}}
+.pin__lbl{
+  position:absolute;left:26px;top:-9px;width:max-content;max-width:190px;
+  background:rgba(8,12,16,.94);border:1px solid rgba(79,214,236,.42);
+  padding:8px 13px;font-size:12px;line-height:1.35;letter-spacing:.05em;color:var(--af-white);
+  opacity:0;transform:translateX(-6px);transition:.2s var(--af-ease);pointer-events:none;
+}
+.pin:hover .pin__lbl{opacity:1;transform:translateX(0)}
+.pin--r .pin__lbl{left:auto;right:26px;transform:translateX(6px)}
+.pin--r:hover .pin__lbl{transform:translateX(0)}
+
+/* ---------- spec grid ---------- */
+.spec{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:rgba(255,255,255,.1);
+  border:1px solid rgba(255,255,255,.1);margin-top:42px}
+.spec div{background:var(--af-ink-800);padding:24px 22px}
+.spec dt{font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--af-grey-500);margin-bottom:8px}
+.spec dd{font-family:var(--af-font-mono);font-size:24px;font-weight:600;color:var(--af-white)}
+.spec dd em{font-style:normal;font-size:14px;color:var(--af-grey-500)}
+
+/* ---------- responsive (ported subset — see file header) ---------- */
+@media (max-width:1080px){
+  .craft{grid-template-columns:1fr;gap:52px}
+  /* hover-only affordance: remove on touch (its nowrap label also widened the page) */
+  .pin{display:none}
+}
+@media (hover:none){ .pin{display:none} }

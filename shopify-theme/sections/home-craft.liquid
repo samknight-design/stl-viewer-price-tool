@@ -1,0 +1,211 @@
+{% comment %}
+  sections/home-craft.liquid
+  Ported from the "Arcane Flame Website Prototype" option-c.html:
+    - CSS: lines ~196-225 (.craft, .craft__fig, .craft__ring, .pin,
+      .pin__dot, .pin__dot::after + @keyframes ping, .pin__lbl, .pin--r,
+      .spec, .spec div, .spec dt, .spec dd, .spec dd em) plus the
+      .craft-relevant slice of the shared <=1080px responsive rule
+      (line ~383) and the two pin-hiding-on-touch rules (lines ~394 and
+      396) — see shopify-theme/assets/home-craft.css for the full
+      colour-substitution notes.
+    - Markup: lines ~517-551 (<section class="sec" id="detail">...
+      </section>) — the close-up product photo with hover-reveal hotspot
+      pins, the heading/body copy, and the print-spec grid.
+
+  The image, eyebrow, heading, body copy, the 3 hotspot pins and the 4
+  dt/dd spec pairs are all section settings / repeatable blocks so a
+  merchant can edit or reposition them without a theme code deploy.
+
+  Judgment call: the prototype's h2 splits across two lines with a hard
+  `<br />` (`Detail you can<br />actually see.`) purely for line-length
+  balance — no semantic meaning like the hero's two-tone highlighted
+  line. Modelled here as a single plain `heading` text setting (matching
+  the brief's literal single-field list) and left to wrap naturally;
+  the manual line break is dropped rather than smuggling markup into a
+  single-line text field. Flagged in the task report.
+
+  Judgment call: the source hardcodes two pins with the default
+  right-opening label (`.pin__lbl` with `left:26px`) and one pin
+  (left:22%) with the `pin--r` modifier class, which flips the label to
+  open leftward instead (`right:26px`). Since pins are now
+  merchant-repositionable via the `left`/`top` range settings, which
+  direction a label should open can no longer be inferred from position
+  alone (see task report for why a simple "left > 50% -> flip" rule
+  doesn't reproduce the source, since the source's own left:52% pin does
+  NOT flip). Added a `flip_label` checkbox setting per pin block, off by
+  default, so the theme editor can reproduce the source layout exactly
+  (the left:22% preset pin below sets it true) while remaining editable.
+  This is one field beyond the brief's literal left/top/label list;
+  flagged here and in the report rather than silently added.
+
+  IMPORTANT — hover-only interaction, no touch fallback (flagged, not
+  silently "fixed"): the prototype hides pins entirely on touch devices
+  (`@media (hover:none){ .pin{display:none} }`, option-c.html line 396,
+  duplicated inside the <=1080px breakpoint at line 394) rather than
+  offering a tap-to-reveal alternative. Ported verbatim — mobile/tablet
+  visitors never see the hotspot labels or dots at all, by the
+  prototype's own explicit design choice, not an oversight this port
+  introduced. No JS touch handler was added: doing so would be
+  overriding an upstream design decision, not porting one. See the task
+  report for the full accessibility-gap discussion and a recommendation.
+{% endcomment %}
+<section class="sec" id="Craft-{{ section.id }}">
+  <div class="wrap">
+    <div class="craft">
+      <div class="craft__fig">
+        <div class="craft__ring"></div>
+        {% if section.settings.image %}
+          <img
+            src="{{ section.settings.image | image_url: width: 1040 }}"
+            srcset="{{ section.settings.image | image_url: width: 520 }} 520w, {{ section.settings.image | image_url: width: 1040 }} 1040w"
+            alt="{{ section.settings.image.alt | default: section.settings.heading }}"
+            loading="lazy"
+            width="{{ section.settings.image.width }}"
+            height="{{ section.settings.image.height }}"
+          />
+        {% endif %}
+        {% for block in section.blocks %}
+          {% if block.type == 'pin' %}
+            <div
+              class="pin{% if block.settings.flip_label %} pin--r{% endif %}"
+              style="left:{{ block.settings.left }}%;top:{{ block.settings.top }}%"
+              {{ block.shopify_attributes }}
+            >
+              <div class="pin__dot"></div>
+              <div class="pin__lbl">{{ block.settings.label }}</div>
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+      <div>
+        <p class="eyebrow">{{ section.settings.eyebrow }}</p>
+        <h2 class="display">{{ section.settings.heading }}</h2>
+        <div class="lede">{{ section.settings.body }}</div>
+        <dl class="spec">
+          {% for block in section.blocks %}
+            {% if block.type == 'spec_item' %}
+              <div {{ block.shopify_attributes }}>
+                <dt>{{ block.settings.label }}</dt>
+                <dd>{{ block.settings.value }}{% if block.settings.unit != blank %}<em>{{ block.settings.unit }}</em>{% endif %}</dd>
+              </div>
+            {% endif %}
+          {% endfor %}
+        </dl>
+      </div>
+    </div>
+  </div>
+</section>
+
+{{ 'brand-tokens.css' | asset_url | stylesheet_tag }}
+{{ 'home-base.css' | asset_url | stylesheet_tag }}
+{{ 'home-craft.css' | asset_url | stylesheet_tag }}
+
+{% schema %}
+{
+  "name": "Craft detail",
+  "settings": [
+    {
+      "type": "image_picker",
+      "id": "image",
+      "label": "Detail photo"
+    },
+    {
+      "type": "text",
+      "id": "eyebrow",
+      "label": "Eyebrow",
+      "default": "The detail is the product"
+    },
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "Detail you can actually see."
+    },
+    {
+      "type": "richtext",
+      "id": "body",
+      "label": "Body text",
+      "default": "<p>Every model is printed on professional MSLA resin printers at 12K resolution — the reason filigree, chainmail and facial detail survive at 32mm heroic scale instead of blurring into the layer lines you get from a desktop filament printer.</p><p>Choose raw resin if you like to prep your own, or have it arrive primed in white, grey or black — ready to paint straight out of the box.</p>"
+    }
+  ],
+  "blocks": [
+    {
+      "type": "spec_item",
+      "name": "Spec",
+      "settings": [
+        {
+          "type": "text",
+          "id": "label",
+          "label": "Label",
+          "default": "Print resolution"
+        },
+        {
+          "type": "text",
+          "id": "value",
+          "label": "Value",
+          "default": "12K"
+        },
+        {
+          "type": "text",
+          "id": "unit",
+          "label": "Unit / suffix (optional, shown smaller)",
+          "info": "e.g. \"mm heroic\" or \" finishes\""
+        }
+      ]
+    },
+    {
+      "type": "pin",
+      "name": "Hotspot pin",
+      "settings": [
+        {
+          "type": "range",
+          "id": "left",
+          "label": "Position from left",
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "unit": "%",
+          "default": 50
+        },
+        {
+          "type": "range",
+          "id": "top",
+          "label": "Position from top",
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "unit": "%",
+          "default": 50
+        },
+        {
+          "type": "text",
+          "id": "label",
+          "label": "Label",
+          "default": "Crisp detail — no layer stepping"
+        },
+        {
+          "type": "checkbox",
+          "id": "flip_label",
+          "label": "Open label to the left of the pin",
+          "info": "Turn on when the pin sits near the right edge of the photo so the label doesn't run off the image.",
+          "default": false
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Craft detail",
+      "blocks": [
+        { "type": "spec_item", "settings": { "label": "Print resolution", "value": "12K", "unit": "" } },
+        { "type": "spec_item", "settings": { "label": "Standard scale", "value": "32", "unit": "mm heroic" } },
+        { "type": "spec_item", "settings": { "label": "Primer options", "value": "04", "unit": " finishes" } },
+        { "type": "spec_item", "settings": { "label": "Turnaround", "value": "UK", "unit": " — made to order" } },
+        { "type": "pin", "settings": { "left": 52, "top": 9, "label": "Crisp crown spikes — no layer stepping", "flip_label": false } },
+        { "type": "pin", "settings": { "left": 22, "top": 34, "label": "Chainmail rings resolved individually", "flip_label": true } },
+        { "type": "pin", "settings": { "left": 57, "top": 56, "label": "Filigree holds at 32mm scale", "flip_label": false } }
+      ]
+    }
+  ]
+}
+{% endschema %}
