@@ -1,0 +1,108 @@
+/* shopify-theme/assets/home-base.css
+   Ported from "Arcane Flame Website Prototype" option-c.html:
+     - the base reset (`*{margin:0;padding:0;box-sizing:border-box;min-width:0}`)
+       and the html/body base rules (lines ~36-44).
+     - `.wrap` (line ~46).
+     - the "type" comment block (lines ~48-58): `.display`,
+       `h2.display`, `.eyebrow`, `.eyebrow.on-light`, `.lede`, `.lede.on-light`.
+     - the "buttons" comment block (lines ~60-74): `.btn`,
+       `.btn--primary`, `.btn--primary:hover`, `.btn--ghost`, `.btn--ghost:hover`,
+       `.btn--dark`, `.btn--dark:hover`, `.btn .arw`, `.btn:hover .arw`.
+     - the "generic section" comment block (lines ~188-193):
+       `.sec`, `.sec--light`, `.sec--mid`, `.sec__head`, `.sec__head h2`.
+
+   This is the shared base stylesheet Tasks 4 (home-nav) and 5 (home-hero)
+   both flagged as missing rather than duplicating privately — see the
+   "Base type/button classes referenced by the markup..." note at the foot
+   of home-hero.css and the equivalent note in home-nav.css. Every remaining
+   homepage section (marquee, craft, services, footer) also depends on these
+   classes, so nothing section-specific belongs here (no `.hero__*`,
+   `.nav__*`, `.roundel*`, etc. — those stay in their own section CSS files).
+
+   Every colour is a var(--af-*) token from brand-tokens.css; the `.btn--ghost`
+   border's rgba(255,255,255,.32) has no token equivalent (translucency over
+   varying backgrounds) and is kept as rgba() per the same exception used in
+   home-hero.css.
+
+   Colour substitutions (prototype value -> token):
+     var(--ink-900)  -> var(--af-ink-900)   (body background)
+     var(--white)    -> var(--af-white)     (body color, .btn--ghost color,
+                                              .btn--dark color)
+     var(--body)     -> var(--af-font-body) (body font-family)
+     var(--display)  -> var(--af-font-display) (.display font-family)
+     var(--maxw)     -> var(--af-maxw)      (.wrap max-width)
+     var(--flame-300)-> var(--af-flame-300) (.eyebrow color, .btn--ghost:hover
+                                              border/color)
+     var(--flame-700)-> var(--af-flame-700) (.eyebrow.on-light color)
+     var(--grey-500) -> var(--af-grey-500)  (.lede color)
+     var(--grey-600) -> var(--af-grey-600)  (.lede.on-light color)
+     var(--flame-200)-> var(--af-flame-200) (.btn--primary:hover gradient
+                                              stop 2 / border)
+     var(--ink-900)  -> var(--af-ink-900)   (.btn--primary:hover color)
+     var(--ink-500)  -> var(--af-ink-500)   (.btn--dark background/border)
+     var(--black)    -> var(--af-black)     (.btn--dark:hover background/
+                                              border)
+     var(--paper)    -> var(--af-paper)     (.sec--light background)
+     var(--black)    -> var(--af-black)     (.sec--light color)
+     var(--ink-800)  -> var(--af-ink-800)   (.sec--mid background)
+
+   Judgment call (no exact token match, nearest brand-tokens.css swatches
+   used, direction of the gradient preserved rather than picking the single
+   nearest swatch for both stops):
+     .btn--primary background: linear-gradient(135deg,#095f76 0%,#0c8199 100%)
+       -> linear-gradient(135deg,var(--af-flame-700) 0%,var(--af-flame-500) 100%)
+       #095f76 (9,95,118) sits almost equidistant between --af-flame-700
+       #084c5f (8,76,95) and --af-flame-500 #0a6f88 (10,111,136); #0c8199
+       (12,129,153) is nearest to --af-flame-500. Using flame-700 for the
+       darker stop and flame-500 for the lighter stop keeps the gradient's
+       dark-to-light direction intact instead of collapsing both stops onto
+       the single nearest swatch.
+     .btn--primary border-color: #0c8199 -> var(--af-flame-500) — nearest
+       token to the gradient's end stop, consistent with the choice above. */
+
+*{margin:0;padding:0;box-sizing:border-box;min-width:0}
+html{scroll-behavior:smooth}
+html,body{max-width:100%;overflow-x:hidden}
+body{
+  background:var(--af-ink-900); color:var(--af-white);
+  font-family:var(--af-font-body); font-size:17px; line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+img{max-width:100%;display:block}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:var(--af-maxw);margin:0 auto;padding:0 32px}
+
+/* ---------- type ---------- */
+.display{font-family:var(--af-font-display);font-weight:700;text-transform:uppercase;line-height:1.06;letter-spacing:.04em}
+/* default size for any display h2 (section-specific rules below can override) */
+h2.display{font-size:clamp(27px,3.4vw,45px);margin:16px 0 20px}
+.eyebrow{
+  font-size:12px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--af-flame-300);
+}
+.eyebrow.on-light{color:var(--af-flame-700)}
+.lede{font-size:19px;color:var(--af-grey-500);max-width:52ch}
+.lede.on-light{color:var(--af-grey-600)}
+
+/* ---------- buttons ---------- */
+.btn{
+  display:inline-flex;align-items:center;gap:10px;
+  padding:16px 30px;border:1px solid transparent;
+  font-weight:600;font-size:14px;letter-spacing:.09em;text-transform:uppercase;
+  cursor:pointer;transition:.18s var(--af-ease);white-space:nowrap;
+}
+.btn--primary{background:linear-gradient(135deg,var(--af-flame-700) 0%,var(--af-flame-500) 100%);color:var(--af-white);border-color:var(--af-flame-500)}
+.btn--primary:hover{background:linear-gradient(135deg,var(--af-flame-300) 0%,var(--af-flame-200) 100%);border-color:var(--af-flame-200);color:var(--af-ink-900)}
+.btn--ghost{background:transparent;color:var(--af-white);border-color:rgba(255,255,255,.32)}
+.btn--ghost:hover{border-color:var(--af-flame-300);color:var(--af-flame-300)}
+.btn--dark{background:var(--af-ink-500);color:var(--af-white);border-color:var(--af-ink-500)}
+.btn--dark:hover{background:var(--af-black);border-color:var(--af-black)}
+.btn .arw{transition:transform .18s var(--af-ease)}
+.btn:hover .arw{transform:translateX(4px)}
+
+/* ---------- generic section ---------- */
+.sec{padding:120px 0;position:relative}
+.sec--light{background:var(--af-paper);color:var(--af-black)}
+.sec--mid{background:var(--af-ink-800)}
+.sec__head{max-width:840px;margin-bottom:60px}
+.sec__head h2{font-size:clamp(34px,4.4vw,58px);margin:16px 0 18px}
