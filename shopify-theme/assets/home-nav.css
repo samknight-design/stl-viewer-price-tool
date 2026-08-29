@@ -1,0 +1,71 @@
+/* shopify-theme/assets/home-nav.css
+   Ported from "Arcane Flame Website Prototype" option-c.html:
+     - lines ~76-96  (.site-head, .nav, .nav__*, .burger)
+     - lines ~98-104 (.announce)
+     - lines ~390-391 (<=1080px: .nav__links hidden, .burger shown)
+     - lines ~402-404 (<=680px: .nav__in / .nav__logo img / .nav__cta)
+   Every colour is a var(--af-*) token from brand-tokens.css; the two
+   translucency values (rgba() on the solid-nav background/border) have no
+   token equivalent and are kept as rgba() per the brief's stated exception.
+
+   Colour substitutions (prototype var -> token, 1:1 by name):
+     --white -> --af-white   --grey-300 -> --af-grey-300
+     --flame-300 -> --af-flame-300   --flame-700 -> --af-flame-700
+     --ease -> --af-ease   --maxw -> --af-maxw
+   #fff literal on .burger -> var(--af-white) (same colour, named token used
+   instead of the hex literal per the no-literal-hex rule). */
+
+/* ---------- header (announce + nav travel together) ---------- */
+.site-head{position:fixed;inset:0 0 auto 0;z-index:100}
+.nav{
+  transition:background .3s var(--af-ease),border-color .3s var(--af-ease),backdrop-filter .3s;
+  border-bottom:1px solid transparent;
+}
+.nav.solid{background:rgba(8,12,16,.94);backdrop-filter:blur(14px);border-bottom-color:rgba(255,255,255,.09)}
+.nav__in{display:flex;align-items:center;gap:34px;height:88px;max-width:var(--af-maxw);margin:0 auto;padding:0 32px}
+.nav__logo{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.nav__logo img{height:64px;width:auto}
+.nav__links{display:flex;gap:28px;margin-left:8px}
+.nav__links a{
+  font-size:13.5px;font-weight:500;letter-spacing:.04em;color:var(--af-grey-300);
+  padding:6px 0;border-bottom:1px solid transparent;transition:.16s;
+}
+.nav__links a:hover{color:var(--af-white);border-bottom-color:var(--af-flame-300)}
+.nav__right{margin-left:auto;display:flex;align-items:center;gap:18px}
+.nav__icon{color:var(--af-grey-300);display:flex;transition:color .16s}
+.nav__icon:hover{color:var(--af-white)}
+.nav__cta{padding:13px 22px;font-size:12.5px}
+.burger{display:none;background:none;border:0;color:var(--af-white);cursor:pointer;padding:8px}
+
+/* ---------- announcement ---------- */
+.announce{
+  background:var(--af-flame-700);color:var(--af-white);text-align:center;
+  font-size:12.5px;letter-spacing:.06em;padding:9px 16px;
+  font-weight:500;
+}
+.announce b{font-weight:700}
+
+/* ---------- responsive (ported subset: nav/burger only) ---------- */
+@media (max-width:1080px){
+  .nav__links{display:none}
+  .burger{display:block}
+
+  /* Mobile burger reveal: not present in the prototype (its burger button
+     had no JS behaviour there — see task-4-report.md); added here so the
+     mobile burger actually reveals the nav links, per the task's definition
+     of done. Toggled by home-nav.js via the .nav--open class. */
+  .nav--open .nav__links{
+    display:flex;flex-direction:column;gap:0;margin-left:0;
+    position:absolute;inset:100% 0 auto 0;
+    background:rgba(8,12,16,.97);backdrop-filter:blur(14px);
+    border-bottom:1px solid rgba(255,255,255,.09);
+    padding:8px 20px 18px;
+  }
+  .nav--open .nav__links a{padding:12px 0;border-bottom:1px solid rgba(255,255,255,.08)}
+}
+@media (max-width:680px){
+  .announce{font-size:11.5px;padding:8px 12px;line-height:1.45}
+  .nav__in{padding:0 20px;height:70px;gap:16px}
+  .nav__logo img{height:52px}
+  .nav__cta{display:none}
+}

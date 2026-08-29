@@ -1,0 +1,69 @@
+{% comment %}
+  sections/home-nav.liquid
+  Ported from the "Arcane Flame Website Prototype" option-c.html:
+    - CSS: lines ~76-104 (.site-head, .nav, .nav__*, .burger, .announce)
+      plus the matching responsive rules at ~390-404 (.nav__links, .burger,
+      .nav__in, .nav__logo img, .nav__cta under the <=1080px / <=680px
+      breakpoints).
+    - Markup: lines ~430-461 (<header class="site-head">...</header>).
+  Static nav links and announcement copy are replaced with section settings
+  so a merchant can edit them without a theme code deploy.
+{% endcomment %}
+<header class="site-head">
+  <div class="announce">
+    {{ section.settings.announcement_text }}
+  </div>
+  <div class="nav" id="Nav-{{ section.id }}">
+    <div class="nav__in">
+      <a href="{{ routes.root_url }}" class="nav__logo" aria-label="{{ shop.name }} home">
+        <img src="{{ 'arcane-flame-white.png' | asset_url }}" alt="{{ shop.name }}" />
+      </a>
+      <nav class="nav__links">
+        {% for link in section.settings.menu.links %}
+          <a href="{{ link.url }}">{{ link.title }}</a>
+        {% endfor %}
+      </nav>
+      <div class="nav__right">
+        <a href="{{ routes.search_url }}" class="nav__icon" aria-label="Search">
+          <svg width="19" height="19" viewBox="0 0 18 19" fill="none"><path fill="currentColor" fill-rule="evenodd" d="M11.03 11.68A5.784 5.784 0 1 1 2.85 3.5a5.784 5.784 0 0 1 8.18 8.18m.26 1.12a6.78 6.78 0 1 1 .72-.7l5.4 5.4a.5.5 0 1 1-.71.7z" clip-rule="evenodd"/></svg>
+        </a>
+        <a href="{{ routes.cart_url }}" class="nav__icon" aria-label="Cart">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/></svg>
+        </a>
+        <a href="#calculator" class="btn btn--primary nav__cta">Instant Quote</a>
+        <button class="burger" aria-label="Menu" aria-expanded="false" aria-controls="Nav-{{ section.id }}">
+          <svg width="24" height="24" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</header>
+
+{{ 'brand-tokens.css' | asset_url | stylesheet_tag }}
+{{ 'home-nav.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'home-nav.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "Header nav",
+  "settings": [
+    {
+      "type": "link_list",
+      "id": "menu",
+      "label": "Navigation menu",
+      "default": "main-menu"
+    },
+    {
+      "type": "richtext",
+      "id": "announcement_text",
+      "label": "Announcement bar text",
+      "default": "<p><b>SPEND &amp; SAVE</b> — up to <b>20% off</b> · <b>FREE UK shipping</b> over £50</p>"
+    }
+  ],
+  "presets": [
+    {
+      "name": "Header nav"
+    }
+  ]
+}
+{% endschema %}
