@@ -19,10 +19,15 @@
            second, broader touch-hiding rule outside the 1080px
            breakpoint (covers touch devices above 1080px too, e.g. a
            touchscreen laptop).
-       Both pin-hiding rules are ported verbatim — see the "no touch
-       fallback" note in home-craft.liquid and the task report; this is
-       the prototype's explicit choice, not a gap introduced by this
-       port.
+       Both pin-hiding rules are ported verbatim — the prototype's own
+       explicit choice, not a gap introduced by this port. However, since
+       the prototype provides no alternative for touch devices at all
+       (hover-only), a tap-to-toggle fallback was added post-port per
+       code review to satisfy the brief's actual definition of done
+       ("hover/tap reveals each pin label") — see the `.pin.is-open` and
+       second `@media (hover:none)` rules near the bottom of this file,
+       and shopify-theme/assets/home-craft.js. See the task report for
+       the full history.
    Every colour is a var(--af-*) token from brand-tokens.css; the
    radial-gradient/box-shadow/border rgba() translucency stops have no
    token equivalent and are kept as rgba() per the brief's stated
@@ -78,6 +83,11 @@
 .pin:hover .pin__lbl{opacity:1;transform:translateX(0)}
 .pin--r .pin__lbl{left:auto;right:26px;transform:translateX(6px)}
 .pin--r:hover .pin__lbl{transform:translateX(0)}
+/* tap-to-toggle fallback (home-craft.js adds/removes this class on click/tap;
+   same reveal treatment as :hover above, works for pin--r too since both
+   hover rules land on the same translateX(0) end state) — added post-port,
+   see file header and task report for why the prototype itself has none */
+.pin.is-open .pin__lbl{opacity:1;transform:translateX(0)}
 
 /* ---------- spec grid ---------- */
 .spec{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:rgba(255,255,255,.1);
@@ -94,3 +104,14 @@
   .pin{display:none}
 }
 @media (hover:none){ .pin{display:none} }
+
+/* tap-to-toggle fallback, added post-port (see file header and task report):
+   restore the pin dot's visibility/tappability specifically on devices that
+   report no hover capability, overriding BOTH `.pin{display:none}` rules
+   above for that case only. Placed after them so source order wins — media
+   queries carry no extra specificity, so on a touch device (`hover:none`
+   matches) this is simply the last matching declaration, regardless of
+   whether the <=1080px width rule also matched. A pointer/mouse device
+   narrower than 1080px (hover:none does NOT match) still gets the
+   prototype's original hidden-pin behavior untouched. */
+@media (hover:none){ .pin{display:block} }

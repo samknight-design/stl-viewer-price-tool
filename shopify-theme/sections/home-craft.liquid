@@ -38,16 +38,16 @@
   This is one field beyond the brief's literal left/top/label list;
   flagged here and in the report rather than silently added.
 
-  IMPORTANT — hover-only interaction, no touch fallback (flagged, not
-  silently "fixed"): the prototype hides pins entirely on touch devices
-  (`@media (hover:none){ .pin{display:none} }`, option-c.html line 396,
-  duplicated inside the <=1080px breakpoint at line 394) rather than
-  offering a tap-to-reveal alternative. Ported verbatim — mobile/tablet
-  visitors never see the hotspot labels or dots at all, by the
-  prototype's own explicit design choice, not an oversight this port
-  introduced. No JS touch handler was added: doing so would be
-  overriding an upstream design decision, not porting one. See the task
-  report for the full accessibility-gap discussion and a recommendation.
+  Touch fallback (added post-port, not in the prototype): option-c.html
+  hides pins entirely on touch devices (`@media (hover:none){ .pin{
+  display:none} }`, line 396, duplicated inside the <=1080px breakpoint
+  at line 394) with no tap alternative — ported verbatim initially, then
+  flagged in the task report as failing the brief's actual definition
+  of done ("hover/tap reveals each pin label"). Per code review,
+  shopify-theme/assets/home-craft.js now adds a minimal tap-to-toggle
+  handler (`is-open` class), and home-craft.css unhides `.pin` under
+  `@media (hover:none)` and reveals `.pin__lbl` on `.is-open` the same
+  way `:hover` does. See the task report for the full history.
 {% endcomment %}
 <section class="sec" id="Craft-{{ section.id }}">
   <div class="wrap">
@@ -99,6 +99,7 @@
 {{ 'brand-tokens.css' | asset_url | stylesheet_tag }}
 {{ 'home-base.css' | asset_url | stylesheet_tag }}
 {{ 'home-craft.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'home-craft.js' | asset_url }}" defer></script>
 
 {% schema %}
 {
