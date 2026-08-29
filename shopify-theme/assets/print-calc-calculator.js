@@ -4,7 +4,7 @@
 // unchanged assembly/primer add-ons.
 // ============================================================
 
-import { getMaterial } from './print-calc-config.js?v=bb5826ba86';
+import { getMaterial } from './print-calc-config.js?v=8a2a3e3654';
 
 // ---- Build plate fit check --------------------------------------------
 

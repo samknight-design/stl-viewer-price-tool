@@ -1,0 +1,34 @@
+{
+  "files": {
+    "print-calc-calculator.js": {
+      "sha256_10": "958ac0254a",
+      "md5": "1fa7ba5f913a187af8ebb8b756f3707d"
+    },
+    "print-calc-config.js": {
+      "sha256_10": "8a2a3e3654",
+      "md5": "bb5826ba86ca66b44f944b40fe9788c6"
+    },
+    "print-calc-icons.js": {
+      "sha256_10": "87ceb3b600",
+      "md5": "e20f3051af174aa5cb96601ee85da0fa"
+    },
+    "print-calc-main.js": {
+      "sha256_10": "c3d4f2efcf",
+      "md5": "f067b0fe7904c7b71ac7f0c37974192b"
+    },
+    "print-calc-stl-parser.js": {
+      "sha256_10": "aaf6f76836",
+      "md5": "8ade704353d2547847519a0e8f15138c"
+    },
+    "print-calc-style.css": {
+      "sha256_10": "1b6efc5445",
+      "md5": "d2bc13400ced377482f8b7a0b57c1f1c"
+    },
+    "print-calc-viewer.js": {
+      "sha256_10": "7bc64f28fe",
+      "md5": "be8e74dfa92625a531e177066bebf5c6"
+    }
+  },
+  "rewrites": 0,
+  "generatedAt": "2026-08-29T19:59:05.498Z"
+}
