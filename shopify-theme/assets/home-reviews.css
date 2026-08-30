@@ -1,0 +1,27 @@
+/* shopify-theme/assets/home-reviews.css
+   Ported from the "Arcane Flame Website Prototype" option-c.html:
+     - CSS: lines ~341-347 (the "reviews" comment block: .rev, .rcard,
+       .stars, .rcard p, .rcard cite).
+     - Markup: lines ~728-753 (<section class="sec">...</section> with
+       the eyebrow "What players say") — see shopify-theme/sections/
+       home-reviews.liquid for the ported markup.
+
+   Uses `.sec` / `.sec__head` from home-base.css — not redefined here.
+   Only `.rev*`, `.rcard*` and `.stars` (this section's own classes) live
+   in this file.
+
+   Colour substitutions (prototype value -> token):
+     var(--ink-800)  -> var(--af-ink-800)   (.rcard background)
+     var(--flame-300)-> var(--af-flame-300) (.stars color)
+     var(--grey-500) -> var(--af-grey-500)  (.rcard cite color)
+
+   rgba(255,255,255,.11) on .rcard's border is kept as rgba() — no
+   brand-tokens.css token for this translucency, same exception used
+   elsewhere (see home-base.css's own note on .btn--ghost's border). */
+
+.rev{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.rcard{border:1px solid rgba(255,255,255,.11);padding:32px;background:var(--af-ink-800);
+  display:flex;flex-direction:column;gap:16px}
+.stars{display:flex;gap:3px;color:var(--af-flame-300)}
+.rcard p{font-size:15.5px;line-height:1.65}
+.rcard cite{font-style:normal;font-size:13px;color:var(--af-grey-500);margin-top:auto}

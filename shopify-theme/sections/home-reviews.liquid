@@ -1,0 +1,138 @@
+{% comment %}
+  sections/home-reviews.liquid
+
+  PLACEHOLDER CONTENT BY DELIBERATE USER DECISION (2026-08-30, Task 14)
+  ----------------------------------------------------------------------
+  This section ships with static placeholder review copy, verbatim from
+  the design prototype. This is NOT a code TODO to silently resolve.
+  The user explicitly ruled out wiring this up to the reviews app
+  currently installed on the live theme for this task, since that app
+  may itself be replaced. Do not build any reviews-app integration here.
+  Leave the placeholder text (including the literal words "Placeholder
+  review copy — swap for a real one" and "— Placeholder · replace") in
+  place until the user decides what replaces it — either real
+  testimonials entered as block settings, or a reviews-app integration
+  decision made later.
+
+  Ported from the "Arcane Flame Website Prototype" option-c.html:
+    - CSS: lines ~341-347 (the "reviews" comment block) — see
+      shopify-theme/assets/home-reviews.css for the full markup and
+      colour-substitution notes.
+    - Markup: lines ~728-753 (<section class="sec">...</section>
+      containing the eyebrow "What players say") — the section heading
+      and 3 review cards (star rating, quote, attribution).
+
+  The star rating is now a per-block range setting (1-5) rather than the
+  source's hardcoded "★★★★★" literal, so a merchant can set a lower
+  rating on a future real review. Rendered as `rating` filled ★
+  characters with no unfilled counterpart, matching the source exactly
+  when rating is 5 (all 3 shipped defaults are 5) and generalising
+  cleanly for any lower rating without inventing empty-star markup the
+  source doesn't have styling for.
+{% endcomment %}
+<section class="sec" id="Reviews-{{ section.id }}">
+  <div class="wrap">
+    <div class="sec__head">
+      <p class="eyebrow">{{ section.settings.eyebrow }}</p>
+      <h2 class="display">{{ section.settings.heading }}</h2>
+    </div>
+    <div class="rev">
+      {% for block in section.blocks %}
+        {% if block.type == 'review' %}
+          <article class="rcard" {{ block.shopify_attributes }}>
+            <div class="stars">
+              {% for i in (1..block.settings.rating) %}★{% endfor %}
+            </div>
+            {{ block.settings.quote }}
+            <cite>{{ block.settings.attribution }}</cite>
+          </article>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+{{ 'brand-tokens.css' | asset_url | stylesheet_tag }}
+{{ 'home-base.css' | asset_url | stylesheet_tag }}
+{{ 'home-reviews.css' | asset_url | stylesheet_tag }}
+
+{% schema %}
+{
+  "name": "Reviews",
+  "settings": [
+    {
+      "type": "text",
+      "id": "eyebrow",
+      "label": "Eyebrow",
+      "default": "What players say"
+    },
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "Trusted at the table."
+    }
+  ],
+  "blocks": [
+    {
+      "type": "review",
+      "name": "Review",
+      "settings": [
+        {
+          "type": "range",
+          "id": "rating",
+          "label": "Star rating",
+          "min": 1,
+          "max": 5,
+          "step": 1,
+          "default": 5
+        },
+        {
+          "type": "richtext",
+          "id": "quote",
+          "label": "Quote",
+          "default": "<p>\"Such a lovely seller! Super easy and fast process. 10/10 would recommend. The rest of my party have already ordered their mini's after seeing mine!\"</p>"
+        },
+        {
+          "type": "text",
+          "id": "attribution",
+          "label": "Attribution",
+          "info": "e.g. \"— Verified customer\" or \"— Placeholder · replace\"",
+          "default": "— Verified customer"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Reviews",
+      "blocks": [
+        {
+          "type": "review",
+          "settings": {
+            "rating": 5,
+            "quote": "<p>\"Such a lovely seller! Super easy and fast process. 10/10 would recommend. The rest of my party have already ordered their mini's after seeing mine!\"</p>",
+            "attribution": "— Verified customer"
+          }
+        },
+        {
+          "type": "review",
+          "settings": {
+            "rating": 5,
+            "quote": "<p>\"Placeholder review copy — swap for a real one. Useful spot to highlight print quality, turnaround speed or how the primed finish saved painting time.\"</p>",
+            "attribution": "— Placeholder · replace"
+          }
+        },
+        {
+          "type": "review",
+          "settings": {
+            "rating": 5,
+            "quote": "<p>\"Placeholder review copy — swap for a real one. Good place for a terrain or bulk-order story to show the service scales beyond single miniatures.\"</p>",
+            "attribution": "— Placeholder · replace"
+          }
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

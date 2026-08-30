@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 // Every CSS file that must source its colours exclusively from
 // brand-tokens.css var(--af-*) tokens (the one allowed exception is
 // rgba() for translucency). Add new theme CSS files here as they're built.
-const FILES = ['shopify-theme/assets/print-calc-style.css', 'shopify-theme/assets/home-nav.css', 'shopify-theme/assets/home-hero.css', 'shopify-theme/assets/home-base.css', 'shopify-theme/assets/home-marquee.css', 'shopify-theme/assets/home-craft.css', 'shopify-theme/assets/home-services.css', 'shopify-theme/assets/home-final-cta.css', 'shopify-theme/assets/home-footer.css', 'shopify-theme/assets/home-calc-teaser.css', 'shopify-theme/assets/home-shop-grid.css', 'shopify-theme/assets/home-spend-save.css'];
+const FILES = ['shopify-theme/assets/print-calc-style.css', 'shopify-theme/assets/home-nav.css', 'shopify-theme/assets/home-hero.css', 'shopify-theme/assets/home-base.css', 'shopify-theme/assets/home-marquee.css', 'shopify-theme/assets/home-craft.css', 'shopify-theme/assets/home-services.css', 'shopify-theme/assets/home-final-cta.css', 'shopify-theme/assets/home-footer.css', 'shopify-theme/assets/home-calc-teaser.css', 'shopify-theme/assets/home-shop-grid.css', 'shopify-theme/assets/home-spend-save.css', 'shopify-theme/assets/home-reviews.css'];
 
 function readCssWithoutComments(path) {
   const css = readFileSync(path, 'utf8');
