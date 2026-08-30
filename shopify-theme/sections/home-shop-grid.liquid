@@ -1,0 +1,196 @@
+{% comment %}
+  sections/home-shop-grid.liquid
+  Ported from the "Arcane Flame Website Prototype" option-c.html:
+    - CSS: lines ~299-323 (.pgrid, .pcard, .pcard__img, .pcard__tag,
+      .pcard__body + children, .attrib*) plus the .pgrid/.attrib-relevant
+      slice of the <=1080px and <=680px responsive rules — see
+      shopify-theme/assets/home-shop-grid.css for the full colour-
+      substitution notes.
+    - Markup: lines ~655-701 (<section class="sec sec--mid" id="shop">
+      ...</section>) — the "Pre-printed miniatures." product grid and the
+      DM Stash attribution lockup immediately below it.
+
+  ** Per the user's explicit decision on 2026-08-30, this section departs
+  from the source in one deliberate way: the source hardcodes 4 fictional
+  products with fake "From £X.00" prices. That is unacceptable on a live
+  commerce page, so this section pulls real Shopify product data from a
+  merchant-assigned collection instead. Nothing about product identity,
+  imagery or pricing is hardcoded here. **
+
+  Schema/rendering decisions:
+
+  1. `collection` (type "collection") + `products_to_show` (type "range",
+     1-12, default 4 — matching the source's 4 cards) drive the grid.
+     Guarded with {% if section.settings.collection %} — a fresh section
+     placement has no collection assigned, so it falls to the {% else %}
+     branch: a clear "Select a collection..." empty state (new — the
+     source never had this case, since its products were hardcoded and
+     always present) rather than a broken/empty grid. See .pgrid--empty
+     in home-shop-grid.css.
+
+  2. Card fields map to real Shopify product data:
+       - image  -> product.featured_image | image_url (not the source's
+         hardcoded assets/img/*.png paths)
+       - title  -> product.title
+       - price  -> product.price | money (the store's real, formatted
+         money value — not the source's hardcoded "From £X.00" string)
+       - "scale" line (source: "32mm heroic · resin" / "Large format ·
+         resin" / "Playable terrain · PLA") -> product.type. This is a
+         judgment call: product.type is a real, built-in Shopify field
+         every product already has (no new tagging/metafield scheme
+         needs to be invented or documented for merchants to fill in),
+         and it plays the same "what kind of thing is this" role the
+         source's hand-written scale/material line did. It won't read
+         identically to the source's specific "32mm heroic · resin"
+         phrasing — that's expected, since real products won't share the
+         prototype's fictional taxonomy. Hidden entirely when blank.
+
+  3. `.pcard__tag` ("Bestseller" / "Terrain", shown on 2 of the source's
+     4 hardcoded cards) is DROPPED for this collection-driven grid rather
+     than kept. The task brief explicitly warns against inventing
+     product-tag/metafield logic that doesn't exist yet, and there is no
+     existing Shopify field that maps onto "which products get a
+     highlight ribbon" today (unlike product.type above, which already
+     exists on every product). Tying it to product.tags contains
+     'bestseller' would require merchants to adopt a specific tagging
+     convention this task has no mandate to define. If a merchant wants
+     this back later, the natural home is a real signal that already
+     exists (e.g. a collection sort/tag convention agreed with the
+     merchant) — flagged for a future task rather than guessed at here.
+
+  4. The DM Stash attribution lockup (.attrib*) is HARDCODED verbatim,
+     not editable — same rule Task 9 (home-services.liquid) applied to
+     its AttributionLockup badge, and consistent with the "legally-
+     reviewed licensing wording" flagged on home-footer.liquid's separate
+     (editable, ordinary-copy) DM Stash line. This one is a fixed
+     licensing-relationship statement co-located with real product
+     pricing, so — like the services badge — it stays out of merchant
+     control entirely: no section/block setting exposes its text.
+     Its "Browse the full range" link is real, not the source's `href="#"`
+     placeholder: it points at section.settings.collection.url when a
+     collection is assigned. My call: the link is omitted entirely (not
+     rendered) when no collection is set, rather than falling back to
+     `#` — a dead link next to an empty-state grid would be confusing,
+     and this section already has a clear empty-state message covering
+     the no-collection case.
+
+  5. Judgment call — dm-stash.png: like arcane-flame-white.png in
+     home-nav.liquid / home-hero.liquid / home-footer.liquid, this
+     references an asset filename that does not yet exist in
+     shopify-theme/assets/. Kept the same asset_url precedent (this is a
+     fixed licensing lockup, not a merchant-editable image_picker) rather
+     than inventing a workaround; tracked as the same known asset gap.
+{% endcomment %}
+<section class="sec sec--mid" id="Shop-{{ section.id }}">
+  <div class="wrap">
+    <div class="sec__head">
+      <p class="eyebrow reveal">{{ section.settings.eyebrow }}</p>
+      <h2 class="display reveal" data-d="1">{{ section.settings.heading }}</h2>
+      <div class="lede reveal" data-d="2">{{ section.settings.lede }}</div>
+    </div>
+
+    {% if section.settings.collection %}
+      {% assign shop_collection = section.settings.collection %}
+      <div class="pgrid">
+        {% assign shown = 0 %}
+        {% for product in shop_collection.products %}
+          {% if shown >= section.settings.products_to_show %}
+            {% break %}
+          {% endif %}
+          <article class="pcard reveal" {% if forloop.index0 > 0 %}data-d="{{ forloop.index0 }}"{% endif %}>
+            <div class="pcard__img">
+              {% if product.featured_image %}
+                <img
+                  src="{{ product.featured_image | image_url: width: 600 }}"
+                  srcset="{{ product.featured_image | image_url: width: 300 }} 300w, {{ product.featured_image | image_url: width: 600 }} 600w"
+                  alt="{{ product.featured_image.alt | default: product.title }}"
+                  loading="lazy"
+                  width="{{ product.featured_image.width }}"
+                  height="{{ product.featured_image.height }}"
+                />
+              {% endif %}
+            </div>
+            <div class="pcard__body">
+              <h4>{{ product.title }}</h4>
+              {% if product.type != blank %}
+                <p class="scale">{{ product.type }}</p>
+              {% endif %}
+              <p class="price">{{ product.price | money }}</p>
+            </div>
+          </article>
+          {% assign shown = shown | plus: 1 %}
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="pgrid--empty">
+        Select a collection in the theme editor to show products here.
+      </div>
+    {% endif %}
+
+    {% comment %} Hardcoded DM Stash attribution lockup — see file header. Not a section setting. {% endcomment %}
+    <div class="attrib reveal">
+      <div class="attrib__unit">
+        <span class="attrib__cap">Models by</span>
+        <img src="{{ 'dm-stash.png' | asset_url }}" alt="DM Stash" />
+      </div>
+      <div class="attrib__div"></div>
+      <div class="attrib__unit">
+        <span class="attrib__cap">Printed by</span>
+        <span class="attrib__name">Arcane Flame</span>
+      </div>
+      {% if section.settings.collection %}
+        <a href="{{ section.settings.collection.url }}" class="svc__link" style="margin-left:auto">Browse the full range <span class="arw">→</span></a>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+{{ 'brand-tokens.css' | asset_url | stylesheet_tag }}
+{{ 'home-base.css' | asset_url | stylesheet_tag }}
+{{ 'home-shop-grid.css' | asset_url | stylesheet_tag }}
+
+{% schema %}
+{
+  "name": "Shop grid",
+  "settings": [
+    {
+      "type": "text",
+      "id": "eyebrow",
+      "label": "Eyebrow",
+      "default": "Ready to ship"
+    },
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "Pre-printed miniatures."
+    },
+    {
+      "type": "richtext",
+      "id": "lede",
+      "label": "Lede",
+      "default": "<p>Officially licensed designs, printed by us to order — no STL needed.</p>"
+    },
+    {
+      "type": "collection",
+      "id": "collection",
+      "label": "Collection",
+      "info": "Products shown come from this collection. Leave unset to show an empty-state message instead of a broken grid."
+    },
+    {
+      "type": "range",
+      "id": "products_to_show",
+      "label": "Products to show",
+      "min": 1,
+      "max": 12,
+      "step": 1,
+      "default": 4
+    }
+  ],
+  "presets": [
+    {
+      "name": "Shop grid"
+    }
+  ]
+}
+{% endschema %}

@@ -1,0 +1,98 @@
+/* shopify-theme/assets/home-shop-grid.css
+   Ported from "Arcane Flame Website Prototype" option-c.html:
+     - lines ~299-323 (the "products" comment block): .pgrid, .pcard,
+       .pcard:hover, .pcard__img, .pcard__img img, .pcard:hover .pcard__img
+       img, .pcard__tag, .pcard__body, .pcard__body h4, .pcard__body .scale,
+       .pcard__body .price, plus the "attribution lockup" block: .attrib,
+       .attrib__unit, .attrib__cap, .attrib img, .attrib__name, .attrib__div.
+     - Plus the .pgrid/.attrib-relevant slice of the responsive rules:
+       the <=1080px `.svc,.pgrid,.rev,.ladder,.foot__grid{grid-template-
+       columns:repeat(2,1fr)}` reduced to just `.pgrid`, the <=680px
+       `.svc,.pgrid,.rev,.ladder,.foot__grid,.spec{grid-template-
+       columns:1fr}` reduced to just `.pgrid`, and `.attrib__div{display:
+       none}` from the same <=680px block (the other selectors in both
+       rules belong to sections not yet ported, or already live in their
+       own section CSS — .svc in home-services.css).
+
+   This section's own markup and rendering logic (real Shopify product
+   data via a `collection` setting, not the source's 4 hardcoded fictional
+   products) live in home-shop-grid.liquid — see that file's header for
+   the schema/empty-state/.pcard__tag decisions. This file only ports the
+   visual styling of the .pgrid/.pcard/.attrib classes; nothing here is
+   product-data-specific.
+
+   Every colour is a var(--af-*) token from brand-tokens.css. rgba()
+   translucency stops with no token equivalent are kept as rgba() per the
+   same exception used throughout this project (see home-base.css,
+   home-services.css). Base type/section classes referenced by the markup
+   (.sec, .sec--mid, .wrap, .eyebrow, .display, .lede, .svc__link, .btn*)
+   are defined in home-base.css / home-services.css and are not redefined
+   here.
+
+   Colour substitutions (prototype value -> token):
+     var(--ink-800)  -> var(--af-ink-800)   (.pcard background)
+     var(--ink-700)  -> var(--af-ink-700)   (.pcard__img background,
+                                              second layer of the gradient)
+     var(--flame-500)-> var(--af-flame-500) (.pcard__tag background)
+     #fff             -> var(--af-white)    (.pcard__tag color — matches
+       --af-white exactly; kept as the var() token instead of the literal
+       for consistency with the rest of this project, same call
+       home-services.css made for .svc__badge's #fff)
+     var(--grey-500) -> var(--af-grey-500)  (.pcard__body .scale color,
+                                              .attrib__cap color)
+     var(--mono)     -> var(--af-font-mono) (.pcard__body .price
+                                              font-family)
+     var(--flame-300)-> var(--af-flame-300) (.pcard__body .price color)
+     var(--ease)     -> var(--af-ease)      (.pcard / .pcard__img img
+                                              transitions)
+     var(--display)  -> var(--af-font-display) (.attrib__name font-family)
+   rgba() translucency kept as-is (no token equivalent):
+     rgba(255,255,255,.1)   — .pcard border
+     rgba(79,214,236,.5)    — .pcard:hover border-color (translucency stop
+       of --af-flame-300 #4fd6ec = rgb(79,214,236), same pattern already
+       used for .svc__card:hover in home-services.css)
+     rgba(79,214,236,.1)    — .pcard__img background radial-gradient
+       (same --af-flame-300 translucency stop as above)
+     rgba(255,255,255,.09)  — .pcard__body border-top
+     rgba(255,255,255,.1)   — .attrib border-top
+     rgba(255,255,255,.16)  — .attrib__div background */
+
+/* ---------- products ---------- */
+.pgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
+.pcard{position:relative;background:var(--af-ink-800);border:1px solid rgba(255,255,255,.1);
+  overflow:hidden;transition:.28s var(--af-ease)}
+.pcard:hover{border-color:rgba(79,214,236,.5);transform:translateY(-5px)}
+.pcard__img{position:relative;aspect-ratio:4/5;overflow:hidden;
+  background:radial-gradient(60% 60% at 50% 42%,rgba(79,214,236,.1),transparent 70%),var(--af-ink-700);
+  display:grid;place-items:center;padding:20px}
+.pcard__img img{height:100%;width:auto;object-fit:contain;transition:transform .45s var(--af-ease)}
+.pcard:hover .pcard__img img{transform:scale(1.07)}
+.pcard__tag{position:absolute;top:12px;left:12px;background:var(--af-flame-500);color:var(--af-white);
+  font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:5px 9px;font-weight:600;z-index:2}
+.pcard__body{padding:18px 20px 22px;border-top:1px solid rgba(255,255,255,.09)}
+.pcard__body h4{font-size:15px;font-weight:600;margin-bottom:5px;line-height:1.3}
+.pcard__body .scale{font-size:12px;color:var(--af-grey-500);margin-bottom:12px}
+.pcard__body .price{font-family:var(--af-font-mono);font-weight:600;font-size:17px;color:var(--af-flame-300)}
+
+/* ---------- shop empty state (new — not in the source, which never had
+   an unset-collection case since its products were hardcoded) ---------- */
+.pgrid--empty{background:var(--af-ink-700);border:1px dashed rgba(255,255,255,.18);
+  padding:48px 32px;text-align:center;color:var(--af-grey-500);font-size:15px}
+
+/* attribution lockup — wording is fixed by brand rule */
+.attrib{display:flex;align-items:center;gap:22px;margin-top:46px;padding-top:26px;
+  border-top:1px solid rgba(255,255,255,.1);flex-wrap:wrap}
+.attrib__unit{display:flex;flex-direction:column;gap:5px}
+.attrib__cap{font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--af-grey-500)}
+.attrib img{height:26px;width:auto}
+.attrib__name{font-family:var(--af-font-display);text-transform:uppercase;font-size:17px;letter-spacing:.04em}
+.attrib__div{width:1px;height:38px;background:rgba(255,255,255,.16)}
+
+/* ---------- responsive (ported subset — see file header) ---------- */
+@media (max-width:1080px){
+  .pgrid{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:680px){
+  .pgrid{grid-template-columns:1fr}
+  .attrib__div{display:none}
+}
