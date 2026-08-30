@@ -101,7 +101,12 @@ h2.display{font-size:clamp(27px,3.4vw,45px);margin:16px 0 20px}
 .btn:hover .arw{transform:translateX(4px)}
 
 /* ---------- generic section ---------- */
-.sec{padding:120px 0;position:relative}
+/* option-c.html's .sec relied on inherited body{background:ink-900} — true
+   in the single-page prototype, false here: Dawn owns <body> on the real
+   site (kept deliberately, per the header/footer decision), so a plain
+   .sec with no modifier must set its own dark ground explicitly or it
+   falls through to Dawn's own (light) body background. */
+.sec{padding:120px 0;position:relative;background:var(--af-ink-900);color:var(--af-white)}
 .sec--light{background:var(--af-paper);color:var(--af-black)}
 .sec--mid{background:var(--af-ink-800)}
 .sec__head{max-width:840px;margin-bottom:60px}

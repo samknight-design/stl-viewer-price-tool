@@ -5,8 +5,8 @@
       "md5": "c27ca2bcb1cb513ce9c39d27dbbcc244"
     },
     "home-base.css": {
-      "sha256_10": "d7774bb09e",
-      "md5": "ecad288df43c6e27855061548b2d39f8"
+      "sha256_10": "edf3fde2c2",
+      "md5": "411a26c2b8b231fd426c1e3a41a8fd60"
     },
     "home-calc-teaser.css": {
       "sha256_10": "83b52def16",
@@ -90,5 +90,5 @@
     }
   },
   "rewrites": 0,
-  "generatedAt": "2026-08-30T08:43:52.888Z"
+  "generatedAt": "2026-08-30T09:11:26.140Z"
 }
