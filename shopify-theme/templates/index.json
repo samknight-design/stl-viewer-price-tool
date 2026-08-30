@@ -1,8 +1,5 @@
 {
   "sections": {
-    "nav": {
-      "type": "home-nav"
-    },
     "hero": {
       "type": "home-hero"
     },
@@ -115,10 +112,7 @@
     },
     "final-cta": {
       "type": "home-final-cta"
-    },
-    "footer": {
-      "type": "home-footer"
     }
   },
-  "order": ["nav", "hero", "marquee", "craft", "services", "calc-teaser", "shop-grid", "spend-save", "reviews", "final-cta", "footer"]
+  "order": ["hero", "marquee", "craft", "services", "calc-teaser", "shop-grid", "spend-save", "reviews", "final-cta"]
 }
