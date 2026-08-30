@@ -21,12 +21,17 @@
 
   1. `collection` (type "collection") + `products_to_show` (type "range",
      1-12, default 4 — matching the source's 4 cards) drive the grid.
-     Guarded with {% if section.settings.collection %} — a fresh section
-     placement has no collection assigned, so it falls to the {% else %}
-     branch: a clear "Select a collection..." empty state (new — the
-     source never had this case, since its products were hardcoded and
-     always present) rather than a broken/empty grid. See .pgrid--empty
-     in home-shop-grid.css.
+     Guarded on the actual card count (`shown`), not merely on whether a
+     collection is assigned: a fresh section placement has no collection
+     assigned at all, and a collection can also be assigned but currently
+     hold zero products (e.g. a merchant empties/unpublishes it) — both
+     fall through to the same "Select a collection..." empty state (new —
+     the source never had either case, since its products were hardcoded
+     and always present) rather than a broken/empty grid. See
+     .pgrid--empty in home-shop-grid.css. (Fixed post-review 2026-08-30 —
+     the first version only checked `section.settings.collection`, which
+     covered the no-collection case but left an assigned-but-empty
+     collection rendering a bare `<div class="pgrid"></div>`.)
 
   2. Card fields map to real Shopify product data:
        - image  -> product.featured_image | image_url (not the source's
@@ -89,10 +94,18 @@
       <div class="lede reveal" data-d="2">{{ section.settings.lede }}</div>
     </div>
 
+    {% comment %}
+      shown/product_cards computed before deciding which wrapper to render,
+      so a collection assigned but currently empty (0 products — e.g. a
+      merchant un-publishes or clears every product in it) falls through to
+      the same empty-state message as no-collection-assigned, instead of a
+      bare empty <div class="pgrid"></div> that reads as broken. Fixed
+      post-review 2026-08-30 — see task-12-report.md.
+    {% endcomment %}
+    {% assign shown = 0 %}
     {% if section.settings.collection %}
       {% assign shop_collection = section.settings.collection %}
-      <div class="pgrid">
-        {% assign shown = 0 %}
+      {% capture product_cards %}
         {% for product in shop_collection.products %}
           {% if shown >= section.settings.products_to_show %}
             {% break %}
@@ -120,7 +133,11 @@
           </article>
           {% assign shown = shown | plus: 1 %}
         {% endfor %}
-      </div>
+      {% endcapture %}
+    {% endif %}
+
+    {% if shown > 0 %}
+      <div class="pgrid">{{ product_cards }}</div>
     {% else %}
       <div class="pgrid--empty">
         Select a collection in the theme editor to show products here.

@@ -25,9 +25,28 @@
    translucency stops with no token equivalent are kept as rgba() per the
    same exception used throughout this project (see home-base.css,
    home-services.css). Base type/section classes referenced by the markup
-   (.sec, .sec--mid, .wrap, .eyebrow, .display, .lede, .svc__link, .btn*)
-   are defined in home-base.css / home-services.css and are not redefined
-   here.
+   (.sec, .sec--mid, .wrap, .eyebrow, .display, .lede, .btn*) are defined
+   in home-base.css and are not redefined here.
+
+   Fix (post-review, 2026-08-30): the "Browse the full range" link inside
+   .attrib reuses the .svc__link / .arw classes that home-services.liquid's
+   CTA link also uses — but this section is independently placeable and
+   never enqueues home-services.css. Enqueuing that file from here just to
+   borrow two selectors would create a hidden cross-section dependency
+   every other section in this codebase avoids (each section pulls only
+   brand-tokens.css + home-base.css + its own file). Instead, the minimal
+   .svc__link / .svc__link .arw rules the CTA actually needs are
+   duplicated directly below, keeping this file self-contained. Values are
+   copied byte-for-byte from home-services.css (which itself already
+   ported them from the source's .svc__link rule, shared by both the
+   services CTA and this shop-grid CTA in the original option-c.html) —
+   var(--af-flame-300) / var(--af-ease), nothing new to substitute. Added
+   a .attrib .svc__link:hover .arw rule (not present verbatim in the
+   source, which only ever triggered this arrow's motion via a wrapping
+   .svc__card:hover — inapplicable here since this link isn't inside a
+   card): without it the arrow's transition property was dead weight with
+   no trigger, so hovering the link itself is the natural equivalent
+   affordance.
 
    Colour substitutions (prototype value -> token):
      var(--ink-800)  -> var(--af-ink-800)   (.pcard background)
@@ -87,6 +106,12 @@
 .attrib img{height:26px;width:auto}
 .attrib__name{font-family:var(--af-font-display);text-transform:uppercase;font-size:17px;letter-spacing:.04em}
 .attrib__div{width:1px;height:38px;background:rgba(255,255,255,.16)}
+/* Minimal duplicate of home-services.css's .svc__link / .arw — see file
+   header "Fix (post-review, 2026-08-30)". */
+.attrib .svc__link{display:inline-flex;align-items:center;gap:9px;font-weight:600;font-size:13px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--af-flame-300)}
+.attrib .svc__link .arw{transition:transform .18s var(--af-ease)}
+.attrib .svc__link:hover .arw{transform:translateX(5px)}
 
 /* ---------- responsive (ported subset — see file header) ---------- */
 @media (max-width:1080px){
