@@ -90,7 +90,7 @@
 .svc__card::after{content:"";position:absolute;inset:0;pointer-events:none;
   background:linear-gradient(90deg,var(--af-ink-900) 20%,rgba(8,10,18,.9) 48%,transparent 86%)}
 .svc__body{position:relative;z-index:2;max-width:330px}
-.svc__card h3{font-family:var(--af-font-display);text-transform:uppercase;font-size:27px;margin:14px 0 12px;line-height:1.1}
+.svc__card h3{font-family:var(--af-font-display);text-transform:uppercase;font-size:27px;margin:14px 0 12px;line-height:1.1;color:var(--af-white)}
 /* The source's `.svc__card p{font-size:15px;color:var(--grey-500);
    margin-bottom:24px}` has higher specificity (class+element) than
    `.eyebrow` (single class) alone, so in option-c.html it also overrides
