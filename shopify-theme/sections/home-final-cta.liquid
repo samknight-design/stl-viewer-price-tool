@@ -1,0 +1,141 @@
+{% comment %}
+  sections/home-final-cta.liquid
+  Ported from the "Arcane Flame Website Prototype" option-c.html:
+    - CSS: lines ~349-359 (.final, .final__bg, .final__art, .final__art--l,
+      .final__in, .final h2, .final .lede, .final__cta) plus the
+      .final__art-relevant slice of the <=1080px responsive rule
+      (line ~392) — see shopify-theme/assets/home-final-cta.css for the
+      full colour-substitution notes.
+    - Markup: the <section class="final">...</section> block (heading,
+      lede, two CTA buttons, two decorative background art images).
+
+  One-section-vs-two decision: built as its own section, separate from
+  the footer (see home-footer.liquid), per the task brief's own framing —
+  this is a distinct, independently placeable banner (a merchant may want
+  to reorder or remove it without touching the global footer underneath
+  it), matching how Dawn and most Shopify themes split a "final CTA" /
+  "newsletter" style banner from the site-wide footer.
+
+  Heading, lede, both CTAs and both decorative art images are section
+  settings so a merchant can edit copy/links or swap/remove the art
+  without a theme code deploy. Both art images are optional
+  (`{% if %}`-guarded) since the source itself hides them below 1080px
+  and they're purely decorative (`aria-hidden="true"`, empty `alt`).
+
+  Judgment call: the source's h2 hard-breaks across two lines ("Got a
+  file?<br />Get a price."), same two-tone-free line-balance pattern
+  home-craft.liquid's heading hit. Modelled as a `textarea` setting
+  (rather than `text`, which can't carry a literal newline) piped through
+  `| newline_to_br`, so the merchant can reproduce the exact two-line
+  break by leaving the default as-is, edit it to a single line, or add
+  their own break — rather than either dropping the break (as
+  home-craft.liquid did) or smuggling raw `<br>` markup into a plain text
+  field. Flagged here per the brief's "flag judgment calls" instruction.
+{% endcomment %}
+<section class="final" id="FinalCta-{{ section.id }}">
+  <div class="final__bg"></div>
+  {% if section.settings.art_image_left %}
+    <img
+      class="final__art final__art--l"
+      src="{{ section.settings.art_image_left | image_url: width: 430 }}"
+      srcset="{{ section.settings.art_image_left | image_url: width: 215 }} 215w, {{ section.settings.art_image_left | image_url: width: 430 }} 430w"
+      alt=""
+      aria-hidden="true"
+      loading="lazy"
+      width="{{ section.settings.art_image_left.width }}"
+      height="{{ section.settings.art_image_left.height }}"
+    />
+  {% endif %}
+  {% if section.settings.art_image_right %}
+    <img
+      class="final__art"
+      src="{{ section.settings.art_image_right | image_url: width: 430 }}"
+      srcset="{{ section.settings.art_image_right | image_url: width: 215 }} 215w, {{ section.settings.art_image_right | image_url: width: 430 }} 430w"
+      alt=""
+      aria-hidden="true"
+      loading="lazy"
+      width="{{ section.settings.art_image_right.width }}"
+      height="{{ section.settings.art_image_right.height }}"
+    />
+  {% endif %}
+  <div class="final__in wrap">
+    <h2 class="display reveal">{{ section.settings.heading | newline_to_br }}</h2>
+    <div class="lede reveal" data-d="1" style="text-align:center">
+      {{ section.settings.lede }}
+    </div>
+    <div class="final__cta reveal" data-d="2">
+      {% if section.settings.primary_cta_text != blank %}
+        <a href="{{ section.settings.primary_cta_url }}" class="btn btn--primary">
+          {{ section.settings.primary_cta_text }} <span class="arw">→</span>
+        </a>
+      {% endif %}
+      {% if section.settings.secondary_cta_text != blank %}
+        <a href="{{ section.settings.secondary_cta_url }}" class="btn btn--ghost">{{ section.settings.secondary_cta_text }}</a>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+{{ 'brand-tokens.css' | asset_url | stylesheet_tag }}
+{{ 'home-base.css' | asset_url | stylesheet_tag }}
+{{ 'home-final-cta.css' | asset_url | stylesheet_tag }}
+
+{% schema %}
+{
+  "name": "Final CTA banner",
+  "settings": [
+    {
+      "type": "textarea",
+      "id": "heading",
+      "label": "Heading",
+      "info": "Use a line break where you want the heading to wrap — matches the source's \"Got a file?\" / \"Get a price.\" two-line treatment.",
+      "default": "Got a file?\nGet a price."
+    },
+    {
+      "type": "richtext",
+      "id": "lede",
+      "label": "Lede",
+      "default": "<p>Two minutes from upload to an accurate quote — for a single character or a full army.</p>"
+    },
+    {
+      "type": "text",
+      "id": "primary_cta_text",
+      "label": "Primary button label",
+      "default": "Get an instant quote"
+    },
+    {
+      "type": "url",
+      "id": "primary_cta_url",
+      "label": "Primary button link"
+    },
+    {
+      "type": "text",
+      "id": "secondary_cta_text",
+      "label": "Secondary button label",
+      "default": "Browse miniatures"
+    },
+    {
+      "type": "url",
+      "id": "secondary_cta_url",
+      "label": "Secondary button link"
+    },
+    {
+      "type": "image_picker",
+      "id": "art_image_left",
+      "label": "Decorative background art (left, optional)",
+      "info": "Purely decorative — hidden automatically below 1080px, same as the source design."
+    },
+    {
+      "type": "image_picker",
+      "id": "art_image_right",
+      "label": "Decorative background art (right, optional)",
+      "info": "Purely decorative — hidden automatically below 1080px, same as the source design."
+    }
+  ],
+  "presets": [
+    {
+      "name": "Final CTA banner"
+    }
+  ]
+}
+{% endschema %}

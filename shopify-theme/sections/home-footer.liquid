@@ -1,0 +1,180 @@
+{% comment %}
+  sections/home-footer.liquid
+  Ported from the "Arcane Flame Website Prototype" option-c.html:
+    - CSS: lines ~361-372 (.foot, .foot__grid, .foot__brand img,
+      .foot__brand p, .foot h5, .foot ul, .foot ul a, .foot ul a:hover,
+      .foot__base) plus the .foot__grid-relevant slice of the <=1080px
+      and <=680px responsive rules — see
+      shopify-theme/assets/home-footer.css for the full colour-
+      substitution notes.
+    - Markup: the <footer class="foot">...</footer> block (brand blurb,
+      three link columns — Print / Shop / Help — and the base bar with
+      copyright + DM Stash attribution line).
+
+  One-section-vs-two decision: built as its own section, separate from
+  the final CTA banner (see home-final-cta.liquid) — see that file's
+  header for the full reasoning. Short version: the footer is
+  conventionally global/site-wide in Shopify themes (assigned once, in
+  every template's JSON, or promoted to theme.liquid) while the CTA
+  banner above it is homepage-specific content a merchant may want to
+  reorder or drop independently. Splitting them lets a merchant do that
+  without touching the other.
+
+  Each footer column (Print / Shop / Help) is its own `link_list`
+  setting, following the exact pattern home-nav.liquid already
+  established for its single `menu` setting — just three of them here,
+  each with its own editable heading text setting defaulting to the
+  source's column titles. This means NO footer link/URL is hardcoded in
+  this file: every link a merchant sees comes from whatever Shopify menu
+  they assign to each of the three settings in the theme editor, which is
+  also how the "footer links must resolve to real Shopify pages, not #"
+  requirement gets satisfied in practice — it's on the merchant to build
+  real menus (ideally pointing Help-column items at real policy pages via
+  Shopify's Online Store > Navigation, and Print/Shop items at the
+  calculator page / collections once they exist) rather than on this
+  section to guess URLs that don't exist yet. See the task report for the
+  full audit of which of the source's *default* link targets are real
+  Shopify routes today vs. still-needed pages/collections.
+
+  Logo judgment call: kept the home-nav.liquid / home-hero.liquid
+  precedent — reference `arcane-flame-white.png` via `asset_url` rather
+  than an `image_picker` setting. The brief notes an `image_picker` would
+  actually be more correct for a real Shopify footer (letting a merchant
+  swap their logo without a deploy), and that's true in isolation — but
+  the header and footer logo should always be the *same* file, and
+  splitting it into two independently-editable settings (one per section)
+  creates a real risk a merchant updates one and not the other, producing
+  a header/footer logo mismatch. Kept the single asset-file precedent
+  instead, consistent with the known tracked gap (the file doesn't exist
+  in shopify-theme/assets/ yet) already flagged for home-nav.liquid and
+  home-hero.liquid.
+
+  The DM Stash attribution line is an editable `text` setting (not
+  hardcoded) per the brief — unlike the wording-constrained
+  AttributionLockup badge in home-services.liquid, which had a specific
+  tamper-proof requirement, footer copy here is ordinary editable content
+  and the default text is simply the legally-reviewed exact wording.
+{% endcomment %}
+<footer class="foot">
+  <div class="wrap">
+    <div class="foot__grid">
+      <div class="foot__brand">
+        <img src="{{ 'arcane-flame-white.png' | asset_url }}" alt="{{ shop.name }}" />
+        <div>{{ section.settings.brand_blurb }}</div>
+      </div>
+      <div>
+        <h5>{{ section.settings.print_heading }}</h5>
+        <ul>
+          {% for link in section.settings.print_links.links %}
+            <li><a href="{{ link.url }}">{{ link.title }}</a></li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div>
+        <h5>{{ section.settings.shop_heading }}</h5>
+        <ul>
+          {% for link in section.settings.shop_links.links %}
+            <li><a href="{{ link.url }}">{{ link.title }}</a></li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div>
+        <h5>{{ section.settings.help_heading }}</h5>
+        <ul>
+          {% for link in section.settings.help_links.links %}
+            <li><a href="{{ link.url }}">{{ link.title }}</a></li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    <div class="foot__base">
+      <span>{{ section.settings.copyright_text }}</span>
+      <span>{{ section.settings.attribution_text }}</span>
+    </div>
+  </div>
+</footer>
+
+{{ 'brand-tokens.css' | asset_url | stylesheet_tag }}
+{{ 'home-base.css' | asset_url | stylesheet_tag }}
+{{ 'home-footer.css' | asset_url | stylesheet_tag }}
+
+{% schema %}
+{
+  "name": "Footer",
+  "settings": [
+    {
+      "type": "richtext",
+      "id": "brand_blurb",
+      "label": "Brand blurb",
+      "default": "<p>High-detail resin and PLA 3D printing for tabletop gamers, makers and painters. Printed to order in the UK.</p>"
+    },
+    {
+      "type": "header",
+      "content": "Print column"
+    },
+    {
+      "type": "text",
+      "id": "print_heading",
+      "label": "Column heading",
+      "default": "Print"
+    },
+    {
+      "type": "link_list",
+      "id": "print_links",
+      "label": "Print column menu"
+    },
+    {
+      "type": "header",
+      "content": "Shop column"
+    },
+    {
+      "type": "text",
+      "id": "shop_heading",
+      "label": "Column heading",
+      "default": "Shop"
+    },
+    {
+      "type": "link_list",
+      "id": "shop_links",
+      "label": "Shop column menu"
+    },
+    {
+      "type": "header",
+      "content": "Help column"
+    },
+    {
+      "type": "text",
+      "id": "help_heading",
+      "label": "Column heading",
+      "default": "Help"
+    },
+    {
+      "type": "link_list",
+      "id": "help_links",
+      "label": "Help column menu"
+    },
+    {
+      "type": "header",
+      "content": "Base bar"
+    },
+    {
+      "type": "text",
+      "id": "copyright_text",
+      "label": "Copyright line",
+      "default": "© 2026 Arcane Flame. All rights reserved."
+    },
+    {
+      "type": "text",
+      "id": "attribution_text",
+      "label": "Attribution line",
+      "info": "Legally-reviewed licensing-relationship wording — edit with care.",
+      "default": "Officially licensed printer for DM Stash. Not affiliated with DM Stash."
+    }
+  ],
+  "presets": [
+    {
+      "name": "Footer"
+    }
+  ]
+}
+{% endschema %}

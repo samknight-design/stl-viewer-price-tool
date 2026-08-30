@@ -1,0 +1,49 @@
+/* shopify-theme/assets/home-footer.css
+   Ported from "Arcane Flame Website Prototype" option-c.html:
+     - lines ~361-372: .foot, .foot__grid, .foot__brand img, .foot__brand p,
+       .foot h5, .foot ul, .foot ul a, .foot ul a:hover, .foot__base.
+     - responsive: the .foot__grid-relevant slice of lines ~387 and ~412
+       (`.foot__grid{grid-template-columns:repeat(2,1fr)}` at <=1080px,
+       `.foot__grid{grid-template-columns:1fr}` at <=680px — the other
+       selectors on those combined rules belong to sections not ported
+       here).
+
+   Every colour is a var(--af-*) token from brand-tokens.css; the
+   rgba() translucency stops (borders) have no token equivalent and are
+   kept as rgba() per the brief's stated exception.
+
+   Colour substitutions (prototype value -> token):
+     var(--ink-900)  -> var(--af-ink-900)   (.foot background)
+     var(--grey-500) -> var(--af-grey-500)  (.foot__brand p color,
+                                              .foot ul a color,
+                                              .foot__base color)
+     var(--flame-300)-> var(--af-flame-300) (.foot ul a:hover color)
+     var(--display)  -> var(--af-font-display) (.foot h5 font-family)
+   rgba() translucency kept as-is (no token equivalent):
+     rgba(255,255,255,.1)  — .foot border-top
+     rgba(255,255,255,.09) — .foot__base border-top
+
+   Base type/section classes referenced by the markup (.wrap) are defined
+   in home-base.css and are not redefined here — same convention as every
+   other home-*.css file in this set. */
+
+/* ---------- footer ---------- */
+.foot{background:var(--af-ink-900);border-top:1px solid rgba(255,255,255,.1);padding:64px 0 30px}
+.foot__grid{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr;gap:40px}
+.foot__brand img{height:74px;margin-bottom:18px}
+.foot__brand p{font-size:14px;color:var(--af-grey-500);max-width:34ch}
+.foot h5{font-family:var(--af-font-display);text-transform:uppercase;font-size:14px;letter-spacing:.09em;margin-bottom:16px}
+.foot ul{list-style:none;display:flex;flex-direction:column;gap:10px}
+.foot ul a{font-size:14px;color:var(--af-grey-500);transition:color .16s}
+.foot ul a:hover{color:var(--af-flame-300)}
+.foot__base{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;
+  margin-top:52px;padding-top:24px;border-top:1px solid rgba(255,255,255,.09);
+  font-size:12.5px;color:var(--af-grey-500)}
+
+/* ---------- responsive ---------- */
+@media (max-width:1080px){
+  .foot__grid{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:680px){
+  .foot__grid{grid-template-columns:1fr}
+}

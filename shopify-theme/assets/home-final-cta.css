@@ -1,0 +1,46 @@
+/* shopify-theme/assets/home-final-cta.css
+   Ported from "Arcane Flame Website Prototype" option-c.html:
+     - lines ~349-359: .final, .final__bg, .final__art, .final__art--l,
+       .final__in, .final h2, .final .lede, .final__cta.
+     - responsive: line ~392 (`.final__art{display:none}` under the
+       <=1080px breakpoint).
+
+   Every colour is a var(--af-*) token from brand-tokens.css; the
+   .final__bg radial-gradient's rgba(14,147,176,.3) translucency stop has
+   no token equivalent and is kept as rgba() per the brief's stated
+   exception (same convention as home-services.css / home-base.css).
+
+   Colour substitutions (prototype value -> token):
+     var(--ink-900) -> var(--af-ink-900)  (.final__bg gradient base)
+   rgba() translucency kept as-is (no token equivalent):
+     rgba(14,147,176,.3) — .final__bg radial-gradient centre stop
+
+   Base type/section/button classes referenced by the markup (.wrap,
+   .display, .lede, .btn, .btn--primary, .btn--ghost, .arw) are defined
+   in home-base.css and are not redefined here — same convention as every
+   other home-*.css file in this set.
+
+   Note on `.reveal` / `data-d` classes in the markup: kept in
+   home-final-cta.liquid for parity with the source and with
+   home-services.liquid (which also carries them), but — consistent with
+   every other section ported so far in this set — no `.reveal` CSS rule
+   or scroll-triggered IntersectionObserver has been ported anywhere in
+   this theme yet, so the classes are inert scaffolding, not a gap
+   introduced by this file. */
+
+/* ---------- final cta ---------- */
+.final{position:relative;overflow:hidden;text-align:center;padding:130px 0}
+.final__bg{position:absolute;inset:0;z-index:0;
+  background:radial-gradient(60% 80% at 50% 50%,rgba(14,147,176,.3),transparent 65%),var(--af-ink-900)}
+.final__art{position:absolute;right:-4%;bottom:-8%;width:min(430px,34vw);opacity:.16;z-index:1;
+  pointer-events:none;filter:grayscale(.4)}
+.final__art--l{left:-5%;right:auto;transform:scaleX(-1)}
+.final__in{position:relative;z-index:3}
+.final h2{font-size:clamp(29px,4.1vw,55px);margin-bottom:20px}
+.final .lede{margin:0 auto 36px}
+.final__cta{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+
+/* ---------- responsive ---------- */
+@media (max-width:1080px){
+  .final__art{display:none}
+}
