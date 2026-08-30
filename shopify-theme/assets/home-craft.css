@@ -60,7 +60,14 @@
 .craft{display:grid;grid-template-columns:.95fr 1.05fr;gap:70px;align-items:center}
 .craft__fig{position:relative}
 .craft__fig>img{
-  width:100%;max-width:520px;margin:0 auto;
+  /* height:auto is required, not decorative — the img carries width/height
+     HTML attributes from Shopify's image_url output, and without an
+     explicit CSS height the browser uses that raw attribute pixel value
+     verbatim instead of scaling proportionally, stretching any real photo
+     whose aspect ratio doesn't happen to match the source prototype's
+     placeholder. Confirmed live: a 1342x2380 photo rendered at a
+     forced 520x2380 box. */
+  width:100%;max-width:520px;height:auto;margin:0 auto;
   filter:drop-shadow(0 40px 70px rgba(0,0,0,.8));
 }
 .craft__ring{display:block!important;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);

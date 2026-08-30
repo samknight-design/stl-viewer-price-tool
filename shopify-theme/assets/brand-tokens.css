@@ -2,6 +2,17 @@
    Single source of truth for colour/type/geometry — ported from
    arcane-flame-design-system/brand.html. Change values there first,
    then copy here; do not let this drift, it's the whole point of this file. */
+
+/* No @font-face for Cinzel/Inter/IBM Plex Mono was ever shipped in this
+   theme — every heading/body font-family declaration pointed at names with
+   nothing backing them, so the browser silently fell through to the stack's
+   fallback (Georgia / system-ui) the whole time this went undetected.
+   Loading from Google Fonts rather than self-hosting: no vendored woff2
+   files exist in this repo, and re-hosting binary font files here risks
+   the exact transcription corruption already hit twice this session with
+   images — Google's CDN is the reliable path. */
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
 :root{
   --af-ink-900:#070d14; --af-ink-800:#0d1520; --af-ink-700:#131d2a;
   --af-ink-600:#182433; --af-ink-500:#213040; --af-ink-400:#2e4152;

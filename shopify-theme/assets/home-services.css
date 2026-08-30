@@ -86,7 +86,10 @@
 }
 .svc__card:hover img{transform:scale(1.05) translateY(-6px)}
 .svc--a img{right:-8%;bottom:0;height:88%;width:auto}
-.svc--b img{right:-4%;bottom:18%;width:52%}
+/* height:auto required — same HTML width/height-attribute stretching bug
+   as .craft__fig>img, see that file's comment. .svc--a img already sets
+   width:auto so it was unaffected; this rule only constrained width. */
+.svc--b img{right:-4%;bottom:18%;width:52%;height:auto}
 .svc__card::after{content:"";position:absolute;inset:0;pointer-events:none;
   background:linear-gradient(90deg,var(--af-ink-900) 20%,rgba(8,10,18,.9) 48%,transparent 86%)}
 .svc__body{position:relative;z-index:2;max-width:330px}

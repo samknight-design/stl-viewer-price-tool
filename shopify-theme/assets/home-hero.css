@@ -47,7 +47,13 @@
    stylesheet task. */
 
 /* ---------- hero ---------- */
-.hero{position:relative;min-height:100vh;display:flex;align-items:center;overflow:hidden;padding:158px 0 82px}
+/* Source padding-top (158px) compensated for the prototype's own fixed/
+   overlaid nav sitting on top of the hero. Dawn's real header renders in
+   normal flow above this section instead (kept deliberately, see the
+   header/footer decision this session) and already reserves its own
+   space, so that compensation is now pure dead air — confirmed live via
+   screenshot. */
+.hero{position:relative;min-height:100vh;display:flex;align-items:center;overflow:hidden;padding:64px 0 82px}
 .hero__bg{display:block!important;position:absolute;inset:0;z-index:0;
   background:
     /* aqua core, low — the hottest part of the flame */
@@ -96,7 +102,11 @@
 @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-16px)}}
 
 /* ---------- hero roundel — signals FDM/prototyping without derailing the mini hero art ---------- */
-.roundel{position:absolute;left:-4%;bottom:6%;z-index:6;width:172px;
+/* left was -4% (pulled outside .hero__art's own box, into the copy
+   column, overlapping the proof-row text) — user flagged this directly
+   from a live screenshot. Moved right onto the dragon's tail/base, clear
+   of any text. */
+.roundel{position:absolute;left:14%;bottom:2%;z-index:6;width:172px;
   display:flex;flex-direction:column;align-items:center;gap:10px}
 .roundel__photo{position:relative;width:150px;height:150px;border-radius:50%;overflow:hidden;
   box-shadow:0 16px 34px rgba(0,0,0,.6),inset 0 0 0 3px var(--af-ink-900),inset 0 0 0 4px rgba(79,214,236,.7)}
