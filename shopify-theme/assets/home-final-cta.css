@@ -30,7 +30,7 @@
 
 /* ---------- final cta ---------- */
 .final{position:relative;overflow:hidden;text-align:center;padding:130px 0}
-.final__bg{position:absolute;inset:0;z-index:0;
+.final__bg{display:block!important;position:absolute;inset:0;z-index:0;
   background:radial-gradient(60% 80% at 50% 50%,rgba(14,147,176,.3),transparent 65%),var(--af-ink-900)}
 .final__art{position:absolute;right:-4%;bottom:-8%;width:min(430px,34vw);opacity:.16;z-index:1;
   pointer-events:none;filter:grayscale(.4)}

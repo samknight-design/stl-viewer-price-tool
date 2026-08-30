@@ -105,7 +105,7 @@
 .attrib__cap{font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--af-grey-500)}
 .attrib img{height:26px;width:auto}
 .attrib__name{font-family:var(--af-font-display);text-transform:uppercase;font-size:17px;letter-spacing:.04em}
-.attrib__div{width:1px;height:38px;background:rgba(255,255,255,.16)}
+.attrib__div{display:block!important;width:1px;height:38px;background:rgba(255,255,255,.16)}
 /* Minimal duplicate of home-services.css's .svc__link / .arw — see file
    header "Fix (post-review, 2026-08-30)". */
 .attrib .svc__link{display:inline-flex;align-items:center;gap:9px;font-weight:600;font-size:13px;

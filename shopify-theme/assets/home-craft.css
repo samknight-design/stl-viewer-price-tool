@@ -63,13 +63,13 @@
   width:100%;max-width:520px;margin:0 auto;
   filter:drop-shadow(0 40px 70px rgba(0,0,0,.8));
 }
-.craft__ring{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+.craft__ring{display:block!important;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
   width:min(560px,90%);aspect-ratio:1;border-radius:50%;z-index:-1;
   background:radial-gradient(circle,rgba(79,214,236,.16),transparent 64%);filter:blur(24px)}
 
 /* ---------- hotspot pins (hover-reveal; hidden on touch, see file header) ---------- */
 .pin{position:absolute;z-index:3}
-.pin__dot{width:15px;height:15px;border-radius:50%;background:var(--af-flame-300);
+.pin__dot{display:block!important;width:15px;height:15px;border-radius:50%;background:var(--af-flame-300);
   border:2px solid rgba(8,12,16,.85);cursor:pointer;position:relative}
 .pin__dot::after{content:"";position:absolute;inset:-9px;border-radius:50%;
   border:1px solid var(--af-flame-300);opacity:.55;animation:ping 2.4s ease-out infinite}

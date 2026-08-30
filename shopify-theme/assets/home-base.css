@@ -1,4 +1,20 @@
 /* shopify-theme/assets/home-base.css
+
+   GOTCHA — Dawn's own base.css ships:
+     a:empty, ul:empty, dl:empty, div:empty, section:empty, article:empty,
+     p:empty, h1:empty, ..., h6:empty { display: none }
+   Any purely-decorative empty element this theme's markup uses as a pure
+   CSS background/overlay layer (e.g. `<div class="hero__bg"></div>`) gets
+   silently hidden by that rule — found live via screenshot, not by any
+   review or test, since nothing in this project's test suite renders
+   real HTML through a real browser against Dawn's actual CSS. Every
+   affected class (hero__bg, hero__grid, hero__vig, hero__glow, final__bg,
+   craft__ring, pin__dot, svc__frame, attrib__div, as of 2026-08-30) sets
+   `display:block!important` at its own rule to win the specificity tie
+   (div:empty is one type + one pseudo-class; a bare class selector alone
+   loses that tie). If a future section adds another empty decorative
+   element, it needs the same treatment.
+
    Ported from "Arcane Flame Website Prototype" option-c.html:
      - the base reset (`*{margin:0;padding:0;box-sizing:border-box;min-width:0}`)
        and the html/body base rules (lines ~36-44).

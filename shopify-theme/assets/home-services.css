@@ -70,7 +70,7 @@
   transition:border-color .3s var(--af-ease),transform .3s var(--af-ease);
 }
 .svc__card:hover{border-color:rgba(79,214,236,.5);transform:translateY(-5px)}
-.svc__frame{position:absolute;inset:14px 14px auto 14px;height:calc(100% - 96px);z-index:2;
+.svc__frame{display:block!important;position:absolute;inset:14px 14px auto 14px;height:calc(100% - 96px);z-index:2;
   border:1px dashed rgba(79,214,236,.55);pointer-events:none}
 .svc__badge{position:absolute;left:0;top:22px;z-index:4;display:flex;align-items:center;gap:10px;
   background:var(--af-flame-500);border:1px solid rgba(255,255,255,.25);
