@@ -66,7 +66,8 @@
             home-services.css for what each variant actually controls.
           {% endcomment %}
           {% assign card_variant = 'a' %}
-          {% if forloop.index0 | modulo: 2 == 1 %}
+          {% assign card_index_remainder = forloop.index0 | modulo: 2 %}
+          {% if card_index_remainder == 1 %}
             {% assign card_variant = 'b' %}
           {% endif %}
           <article class="svc__card svc--{{ card_variant }} reveal" {% if forloop.index0 > 0 %}data-d="1"{% endif %} {{ block.shopify_attributes }}>
