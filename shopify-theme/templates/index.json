@@ -60,6 +60,9 @@
     },
     "calc-teaser": {
       "type": "home-calc-teaser",
+      "settings": {
+        "cta_url": "shopify://pages/3d-print-calculator"
+      },
       "blocks": {
         "step-1": { "type": "step", "settings": { "number": "01", "title": "Upload your STL files", "description": "Single files or multi-part builds we assemble for you." } },
         "step-2": { "type": "step", "settings": { "number": "02", "title": "Pick resin or PLA", "description": "Plus finish, colour and scale — the price updates live." } },
