@@ -1,0 +1,106 @@
+/* shopify-theme/assets/home-calc-teaser.css
+   Ported from "Arcane Flame Website Prototype" option-c.html:
+     - .calc, .steps, .steps li, .steps li:last-child, .steps b, .steps h4,
+       .steps p, .ui, .ui__bar, .ui__bar i, .ui__bar span, .ui__body, .drop,
+       .drop svg, .drop p, .drop small, .frow, .frow__ico, .frow__meta,
+       .frow__meta b, .frow__meta small, .frow__price, .total, .total
+       small, .total .amt, .total .save, .total .save b (all located by
+       class name, not line number, per the task brief).
+     - Plus the .calc-relevant slice of a shared responsive rule that
+       lives elsewhere in the prototype and also covers unrelated
+       sections (.hero__in, .craft) — same pattern home-craft.css used
+       for its own responsive subset:
+         - `.hero__in,.craft,.calc{grid-template-columns:1fr;gap:52px}`
+           under the <=1080px breakpoint — only the `.calc` declaration
+           pulled out.
+         - `.total .amt{font-size:34px}` under the <=680px breakpoint.
+
+   Every colour is a var(--af-*) token from brand-tokens.css; the
+   .drop border/background and .ui__bar i rgba()/var() translucency has
+   no exact solid-colour token equivalent in some spots (see below) and
+   is kept as rgba() per the brief's stated exception.
+
+   Colour substitutions (prototype value -> token):
+     var(--mono)      -> var(--af-font-mono)   (.steps b, .ui__bar span,
+                                                  .frow__meta small,
+                                                  .frow__price, .total .amt
+                                                  font-family)
+     var(--flame-300)  -> var(--af-flame-300)  (.steps b, .drop svg,
+                                                  .frow__ico color,
+                                                  .total .amt color,
+                                                  .total .save b color)
+     var(--grey-500)   -> var(--af-grey-500)   (.steps p, .ui__bar span,
+                                                  .drop small,
+                                                  .frow__meta small,
+                                                  .total small,
+                                                  .total .save color)
+     var(--ink-800)    -> var(--af-ink-800)    (.ui background)
+     var(--ink-700)    -> var(--af-ink-700)    (.ui__bar background)
+     var(--ink-400)    -> var(--af-ink-400)    (.ui__bar i background)
+     var(--ink-500)    -> var(--af-ink-500)    (.frow__ico background)
+   rgba() translucency kept as-is (no token equivalent):
+     rgba(255,255,255,.1)  — .steps li / .steps li:last-child border,
+       .ui border
+     rgba(79,214,236,.45)  — .drop border (translucent flame-300; the
+       prototype uses the flame-300 RGB triplet, 79,214,236, directly
+       rather than var(--flame-300), so there is no var() to swap in —
+       ported as rgba() verbatim, same judgment call home-craft.css and
+       home-final-cta.css made for identical cases)
+     rgba(79,214,236,.05)  — .drop background (same triplet as above)
+     rgba(255,255,255,.09) — .frow border
+     rgba(79,214,236,.35)  — .total border (same triplet as above)
+   No literal hex colours appear in this block of the prototype.
+
+   Base type/section/button classes referenced by the markup (.sec,
+   .wrap, .eyebrow, .display, .lede, .btn, .btn--primary, .arw) are
+   defined in home-base.css and are not redefined here — same convention
+   as every other home-*.css file in this set.
+
+   Note on `.reveal` / `data-d` classes in the markup: kept in
+   home-calc-teaser.liquid for parity with the source and with every
+   other section in this set, but — consistent with all of them — no
+   `.reveal` CSS rule or scroll-triggered IntersectionObserver/count-up
+   animation has been ported; the classes are inert scaffolding, not a
+   gap introduced by this file. See home-calc-teaser.liquid's file header
+   for the count-up-total judgment call specifically. */
+
+/* ---------- calculator teaser ---------- */
+.calc{display:grid;grid-template-columns:.88fr 1.12fr;gap:70px;align-items:center}
+.steps{list-style:none;margin-top:36px}
+.steps li{display:flex;gap:18px;padding:20px 0;border-top:1px solid rgba(255,255,255,.1)}
+.steps li:last-child{border-bottom:1px solid rgba(255,255,255,.1)}
+.steps b{font-family:var(--af-font-mono);font-size:13px;color:var(--af-flame-300);padding-top:3px;flex-shrink:0}
+.steps h4{font-size:16px;margin-bottom:4px;font-weight:600}
+.steps p{font-size:14.5px;color:var(--af-grey-500)}
+.ui{background:var(--af-ink-800);border:1px solid rgba(255,255,255,.13);overflow:hidden}
+.ui__bar{display:flex;align-items:center;gap:8px;padding:14px 18px;
+  border-bottom:1px solid rgba(255,255,255,.1);background:var(--af-ink-700)}
+.ui__bar i{width:10px;height:10px;border-radius:50%;background:var(--af-ink-400);display:block}
+.ui__bar span{margin-left:10px;font-size:12px;color:var(--af-grey-500);font-family:var(--af-font-mono)}
+.ui__body{padding:26px}
+.drop{border:1px dashed rgba(79,214,236,.45);background:rgba(79,214,236,.05);
+  padding:32px;text-align:center;margin-bottom:22px}
+.drop svg{color:var(--af-flame-300);margin:0 auto 12px}
+.drop p{font-size:14.5px;font-weight:600}
+.drop small{color:var(--af-grey-500);font-size:12.5px;display:block;margin-top:5px}
+.frow{display:flex;align-items:center;gap:14px;padding:15px 0;border-top:1px solid rgba(255,255,255,.09)}
+.frow__ico{width:36px;height:36px;background:var(--af-ink-500);display:grid;place-items:center;
+  color:var(--af-flame-300);flex-shrink:0}
+.frow__meta{flex:1;min-width:0}
+.frow__meta b{display:block;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.frow__meta small{color:var(--af-grey-500);font-size:12px;font-family:var(--af-font-mono)}
+.frow__price{font-family:var(--af-font-mono);font-weight:600;font-size:16px}
+.total{display:flex;justify-content:space-between;align-items:flex-end;
+  margin-top:22px;padding-top:20px;border-top:1px solid rgba(79,214,236,.35)}
+.total small{font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--af-grey-500);display:block;margin-bottom:5px}
+.total .amt{font-family:var(--af-font-mono);font-size:42px;font-weight:600;color:var(--af-flame-300);line-height:1}
+.total .save{font-size:12.5px;color:var(--af-grey-500);text-align:right}
+.total .save b{color:var(--af-flame-300)}
+
+/* ---------- responsive (ported subset — see file header) ---------- */
+@media (max-width:1080px){
+  .calc{grid-template-columns:1fr;gap:52px}
+}
+@media (max-width:680px){
+  .total .amt{font-size:34px}
+}
