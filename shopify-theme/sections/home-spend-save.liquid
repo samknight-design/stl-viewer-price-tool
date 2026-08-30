@@ -1,0 +1,179 @@
+{% comment %}
+  sections/home-spend-save.liquid
+  Ported from the "Arcane Flame Website Prototype" option-c.html:
+    - CSS: lines ~325-339 (the "spend ladder" comment block): .ladder,
+      .rung, .rung:last-child, .rung:hover, .rung__pct, .rung__spend,
+      .rung__bar, .rung__bar i, .reveal.in .rung__bar i, .shipflag, .terms
+      — plus the .ladder-relevant slice of the <=1080px responsive rule
+      (line ~387-389: `.ladder{grid-template-columns:repeat(2,1fr)}` from
+      the combined `.svc,.pgrid,.rev,.ladder,.foot__grid` selector, and
+      the `.rung:nth-child(2n){border-right:0}` /
+      `.rung:nth-child(-n+2){border-bottom:...}` rules that only apply to
+      `.rung`) and the <=680px slice (line ~413:
+      `.rung{border-right:0;border-bottom:1px solid rgba(18,18,18,.14)}`
+      from the combined `.ladder .rung, ...` rule at that breakpoint —
+      see shopify-theme/assets/home-spend-save.css for the full colour-
+      substitution notes.
+    - Markup: lines ~703-726 (<section class="sec sec--light">...
+      </section>) — the "Discounts that stack as your army grows"
+      eyebrow/heading, the 4-rung discount ladder, the free-shipping
+      flag banner and the minimum-spend disclaimer.
+
+  ** CONTENT-ACCURACY FLAG (does not block this task, but needs a human
+  check before publish): the 5%/10%/15%/20% discount percentages, the
+  £10/£20/£30/£40 spend thresholds and the £50 free-shipping threshold
+  below are the prototype's illustrative marketing copy, ported here
+  verbatim as static/editable section settings. They are NOT read from
+  and NOT wired to `print_calculator.pricing_config` (the shop metafield
+  that actually drives checkout discounts) — this task has no access to
+  that metafield's current live values and was not asked to reconcile
+  against it. Whoever publishes this section should verify these
+  displayed numbers still match whatever discount tiers are actually
+  configured live, or customers will see marketing copy that promises a
+  different discount than checkout applies. **
+
+  Schema/rendering decisions:
+
+  1. The 4 rungs are a repeatable `rung` block (percent number, spend_text
+     text, bar_width range 0-100 matching the source's per-rung
+     `--w:25%/50%/75%/100%` custom property) rather than 4 fixed settings,
+     so a merchant can add/remove/reorder tiers — same block-loop pattern
+     Task 8 (home-craft.liquid, spec_item blocks) and Task 12
+     (home-shop-grid.liquid) used. The preset below ships the source's
+     exact 4 rungs (5%/£10, 10%/£20, 15%/£30, 20%/£40) as the default.
+     bar_width is exposed as its own editable field (not silently derived
+     from percent) since the source's bar-fill values (25/50/75/100) don't
+     follow an obvious formula from the percent values (5/10/15/20) — they
+     look like "position in the ladder" (1st of 4 = 25%, ..., 4th of 4 =
+     100%) rather than a function of the percent itself, so a merchant
+     changing percent shouldn't silently change the fill width too.
+
+  2. `eyebrow` is included as a section setting even though the outer task
+     list names only heading/shipping_text/terms_text — every other ported
+     homepage section with a `.sec__head` (home-craft, home-shop-grid,
+     home-services) exposes its eyebrow as an editable setting for
+     consistency, and the source's eyebrow here ("Spend more, save more")
+     is clearly the same kind of merchant-editable microcopy as those.
+     Flagged here as one field added beyond the literal list, same
+     disclosure pattern Task 8 used for its `flip_label` addition.
+
+  3. The heading keeps the source's `<br />` line break (`Discounts that
+     stack<br />as your army grows.`) — unlike Task 8's craft heading,
+     which dropped its manual break as arbitrary line-length balance, this
+     break sits at a real clause boundary ("...as your army grows" is a
+     complete trailing clause, not a mid-phrase wrap) so it's modelled as
+     a `richtext` setting (matching home-shop-grid.liquid's `lede`
+     precedent for the same reason: needing an editable line break)
+     instead of dropping it. Flagged as a judgment call since the brief
+     said "heading (text)".
+
+  4. `.reveal`/`.reveal.in`/`data-d` scroll-reveal classes from the source
+     are dropped from the markup, same call every other ported section in
+     this project already made (see home-craft.liquid, home-shop-grid.liquid)
+     — no reveal-on-scroll JS exists anywhere in this theme yet, so the
+     bars would render permanently at `width:0` (the `.rung__bar i` default)
+     and never reach `var(--w)` without `.reveal.in` ever being added. The
+     CSS below renders the bar fill unconditionally instead of gating it
+     behind a `.reveal.in` class that would never appear.
+{% endcomment %}
+<section class="sec sec--light" id="SpendSave-{{ section.id }}">
+  <div class="wrap">
+    <div class="sec__head">
+      <p class="eyebrow on-light">{{ section.settings.eyebrow }}</p>
+      <h2 class="display">{{ section.settings.heading }}</h2>
+    </div>
+    <div class="ladder">
+      {% for block in section.blocks %}
+        {% if block.type == 'rung' %}
+          <div class="rung" {{ block.shopify_attributes }}>
+            <div class="rung__pct">{{ block.settings.percent }}%</div>
+            <div class="rung__spend">{{ block.settings.spend_text }}</div>
+            <div class="rung__bar"><i style="--w:{{ block.settings.bar_width }}%"></i></div>
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+    <div class="shipflag">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 3h1.4a2 2 0 0 1 1.7 1l2.6 4.3a2 2 0 0 1 .3 1V17a1 1 0 0 1-1 1h-1"/><path d="M2 6a1 1 0 0 1 1-1h11a1 1 0 0 1 1 1v12H9"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg>
+      {{ section.settings.shipping_text }}
+    </div>
+    <p class="terms">{{ section.settings.terms_text }}</p>
+  </div>
+</section>
+
+{{ 'brand-tokens.css' | asset_url | stylesheet_tag }}
+{{ 'home-base.css' | asset_url | stylesheet_tag }}
+{{ 'home-spend-save.css' | asset_url | stylesheet_tag }}
+
+{% schema %}
+{
+  "name": "Spend & save",
+  "settings": [
+    {
+      "type": "text",
+      "id": "eyebrow",
+      "label": "Eyebrow",
+      "default": "Spend more, save more"
+    },
+    {
+      "type": "richtext",
+      "id": "heading",
+      "label": "Heading",
+      "default": "<p>Discounts that stack<br />as your army grows.</p>"
+    },
+    {
+      "type": "text",
+      "id": "shipping_text",
+      "label": "Free shipping flag text",
+      "default": "Spend £50 and over for FREE UK shipping"
+    },
+    {
+      "type": "text",
+      "id": "terms_text",
+      "label": "Terms disclaimer",
+      "default": "*Minimum spend requirement does not include postage costs."
+    }
+  ],
+  "blocks": [
+    {
+      "type": "rung",
+      "name": "Discount tier",
+      "settings": [
+        {
+          "type": "number",
+          "id": "percent",
+          "label": "Discount percent",
+          "default": 5
+        },
+        {
+          "type": "text",
+          "id": "spend_text",
+          "label": "Spend threshold text",
+          "default": "Spend £10 and over"
+        },
+        {
+          "type": "range",
+          "id": "bar_width",
+          "label": "Progress bar fill",
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "unit": "%",
+          "default": 25
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Spend & save",
+      "blocks": [
+        { "type": "rung", "settings": { "percent": 5, "spend_text": "Spend £10 and over", "bar_width": 25 } },
+        { "type": "rung", "settings": { "percent": 10, "spend_text": "Spend £20 and over", "bar_width": 50 } },
+        { "type": "rung", "settings": { "percent": 15, "spend_text": "Spend £30 and over", "bar_width": 75 } },
+        { "type": "rung", "settings": { "percent": 20, "spend_text": "Spend £40 and over", "bar_width": 100 } }
+      ]
+    }
+  ]
+}
+{% endschema %}

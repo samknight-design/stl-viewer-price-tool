@@ -1,0 +1,94 @@
+/* shopify-theme/assets/home-spend-save.css
+   Ported from "Arcane Flame Website Prototype" option-c.html:
+     - lines ~325-339 (the "spend ladder" comment block): .ladder, .rung,
+       .rung:last-child, .rung:hover, .rung__pct, .rung__spend, .rung__bar,
+       .rung__bar i, .reveal.in .rung__bar i, .shipflag, .terms.
+     - Plus the .ladder/.rung-relevant slice of two responsive rules that
+       live elsewhere in the prototype and also cover unrelated sections
+       (same pattern home-shop-grid.css and home-craft.css used):
+         - line ~387-389 (<=1080px): `.ladder{grid-template-columns:
+           repeat(2,1fr)}` pulled from the combined `.svc,.pgrid,.rev,
+           .ladder,.foot__grid{...}` selector, plus the two `.rung:
+           nth-child` rules from the same breakpoint (already .rung-only
+           in the source, ported verbatim).
+         - line ~413 (<=680px): `.rung{border-right:0;border-bottom:1px
+           solid rgba(18,18,18,.14)}` pulled from a combined selector
+           covering other sections' 2-column grids at that breakpoint.
+
+   This section's markup and schema (repeatable `rung` blocks driving
+   percent/spend-text/bar-width, section-level heading/shipping/terms
+   text) live in home-spend-save.liquid — see that file's header for the
+   block-loop and content-accuracy decisions. This file only ports the
+   visual styling of the .ladder/.rung/.shipflag/.terms classes.
+
+   Base type/section classes referenced by the markup (.sec, .sec--light,
+   .wrap, .eyebrow, .eyebrow.on-light, .display, .sec__head) are defined
+   in home-base.css and are not redefined here — same convention as every
+   other ported section in this project.
+
+   Judgment call: the source's `.reveal`/`.reveal.in` scroll-reveal
+   classes gate `.rung__bar i`'s width transition from 0 to `var(--w)`
+   behind a class this theme's markup never adds (no reveal-on-scroll JS
+   exists anywhere in shopify-theme yet — see home-spend-save.liquid's
+   header, point 4). Porting `.reveal.in .rung__bar i{width:var(--w)}`
+   verbatim would leave every bar permanently collapsed at width:0, which
+   fails the task's own definition of done ("bar-width custom properties
+   render correctly per rung"). The selector below sets `width:var(--w)`
+   directly on `.rung__bar i` with no `.reveal.in` gate, so each rung's
+   fill renders immediately from its block's `bar_width` setting. The
+   `transition` is kept (harmless — nothing currently triggers it, but it
+   costs nothing and matches the source's intent if reveal-on-scroll is
+   added to this theme later).
+
+   Colour substitutions (prototype value -> token):
+     var(--display)  -> var(--af-font-display) (.rung__pct font-family)
+     var(--flame-700)-> var(--af-flame-700)    (.rung__pct color)
+     var(--grey-600) -> var(--af-grey-600)     (.rung__spend color,
+                                                  .terms color)
+     var(--flame-500)-> var(--af-flame-500)    (.rung__bar i background,
+                                                  .shipflag background)
+     #fff             -> var(--af-white)       (.shipflag color — matches
+       --af-white exactly; kept as the var() token instead of the literal,
+       same call home-shop-grid.css made for .pcard__tag's #fff)
+     var(--ease)     -> var(--af-ease)         (.rung__bar i transition)
+   rgba() translucency kept as-is (no exact token equivalent):
+     rgba(18,18,18,.14) — .ladder border, .rung border-right, the
+       responsive .rung:nth-child border-bottom and the <=680px .rung
+       border-bottom. This is a translucency stop of --af-black (#121212
+       = rgb(18,18,18)) used on the light `.sec--light` background (same
+       token .sec--light itself uses for its `color`, in home-base.css) —
+       kept as rgba() per the same exception used throughout this project
+       rather than inventing a new token for one opacity stop.
+     rgba(14,147,176,.06) — .rung:hover background. Nearest brand token by
+       RGB distance is --af-flame-500 (#0a6f88 = rgb(10,111,136); the
+       source value rgb(14,147,176) is much further from --af-flame-300's
+       rgb(79,214,236)). Same "translucency stop of the nearest token, no
+       exact match" pattern as home-shop-grid.css's rgba(79,214,236,.5)
+       for .pcard:hover border-color — kept as rgba() rather than forcing
+       it onto var(--af-flame-500) at a fixed alpha that wouldn't match
+       the source's specific value. */
+
+/* ---------- spend ladder ---------- */
+.ladder{display:grid;grid-template-columns:repeat(4,1fr);gap:0;
+  border:1px solid rgba(18,18,18,.14);margin-top:16px}
+.rung{padding:34px 26px;border-right:1px solid rgba(18,18,18,.14);position:relative;
+  transition:background .25s var(--af-ease)}
+.rung:last-child{border-right:0}
+.rung:hover{background:rgba(14,147,176,.06)}
+.rung__pct{font-family:var(--af-font-display);font-size:clamp(42px,5vw,64px);line-height:1;color:var(--af-flame-700)}
+.rung__spend{font-size:14px;color:var(--af-grey-600);margin-top:10px}
+.rung__bar{height:3px;background:rgba(18,18,18,.1);margin-top:22px;overflow:hidden}
+.rung__bar i{display:block;height:100%;background:var(--af-flame-500);width:var(--w);transition:width 1.1s var(--af-ease)}
+.shipflag{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:26px;
+  background:var(--af-flame-500);color:var(--af-white);padding:18px;font-weight:600;letter-spacing:.05em;font-size:15px}
+.terms{font-size:12.5px;color:var(--af-grey-600);margin-top:16px;text-align:center}
+
+/* ---------- responsive (ported subset — see file header) ---------- */
+@media (max-width:1080px){
+  .ladder{grid-template-columns:repeat(2,1fr)}
+  .rung:nth-child(2n){border-right:0}
+  .rung:nth-child(-n+2){border-bottom:1px solid rgba(18,18,18,.14)}
+}
+@media (max-width:680px){
+  .rung{border-right:0;border-bottom:1px solid rgba(18,18,18,.14)}
+}
