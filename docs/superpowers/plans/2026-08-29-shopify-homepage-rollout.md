@@ -458,10 +458,44 @@ For each section task, "verify" means: open the section in the Shopify theme-edi
 **Source:** whatever final/footer CSS and body markup follows the services section in `option-c.html` (read the file's remaining content — it wasn't fully reviewed during planning — before writing this task's section, since the exact classes aren't yet confirmed).
 **Definition of done:** matches the prototype visually; all footer links resolve to real Shopify page/policy URLs, not `#`.
 
-### Task 11: Assemble `templates/index.json` and cut over
+### Task 11: Calculator marketing teaser (`home-calc-teaser.liquid`) — inserted after Task 10 found unplanned sections
+
+**Why this task exists:** Reading past the services section (needed to scope Task 10's footer) surfaced four more full sections in `option-c.html` between "Two ways to print" and the footer that this plan never accounted for. This is the first of three added to cover them; a fourth (Reviews) is deliberately built with placeholder copy per the user's explicit call — see Task 14.
+
+**Files:** Create `shopify-theme/sections/home-calc-teaser.liquid`, `shopify-theme/assets/home-calc-teaser.css`.
+**Source:** locate `<section class="sec" id="calculator">` and its CSS (`.calc`, `.steps`, `.ui`, `.ui__bar`, `.ui__body`, `.drop`, `.frow`, `.total` — search by class name, don't trust old line numbers).
+**Schema:** heading, lede (richtext), a repeatable `step` block (number, title, description — 3 by default, matching the source's 01/02/03), CTA text/url. The fake browser-chrome mockup (file rows with names/prices, the drop-zone) is decorative marketing content illustrating the real tool — hardcode it as static example content (not merchant-editable settings), same reasoning as Task 9's badge: this is illustrative UI chrome, not real data, and letting a merchant "edit" fake prices into something that reads as a real quote would be worse than leaving it fixed.
+**Definition of done:** matches the prototype visually; the CTA links to the actual calculator page (`{{ pages.3d-print-calculator.url }}` — confirm this Shopify page handle against `docs/shopify-integration-runbook.md` §2, which lists `https://www.arcane-flame.com/pages/3d-print-calculator` as the calculator page), not the prototype's `#calculator` anchor (there's no matching on-page anchor once this becomes its own homepage section — the button should navigate to the real tool).
+
+### Task 12: Shop product grid (`home-shop-grid.liquid`) — pulls real Shopify products, per user decision 2026-08-30
+
+**User's explicit call:** the prototype hardcodes 4 fictional products with fake prices. The user decided this must pull real Shopify products, not ship illustrative fake pricing on a live commerce page.
+
+**Files:** Create `shopify-theme/sections/home-shop-grid.liquid`, `shopify-theme/assets/home-shop-grid.css`.
+**Source:** locate `<section class="sec sec--mid" id="shop">`, `.pgrid`, `.pcard`, `.pcard__img`, `.pcard__tag`, `.pcard__body`, `.attrib*` (the DM Stash licensing attribution block — keep its wording exact, this is a legally-reviewed line per this project's conventions, same rule Task 10 already applied to the footer's DM Stash line).
+**Schema:** a `collection` setting (Shopify `collection` picker type) and a `products_to_show` range/number setting (default 4, matching the source). Render via `{% for product in section.settings.collection.products limit: section.settings.products_to_show %}`, pulling `product.featured_image`, `product.title`, and `product.price | money` (Shopify's real price, formatted through the store's money format — not a hardcoded "From £X.00" string). Guard the whole grid with `{% if section.settings.collection %}...{% else %}` and a clear empty-state message for when no collection is assigned yet (a fresh section placement will have this unset).
+**Definition of done:** with no collection assigned, the section shows a clear "select a collection" empty state rather than a broken/empty grid; with a collection assigned, product cards show real titles/images/prices from that collection, not the prototype's fictional ones. The attribution block and its wording are hardcoded (not editable), same rule as Task 9.
+
+### Task 13: Spend & Save discount ladder (`home-spend-save.liquid`)
+
+**Files:** Create `shopify-theme/sections/home-spend-save.liquid`, `shopify-theme/assets/home-spend-save.css`.
+**Source:** locate the `.ladder`, `.rung`, `.rung__pct`, `.rung__bar`, `.shipflag` CSS and the `<section class="sec sec--light">` containing them (the one with eyebrow "Spend more, save more").
+**Schema:** a repeatable `rung` block (percent number, spend-threshold text, bar-width percent — matching the source's `--w:25%/50%/75%/100%`), free-shipping threshold text, terms disclaimer text. This section is purely illustrative marketing copy in the prototype (not wired to `print_calculator.pricing_config`, which drives actual checkout discounts) — port it as static/editable marketing content, do not attempt to wire it to the live pricing config in this task; flag in the report if the displayed percentages/thresholds don't match the actual configured discount tiers, since that would be a real content-accuracy issue worth a human decision, not something to silently reconcile or silently ignore.
+**Definition of done:** matches the prototype visually; bar-width custom properties render correctly per rung.
+
+### Task 14: Reviews section (`home-reviews.liquid`) — static placeholder content, per user decision 2026-08-30
+
+**User's explicit call:** keep this as static placeholder content for now — do not integrate the reviews app currently installed on the live theme, since the user may replace that app. This is a deliberate, temporary placeholder, not a content gap to silently fill with invented copy.
+
+**Files:** Create `shopify-theme/sections/home-reviews.liquid`, `shopify-theme/assets/home-reviews.css`.
+**Source:** locate `.rev`, `.rcard`, `.stars` CSS and the `<section class="sec">` containing them (eyebrow "What players say").
+**Schema:** a repeatable `review` block (star rating as a number/range setting, quote as richtext, attribution text). Ship the section with its current 3 blocks as defaults, **preserving the source's exact placeholder wording verbatim, including the literal words "Placeholder review copy — swap for a real one"** — do not invent real-sounding testimonial copy to replace it. The point is that this must be obviously fake to whoever next edits it, not quietly plausible.
+**Definition of done:** matches the prototype visually; a code comment at the top of the liquid file states clearly that this section ships with placeholder content pending either real testimonials or a reviews-app integration decision.
+
+### Task 15: Assemble `templates/index.json` and cut over
 **Files:** Modify `shopify-theme/templates/index.json`.
 **Steps:**
-- [ ] Add each section from Tasks 4–10 in order, with default settings populated from `option-c.html`'s current copy.
+- [ ] Add each section from Tasks 4–14 in order, with default settings populated from `option-c.html`'s current copy.
 - [ ] Run the full Part A deploy checklist once for the complete set.
 - [ ] Smoke test the four order paths from the runbook (§9.6: under £5, normal, multi-model, over £150) against the preview theme — the homepage changes shouldn't touch checkout, but this is the existing regression suite and costs little to re-run before a homepage-scale publish.
 - [ ] Ask the user to publish, then verify the live `server-timing` header matches and clear the preview cookie.
