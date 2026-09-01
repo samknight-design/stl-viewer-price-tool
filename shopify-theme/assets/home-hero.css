@@ -51,9 +51,11 @@
    overlaid nav sitting on top of the hero. Dawn's real header renders in
    normal flow above this section instead (kept deliberately, see the
    header/footer decision this session) and already reserves its own
-   space, so that compensation is now pure dead air — confirmed live via
-   screenshot. */
-.hero{position:relative;min-height:100vh;display:flex;align-items:center;overflow:hidden;padding:64px 0 82px}
+   space. First attempt (64px) still left a visible gap per a follow-up
+   screenshot — cut further, since align-items:center on this flex
+   container already centers the content vertically without needing top
+   padding to do any work. */
+.hero{position:relative;min-height:100vh;display:flex;align-items:center;overflow:hidden;padding:24px 0 82px}
 .hero__bg{display:block!important;position:absolute;inset:0;z-index:0;
   background:
     /* aqua core, low — the hottest part of the flame */
