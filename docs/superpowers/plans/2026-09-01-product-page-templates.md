@@ -348,7 +348,7 @@ git commit -m "feat: brand override CSS for Dawn's native product section"
     {%- if has_lore -%}
       <div class="pmini__lore">
         <p class="eyebrow">Lore</p>
-        {{ product.metafields.custom.lore.value }}
+        {{ product.metafields.custom.lore }}
       </div>
     {%- endif -%}
 
