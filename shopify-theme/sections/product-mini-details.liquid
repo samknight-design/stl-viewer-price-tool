@@ -1,0 +1,135 @@
+{% comment %}
+  Lore, DM-Stash-style stat block, assembly/primer explainer, and trio
+  cross-links for mini/bust products. Not used on terrain products - see
+  templates/product.terrain.json, which uses main-product alone.
+
+  Every field is optional: a blank metafield simply doesn't render its row.
+  The assembly explainer only renders if this product literally has a
+  variant option named "Assembly" (case-insensitive) - trio and bust
+  products typically won't.
+{% endcomment %}
+
+{{ 'brand-tokens.css' | asset_url | stylesheet_tag }}
+{{ 'home-base.css' | asset_url | stylesheet_tag }}
+{{ 'product-brand-override.css' | asset_url | stylesheet_tag }}
+{{ 'product-mini-details.css' | asset_url | stylesheet_tag }}
+
+{%- liquid
+  assign has_lore = false
+  if product.metafields.custom.lore != blank
+    assign has_lore = true
+  endif
+
+  assign stat_rows = ''
+  assign stat_fields = 'race,class,miniature_type,tabletop_size' | split: ','
+
+  assign has_assembly_option = false
+  for option in product.options
+    assign option_lower = option | downcase
+    if option_lower == 'assembly'
+      assign has_assembly_option = true
+    endif
+  endfor
+
+  assign trio_group = product.metafields.custom.trio_group.value
+  assign trio_siblings = ''
+-%}
+
+<section class="sec sec--mid pmini">
+  <div class="wrap pmini__grid">
+
+    {%- if has_lore -%}
+      <div class="pmini__lore">
+        <p class="eyebrow">Lore</p>
+        {{ product.metafields.custom.lore.value }}
+      </div>
+    {%- endif -%}
+
+    {%- assign race = product.metafields.custom.race.value -%}
+    {%- assign class_field = product.metafields.custom.class.value -%}
+    {%- assign miniature_type = product.metafields.custom.miniature_type.value -%}
+    {%- assign tabletop_size = product.metafields.custom.tabletop_size.value -%}
+
+    {%- if race != blank or class_field != blank or miniature_type != blank or tabletop_size != blank -%}
+      <table class="pmini__stats">
+        <tbody>
+          {%- if class_field != blank -%}
+            <tr><th>Class</th><td>{{ class_field }}</td></tr>
+          {%- endif -%}
+          {%- if miniature_type != blank -%}
+            <tr><th>Miniature Type</th><td>{{ miniature_type }}</td></tr>
+          {%- endif -%}
+          {%- if race != blank -%}
+            <tr><th>Race</th><td>{{ race }}</td></tr>
+          {%- endif -%}
+          {%- if tabletop_size != blank -%}
+            <tr><th>Tabletop Size</th><td>{{ tabletop_size }}</td></tr>
+          {%- endif -%}
+        </tbody>
+      </table>
+    {%- endif -%}
+
+    {%- if has_assembly_option -%}
+      <div class="pmini__assembly">
+        <p class="eyebrow">Assembly &amp; finish</p>
+        <ul class="pmini__assembly-list">
+          <li><strong>In parts &amp; unprimed</strong> — arrives unassembled, bare resin, ready for your own build and paint.</li>
+          <li><strong>Assembled &amp; unprimed</strong> — arrives glued together, bare resin, ready to prime and paint.</li>
+          <li><strong>Assembled &amp; primed</strong> — arrives glued and primed in your choice of White, Grey, or Black, ready to paint straight away.</li>
+        </ul>
+      </div>
+    {%- endif -%}
+
+    {%- if trio_group != blank -%}
+      {%- comment -%}
+        Liquid's `where` filter does not reliably support a dotted
+        metafield path as a string property accessor, and `concat`
+        requires an array argument (not a single product), so this
+        collects matching handles as a comma string and looks each one up
+        via the `all_products[handle]` global instead. Bounded to the
+        first 250 products in the catalog (Liquid's for-loop default/max
+        limit), which comfortably covers this store's DM Stash catalog.
+      {%- endcomment -%}
+      {%- assign sibling_handles = '' -%}
+      {%- for candidate in collections.all.products limit: 250 -%}
+        {%- if candidate.metafields.custom.trio_group.value == trio_group and candidate.handle != product.handle -%}
+          {%- assign sibling_handles = sibling_handles | append: candidate.handle | append: ',' -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {%- assign sibling_handle_list = sibling_handles | split: ',' -%}
+      {%- if sibling_handle_list.size > 0 -%}
+        <div class="pmini__trio">
+          <p class="eyebrow">Part of this release</p>
+          <ul class="pmini__trio-list">
+            {%- for handle in sibling_handle_list -%}
+              {%- assign sibling = all_products[handle] -%}
+              <li>
+                <a href="{{ sibling.url }}">
+                  {%- if sibling.featured_media -%}
+                    <img
+                      src="{{ sibling.featured_media | image_url: width: 200 }}"
+                      alt="{{ sibling.featured_media.alt | escape }}"
+                      width="100"
+                      height="100"
+                      loading="lazy"
+                    >
+                  {%- endif -%}
+                  <span>{{ sibling.title }}</span>
+                </a>
+              </li>
+            {%- endfor -%}
+          </ul>
+        </div>
+      {%- endif -%}
+    {%- endif -%}
+
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Mini details (lore/stats)",
+  "tag": "section",
+  "settings": []
+}
+{% endschema %}

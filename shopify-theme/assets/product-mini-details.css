@@ -1,0 +1,77 @@
+/* shopify-theme/assets/product-mini-details.css
+   Styles for sections/product-mini-details.liquid. Every colour/font is a
+   var(--af-*) token from brand-tokens.css - no literal hex. */
+
+.pmini { position: relative; z-index: 0; }
+.pmini__grid {
+  display: grid;
+  gap: 40px;
+}
+.pmini__lore p:not(.eyebrow) {
+  font-family: var(--af-font-body);
+  color: var(--af-grey-500);
+  line-height: 1.7;
+  max-width: 68ch;
+  margin-top: 12px;
+}
+.pmini__stats {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--af-font-body);
+}
+.pmini__stats th,
+.pmini__stats td {
+  text-align: left;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, .12);
+}
+.pmini__stats th {
+  color: var(--af-flame-300);
+  font-weight: 600;
+  width: 40%;
+}
+.pmini__stats td {
+  color: var(--af-white);
+}
+.pmini__assembly-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.pmini__assembly-list li {
+  font-family: var(--af-font-body);
+  color: var(--af-grey-500);
+  line-height: 1.6;
+}
+.pmini__assembly-list strong {
+  color: var(--af-white);
+}
+.pmini__trio-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.pmini__trio-list a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--af-white);
+  text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, .2);
+  border-radius: var(--af-radius);
+  padding: 8px 14px;
+  transition: .18s var(--af-ease);
+}
+.pmini__trio-list a:hover {
+  border-color: var(--af-flame-300);
+  color: var(--af-flame-300);
+}
+.pmini__trio-list img {
+  border-radius: var(--af-radius);
+  object-fit: cover;
+}
