@@ -340,7 +340,7 @@ git commit -m "feat: brand override CSS for Dawn's native product section"
   assign has_assembly_option = false
   for option in product.options
     assign option_lower = option | downcase
-    if option_lower == 'assembly'
+    if option_lower == 'assembly' or option_lower == 'finish'
       assign has_assembly_option = true
     endif
   endfor
