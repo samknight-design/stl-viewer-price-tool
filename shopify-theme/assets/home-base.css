@@ -127,7 +127,12 @@ h2.display{font-size:clamp(27px,3.4vw,45px);margin:16px 0 20px}
    site (kept deliberately, per the header/footer decision), so a plain
    .sec with no modifier must set its own dark ground explicitly or it
    falls through to Dawn's own (light) body background. */
-.sec{padding:120px 0;position:relative;background:var(--af-ink-900);color:var(--af-white)}
+/* z-index:0 contains every section built on this base class (craft,
+   services, calc-teaser, shop-grid, spend-save, reviews) so none of their
+   internal layers (up to z-index:4 in home-services.css) can leak above
+   page-level UI like Dawn's search dropdown — same bug and fix as .hero
+   and .final in their own files. */
+.sec{padding:120px 0;position:relative;z-index:0;background:var(--af-ink-900);color:var(--af-white)}
 .sec--light{background:var(--af-paper);color:var(--af-black)}
 .sec--light .display{color:var(--af-black)}
 .sec--mid{background:var(--af-ink-800)}
