@@ -4,7 +4,9 @@
       "type": "home-hero",
       "settings": {
         "hero_image": "shopify://shop_images/shingorion-ancient-undead-dragon.png",
-        "roundel_image": "shopify://shop_images/ruins-of-terataya-ancient-temple-ruins.png"
+        "roundel_image": "shopify://shop_images/ruins-of-terataya-ancient-temple-ruins.png",
+        "primary_cta_url": "shopify://pages/3d-print-calculator",
+        "secondary_cta_url": "shopify://pages/3d-printed-miniatures"
       }
     },
     "marquee": {
@@ -48,7 +50,7 @@
             "body": "<p>Fine detail at small scale. Heroes, villains, monsters and busts, printed in high-detail photopolymer resin.</p>",
             "tags": "32mm heroic, 12K detail, Primed or raw",
             "cta_text": "Upload for a resin quote",
-            "cta_url": "#calculator",
+            "cta_url": "shopify://pages/3d-print-calculator",
             "image": "shopify://shop_images/arch-paladin-tyrius-iii.png"
           }
         },
@@ -60,7 +62,7 @@
             "body": "<p>Bigger, tougher builds on a 256mm plate. Terrain, prototypes, gadget housings and custom components.</p>",
             "tags": "256mm plate, 16 colours, Priced by volume",
             "cta_text": "Upload for a PLA quote",
-            "cta_url": "#calculator",
+            "cta_url": "shopify://pages/3d-print-calculator",
             "image": "shopify://shop_images/sunspire-temple-dicetower.png"
           }
         }
@@ -123,7 +125,11 @@
       "block_order": ["review-1", "review-2", "review-3"]
     },
     "final-cta": {
-      "type": "home-final-cta"
+      "type": "home-final-cta",
+      "settings": {
+        "primary_cta_url": "shopify://pages/3d-print-calculator",
+        "secondary_cta_url": "shopify://pages/3d-printed-miniatures"
+      }
     }
   },
   "order": ["hero", "marquee", "craft", "services", "calc-teaser", "shop-grid", "spend-save", "reviews", "final-cta"]
