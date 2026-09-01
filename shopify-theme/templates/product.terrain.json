@@ -1,0 +1,43 @@
+{
+  "sections": {
+    "main": {
+      "type": "main-product",
+      "blocks": {
+        "title": { "type": "title" },
+        "price": { "type": "price" },
+        "variant_picker": {
+          "type": "variant_picker",
+          "settings": { "picker_type": "button", "swatch_shape": "none" }
+        },
+        "quantity_selector": { "type": "quantity_selector" },
+        "buy_buttons": {
+          "type": "buy_buttons",
+          "settings": { "show_dynamic_checkout": true, "show_gift_card_recipient": true }
+        },
+        "description": { "type": "description" }
+      },
+      "block_order": [
+        "title",
+        "price",
+        "variant_picker",
+        "quantity_selector",
+        "buy_buttons",
+        "description"
+      ],
+      "settings": {
+        "media_size": "large",
+        "media_position": "left",
+        "gallery_layout": "stacked",
+        "mobile_thumbnails": "show",
+        "enable_sticky_info": true,
+        "image_zoom": "lightbox",
+        "padding_top": 36,
+        "padding_bottom": 20
+      }
+    },
+    "terrain-hook": {
+      "type": "product-terrain-hook"
+    }
+  },
+  "order": ["main", "terrain-hook"]
+}
