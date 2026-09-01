@@ -1,0 +1,132 @@
+/* shopify-theme/assets/product-brand-override.css
+
+   Re-skins Dawn's native `main-product` section (sections/main-product.liquid,
+   snippets/price.liquid, snippets/buy-buttons.liquid,
+   snippets/product-variant-picker.liquid — all Dawn-owned, not in this repo,
+   confirmed live on theme gid://shopify/OnlineStoreTheme/174291517784) to
+   match the Arcane Flame brand, without touching Dawn's own files or its
+   cart/variant JavaScript (product-form.js, product-info.js).
+
+   Loaded by product-mini-details.liquid and product-terrain-hook.liquid
+   (see those files) rather than by main-product.liquid itself, since Dawn's
+   section has no slot for a custom stylesheet reference.
+
+   Every value is a var(--af-*) token from brand-tokens.css. No literal hex. */
+
+product-info {
+  font-family: var(--af-font-body);
+  color: var(--af-white);
+  background: var(--af-ink-900);
+  display: block;
+}
+
+product-info .product__title h1,
+product-info .product__title h2.h1 {
+  font-family: var(--af-font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--af-white);
+}
+
+product-info .product__title a.product__title {
+  text-decoration: none;
+}
+
+product-info .product__description.rte {
+  font-family: var(--af-font-body);
+  color: var(--af-grey-500);
+  line-height: 1.6;
+}
+
+/* ---------- price (snippets/price.liquid classes) ---------- */
+product-info .price {
+  font-family: var(--af-font-mono);
+  color: var(--af-white);
+}
+product-info .price .price-item--regular {
+  color: var(--af-white);
+}
+product-info .price.price--on-sale .price-item--sale {
+  color: var(--af-flame-300);
+}
+product-info .price s.price-item--regular {
+  color: var(--af-grey-600);
+}
+product-info .badge.price__badge-sale {
+  background: var(--af-flame-500);
+  color: var(--af-white);
+  border-radius: var(--af-radius);
+}
+
+/* ---------- variant picker (snippets/product-variant-picker.liquid) ---------- */
+product-info variant-selects fieldset.product-form__input {
+  border: none;
+  margin: 0 0 20px;
+}
+product-info variant-selects .form__label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--af-flame-300);
+}
+/* pill-style buttons (block.settings.picker_type == 'button', Dawn's default) */
+product-info variant-selects .product-form__input--pill input[type="radio"] + label {
+  font-family: var(--af-font-body);
+  border: 1px solid rgba(255, 255, 255, .32);
+  background: transparent;
+  color: var(--af-white);
+  border-radius: var(--af-radius);
+  transition: .18s var(--af-ease);
+}
+product-info variant-selects .product-form__input--pill input[type="radio"]:checked + label {
+  border-color: var(--af-flame-500);
+  background: var(--af-flame-700);
+  color: var(--af-white);
+}
+product-info .select .select__select {
+  font-family: var(--af-font-body);
+  background: var(--af-ink-800);
+  color: var(--af-white);
+  border: 1px solid rgba(255, 255, 255, .32);
+  border-radius: var(--af-radius);
+}
+
+/* ---------- buy buttons (snippets/buy-buttons.liquid) ---------- */
+product-info product-form .product-form__submit.button.button--primary {
+  font-family: var(--af-font-body);
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, var(--af-flame-700) 0%, var(--af-flame-500) 100%);
+  color: var(--af-white);
+  border: 1px solid var(--af-flame-500);
+  border-radius: var(--af-radius);
+  transition: .18s var(--af-ease);
+}
+product-info product-form .product-form__submit.button.button--primary:hover {
+  background: linear-gradient(135deg, var(--af-flame-300) 0%, var(--af-flame-200) 100%);
+  border-color: var(--af-flame-200);
+  color: var(--af-ink-900);
+}
+product-info product-form .product-form__submit.button:disabled {
+  background: var(--af-ink-500);
+  border-color: var(--af-ink-500);
+  color: var(--af-grey-600);
+}
+
+/* ---------- quantity selector ---------- */
+product-info quantity-input {
+  border: 1px solid rgba(255, 255, 255, .32);
+  border-radius: var(--af-radius);
+}
+product-info .quantity__button {
+  color: var(--af-white);
+  background: transparent;
+}
+product-info .quantity__input {
+  font-family: var(--af-font-mono);
+  background: var(--af-ink-900);
+  color: var(--af-white);
+}
