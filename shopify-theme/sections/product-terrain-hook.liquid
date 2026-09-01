@@ -1,0 +1,17 @@
+{% comment %}
+  Loads product-brand-override.css for terrain/dice-tower product pages,
+  which have no other custom section to carry that stylesheet reference.
+  Renders no visible markup. See product-mini-details.liquid for the
+  equivalent on mini/bust pages.
+{% endcomment %}
+
+{{ 'brand-tokens.css' | asset_url | stylesheet_tag }}
+{{ 'product-brand-override.css' | asset_url | stylesheet_tag }}
+
+{% schema %}
+{
+  "name": "Terrain brand CSS hook",
+  "tag": "div",
+  "settings": []
+}
+{% endschema %}
