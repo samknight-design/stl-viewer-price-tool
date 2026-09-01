@@ -161,12 +161,19 @@ This file re-skins Dawn's existing `main-product` markup (fetched and confirmed 
    (see those files) rather than by main-product.liquid itself, since Dawn's
    section has no slot for a custom stylesheet reference.
 
-   Every value is a var(--af-*) token from brand-tokens.css. No literal hex. */
+   Every value is a var(--af-*) token from brand-tokens.css. No literal hex.
+
+   product-info's background/color use !important: Dawn applies its own
+   background via a `.gradient.color-scheme-N` compound class on the same
+   element (see sections/main-product.liquid), which at (0,2,0) beats this
+   rule's plain-element (0,0,1) specificity. Found live: without !important
+   the product page rendered with Dawn's white scheme background instead of
+   ours, despite this CSS loading correctly and the --af-* tokens resolving. */
 
 product-info {
   font-family: var(--af-font-body);
-  color: var(--af-white);
-  background: var(--af-ink-900);
+  color: var(--af-white) !important;
+  background: var(--af-ink-900) !important;
   display: block;
 }
 
