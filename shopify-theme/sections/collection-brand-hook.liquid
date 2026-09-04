@@ -1,0 +1,16 @@
+{% comment %}
+  Loads collection-brand-override.css on collection pages, which have no
+  other custom section to carry that stylesheet reference. Renders no
+  visible markup. Same pattern as product-terrain-hook.liquid.
+{% endcomment %}
+
+{{ 'brand-tokens.css' | asset_url | stylesheet_tag }}
+{{ 'collection-brand-override.css' | asset_url | stylesheet_tag }}
+
+{% schema %}
+{
+  "name": "Collection brand CSS hook",
+  "tag": "div",
+  "settings": []
+}
+{% endschema %}

@@ -1,0 +1,54 @@
+/* shopify-theme/assets/collection-brand-override.css
+
+   Most of this page's colouring comes from scheme-6 (config/settings_data.json,
+   Task 1), which Dawn's own collection/facets/card CSS already derives
+   correctly from --color-foreground/--color-background - see
+   assets/component-facets.css and assets/component-card.css, both entirely
+   scheme-variable-driven with no compound-class specificity fight like the
+   one product-brand-override.css had to work around on <product-info>.
+
+   This file covers only what the colour scheme can't: typography, and the
+   card component's own colour, which is controlled by a *global*
+   card_color_scheme setting (currently scheme-2, used by cards elsewhere
+   on the site) that this feature deliberately does not change - so cards
+   are re-skinned here instead, scoped to .product-grid-container only. */
+
+.collection-hero__title {
+  font-family: var(--af-font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.collection-hero__description {
+  font-family: var(--af-font-body);
+  color: var(--af-grey-500);
+}
+
+.facets__heading,
+.facets__summary,
+.facet-filters__label,
+.product-count__text {
+  font-family: var(--af-font-body);
+}
+
+/* ---------- card re-skin, scoped to this page only ---------- */
+.product-grid-container .card--card,
+.product-grid-container .card--standard .card__inner {
+  background: var(--af-ink-800) !important;
+  border-color: rgba(255, 255, 255, .1) !important;
+}
+.product-grid-container .card__inner.color-scheme-1 {
+  background: transparent !important;
+}
+.product-grid-container .card__heading {
+  font-family: var(--af-font-body);
+  color: var(--af-white) !important;
+}
+.product-grid-container .card-information > * {
+  color: var(--af-grey-500) !important;
+}
+.product-grid-container .card-information > .price {
+  font-family: var(--af-font-mono);
+  color: var(--af-flame-300) !important;
+}
