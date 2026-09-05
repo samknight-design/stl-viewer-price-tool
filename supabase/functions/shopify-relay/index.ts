@@ -1,6 +1,6 @@
 // supabase/functions/shopify-relay/index.ts
 import { getShopConfig, saveShopConfig } from "./config.ts";
-import { stageUpload } from "./files.ts";
+import { stageUpload, writeManifest } from "./files.ts";
 import { createPricedVariant } from "./variant.ts";
 import { createDraftOrder, type QuoteLineItem } from "./draftOrder.ts";
 import { findOrCreateCustomer } from "./customer.ts";
@@ -65,10 +65,14 @@ const PRINT_METHOD_LABELS: Record<string, string> = {
 };
 
 /**
- * Human-readable per-model breakdown for the draft order's note — the shop
- * owner reviewing this in Admin needs print method, primer, assembly, and
- * notes at a glance, plus every uploaded file with a clickable link,
- * without having to decode each line item's raw custom-attribute JSON.
+ * Human-readable per-model breakdown for the order's note — the shop owner
+ * reviewing this in Admin needs print method, primer, assembly, and notes at
+ * a glance, plus every uploaded file with a clickable link, without having to
+ * decode each line item's raw custom-attribute JSON.
+ *
+ * Used by both checkout paths. It used to serve only the draft-order (£150+)
+ * path, which is exactly why the ordinary path lost files silently: nothing
+ * ever wrote the other models down anywhere.
  */
 function buildModelSummaryLines(lineItems: QuoteLineItem[]): string[] {
   return lineItems.flatMap((li) => {
@@ -107,6 +111,107 @@ function extractQuoteRef(lineItems: QuoteLineItem[]): string {
   return lineItems[0]?.properties.find((p) => p.name === "_quote_ref")?.value ?? "";
 }
 
+/** Shopify's order note is a bounded field, and a big multi-part order can
+ *  run long. Truncate on a line boundary and say where the rest lives rather
+ *  than letting Shopify silently cut it — or reject the write. */
+const MAX_NOTE_CHARS = 4800;
+
+export function capNote(note: string, manifestUrl: string | null): string {
+  if (note.length <= MAX_NOTE_CHARS) return note;
+  const tail = manifestUrl
+    ? `\n… list truncated. Full record: ${manifestUrl}`
+    : "\n… list truncated — see the line item's _models_json property.";
+  const body = note.slice(0, MAX_NOTE_CHARS - tail.length);
+  return body.slice(0, body.lastIndexOf("\n") + 1 || body.length) + tail;
+}
+
+interface ManifestFile {
+  filename: string;
+  label: string | null;
+  path: string | null;
+  fileUrl: string | null;
+  thumbnailUrl: string | null;
+  quantity: number;
+}
+
+interface ManifestModel {
+  name: string;
+  printMethod: string;
+  primer: string;
+  assembly: boolean;
+  notes: string;
+  price: string;
+  files: ManifestFile[];
+}
+
+/** Re-reads the flat per-line-item properties the browser sends back into
+ *  one structured record per model. */
+export function parseModels(lineItems: QuoteLineItem[]): ManifestModel[] {
+  return lineItems.map((li) => {
+    const get = (name: string) => li.properties.find((p) => p.name === name)?.value ?? "";
+    let files: ManifestFile[] = [];
+    try {
+      const parsed = JSON.parse(get("_files_json"));
+      if (Array.isArray(parsed)) {
+        files = parsed.map((f) => ({
+          filename: String(f?.filename ?? ""),
+          label: f?.label ?? null,
+          path: f?.path ?? pathFromPublicUrl(f?.fileUrl ?? null),
+          fileUrl: f?.fileUrl ?? null,
+          thumbnailUrl: f?.thumbnailUrl ?? null,
+          quantity: Number(f?.quantity) || 1,
+        }));
+      }
+    } catch {
+      files = [];
+    }
+    return {
+      name: get("_model_name") || li.title,
+      printMethod: get("_print_method"),
+      primer: get("_primer"),
+      assembly: get("_assembly") === "true",
+      notes: get("_notes"),
+      price: String(li.price ?? ""),
+      files,
+    };
+  });
+}
+
+/** Older cached copies of the frontend send only the full public URL, not the
+ *  bucket-relative path. Recover the path so the compact record the cart
+ *  carries is the same shape either way. */
+export function pathFromPublicUrl(url: string | null): string | null {
+  if (!url) return null;
+  const marker = "/object/public/quote-uploads/";
+  const at = url.indexOf(marker);
+  if (at === -1) return null;
+  try {
+    return decodeURIComponent(url.slice(at + marker.length));
+  } catch {
+    return url.slice(at + marker.length);
+  }
+}
+
+/** The record that rides on the cart line. Deliberately compact: paths, not
+ *  full URLs, so a 20-part order doesn't push the property past whatever
+ *  length Shopify is willing to carry. The full version — URLs and all —
+ *  goes to the manifest in the quote's own storage folder. */
+export function compactModels(models: ManifestModel[]) {
+  return models.map((m) => ({
+    name: m.name,
+    method: m.printMethod,
+    primer: m.primer,
+    assembly: m.assembly,
+    notes: m.notes,
+    files: m.files.map((f) => ({
+      filename: f.filename,
+      label: f.label,
+      path: f.path,
+      qty: f.quantity,
+    })),
+  }));
+}
+
 /**
  * Dependencies the router dispatches to. Exposed as a parameter (rather than
  * imported directly at call sites) so tests can substitute fakes without
@@ -116,6 +221,7 @@ export interface RelayDeps {
   getShopConfig: typeof getShopConfig;
   saveShopConfig: typeof saveShopConfig;
   stageUpload: typeof stageUpload;
+  writeManifest: typeof writeManifest;
   createPricedVariant: typeof createPricedVariant;
   createDraftOrder: typeof createDraftOrder;
   findOrCreateCustomer: typeof findOrCreateCustomer;
@@ -126,6 +232,7 @@ const defaultDeps: RelayDeps = {
   getShopConfig,
   saveShopConfig,
   stageUpload,
+  writeManifest,
   createPricedVariant,
   createDraftOrder,
   findOrCreateCustomer,
@@ -162,8 +269,11 @@ export async function handleRequest(
     // old Shopify-Files-based flow, the returned publicUrl is immediately
     // valid — no separate finalize/resolve round trip needed.
     if (url.pathname.endsWith("/files/stage") && req.method === "POST") {
-      const { filename, mimeType, fileSize } = await readJsonBody(req);
-      const target = await deps.stageUpload({ filename, mimeType, fileSize });
+      const { filename, mimeType, fileSize, quoteRef, modelName } = await readJsonBody(req);
+      // quoteRef/modelName decide the storage folder. They are optional so an
+      // older cached copy of the frontend keeps working (it lands under
+      // unlinked/<date>/ instead) — see buildObjectPath.
+      const target = await deps.stageUpload({ filename, mimeType, fileSize, quoteRef, modelName });
       return json(target);
     }
 
@@ -271,9 +381,19 @@ export async function handleRequest(
           ...buildModelSummaryLines(body.lineItems),
         ].join("\n");
 
+        const manifestUrl = await deps.writeManifest(quoteRef, {
+          quoteRef,
+          mode: "quote",
+          createdAt: new Date().toISOString(),
+          customerName: body.customerName,
+          customerEmail: body.customerEmail,
+          grandTotal: body.grandTotal,
+          models: parseModels(body.lineItems),
+        });
+
         const { draftOrderId } = await deps.createDraftOrder({
           customerId: customer.id,
-          note,
+          note: capNote(note, manifestUrl),
           tags: ["quote", `quote-ref:${quoteRef}`],
           lineItems: body.lineItems,
         });
@@ -304,15 +424,50 @@ export async function handleRequest(
         price: body.grandTotal.toFixed(2),
       });
 
-      // v1 limitation: a single variant/cart-line is created for the whole
-      // order, so only the first line item's properties (file ids, notes,
-      // etc.) can travel with it — see docs/superpowers/plans/2026-08-02-shopify-integration.md.
-      const properties: Record<string, string> = {};
-      for (const p of body.lineItems[0]?.properties ?? []) {
-        properties[p.name] = p.value;
-      }
+      // One variant is created for the whole order (keeping the variant
+      // count on PRINT_PRODUCT_ID down), so everything the shop needs has to
+      // travel on that single cart line. It used to copy only
+      // lineItems[0].properties, which silently dropped every model after the
+      // first: order #1399 was paid for with nine models and recorded two
+      // files. Now the whole basket is carried three ways —
+      //   * `note`         — the human-readable listing, which the browser
+      //                      appends to the cart note so it lands in the
+      //                      order's Notes field, exactly like the £150+
+      //                      draft-order path already did;
+      //   * `_models_json` — a compact machine-readable record on the line
+      //                      item (paths, not URLs, to stay well inside
+      //                      whatever length Shopify will carry);
+      //   * the manifest   — the full record with URLs, written into the
+      //                      quote's own storage folder next to the files.
+      const models = parseModels(body.lineItems);
+      const manifestUrl = await deps.writeManifest(quoteRef, {
+        quoteRef,
+        mode: "cart",
+        createdAt: new Date().toISOString(),
+        customerName: body.customerName,
+        customerEmail: body.customerEmail,
+        grandTotal: body.grandTotal,
+        variantId,
+        models,
+      });
 
-      return json({ mode: "cart", variantId, properties });
+      const properties: Record<string, string> = {
+        _quote_ref: quoteRef,
+        _model_count: String(models.length),
+        _models_json: JSON.stringify(compactModels(models)),
+      };
+      if (manifestUrl) properties._manifest_url = manifestUrl;
+
+      const note = capNote(
+        [
+          `Quote ${quoteRef} for ${body.customerName} (${body.customerEmail}).`,
+          "",
+          ...buildModelSummaryLines(body.lineItems),
+        ].join("\n"),
+        manifestUrl,
+      );
+
+      return json({ mode: "cart", variantId, properties, note });
     }
 
     return json({ error: "Not found" }, 404);

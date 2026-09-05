@@ -17,6 +17,10 @@ import {
 let config      = null;
 let groups      = [];    // Group[]
 let modalViewer  = null;
+// The quote reference is minted up front rather than when the review screen
+// opens, because uploads start the moment a part is added and the reference
+// is what names their storage folder. Generated lazily on first use so it is
+// still defined before config loads, and reset after each submitted order.
 let _orderNumber = null;
 
 // Group shape:
@@ -1009,7 +1013,11 @@ async function addFileToGroup(file, targetGroup) {
     // this to one file's worth of in-flight request at a time.
     // uploadItemToShopify() never rejects (it catches its own errors), so
     // chaining is safe — one slow/failed upload can't break the queue.
-    _uploadChain = _uploadChain.then(() => uploadItemToShopify(item, file));
+    // Filed under the model the part was added to. Moving a part to a
+    // different model afterwards doesn't re-file the stored object; the
+    // recorded path still points at it, so nothing is lost — the folder is
+    // just named for where the part started.
+    _uploadChain = _uploadChain.then(() => uploadItemToShopify(item, file, targetGroup.name));
     item.uploadPromise = _uploadChain;
   } catch (err) {
     item.status   = 'error';
@@ -1045,14 +1053,23 @@ function fetchWithTimeout(url, options, timeoutMs = RELAY_TIMEOUT_MS) {
  * architecture, just pointed at a bucket we control (50MB cap on this
  * project's free plan; raised on Pro).
  */
-async function uploadFileDirect(fileOrBlob, filename, mimeType) {
+async function uploadFileDirect(fileOrBlob, filename, mimeType, modelName) {
   const stageRes = await fetchWithTimeout(`${RELAY_BASE_URL}/files/stage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filename, mimeType, fileSize: fileOrBlob.size }),
+    // quoteRef and modelName decide the storage folder. Without them every
+    // upload used to land in its own random UUID directory, which meant an
+    // order's files could not be found in storage at all — see files.ts.
+    body: JSON.stringify({
+      filename,
+      mimeType,
+      fileSize: fileOrBlob.size,
+      quoteRef: quoteRef(),
+      modelName,
+    }),
   });
   if (!stageRes.ok) throw new Error(`Stage upload failed: HTTP ${stageRes.status}`);
-  const { uploadUrl, publicUrl } = await stageRes.json();
+  const { uploadUrl, publicUrl, path } = await stageRes.json();
 
   const putRes = await fetchWithTimeout(uploadUrl, {
     method: 'PUT',
@@ -1061,7 +1078,7 @@ async function uploadFileDirect(fileOrBlob, filename, mimeType) {
   }, FILE_PUT_TIMEOUT_MS);
   if (!putRes.ok) throw new Error(`Direct upload failed: HTTP ${putRes.status}`);
 
-  return publicUrl;
+  return { publicUrl, path };
 }
 
 /** Upload an item's STL bytes + thumbnail to Supabase Storage, without
@@ -1069,13 +1086,16 @@ async function uploadFileDirect(fileOrBlob, filename, mimeType) {
  *  re-renders. No size cap needed here — uploads go straight to storage
  *  (see uploadFileDirect), so the relay never holds the file in memory
  *  regardless of how large it is. */
-async function uploadItemToShopify(item, file) {
+async function uploadItemToShopify(item, file, modelName) {
   try {
-    item.fileUrl = await uploadFileDirect(file, item.name, 'model/stl');
+    const stl = await uploadFileDirect(file, item.name, 'model/stl', modelName);
+    item.fileUrl  = stl.publicUrl;
+    item.filePath = stl.path;
 
     if (item.thumbnail) {
       const thumbBlob = await (await fetch(item.thumbnail)).blob();
-      item.thumbnailUrl = await uploadFileDirect(thumbBlob, item.name.replace(/\.stl$/i, '.png'), 'image/png');
+      const thumb = await uploadFileDirect(thumbBlob, item.name.replace(/\.stl$/i, '.png'), 'image/png', modelName);
+      item.thumbnailUrl = thumb.publicUrl;
     }
   } catch (err) {
     console.warn('File upload failed for', item.name, err);
@@ -1091,6 +1111,15 @@ function generateOrderNumber() {
   const date = d.toISOString().slice(0, 10).replace(/-/g, '');
   const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
   return `AF-${date}-${rand}`;
+}
+
+/** The current quote reference, minting one on first use. Every file uploaded
+ *  during this session is filed under it in storage, and it is what ties the
+ *  resulting order back to that folder — so it has to be stable across the
+ *  whole session, not generated at review time the way it used to be. */
+function quoteRef() {
+  if (!_orderNumber) _orderNumber = generateOrderNumber();
+  return _orderNumber;
 }
 
 /**
@@ -1155,7 +1184,7 @@ function buildReviewGroupHTML(group, sym) {
 function showOrderForm() {
   clearFormError();
   const ref = document.getElementById('form-order-ref');
-  if (ref) ref.textContent = _orderNumber ?? '—';
+  if (ref) ref.textContent = quoteRef();
   document.getElementById('order-review-wrap').style.display  = 'none';
   document.getElementById('order-form-wrap').style.display    = 'block';
   document.getElementById('order-panel-title').textContent    = 'Contact Details';
@@ -1424,7 +1453,6 @@ function openOrderForm() {
   const overlay = document.getElementById('order-overlay');
   if (!overlay) return;
 
-  _orderNumber = generateOrderNumber();
   const sym        = config.currencySymbol;
   const grandTotal = calcOrderTotal(activeGroups, config);
   const minimumShortfall = calcOrderMinimumShortfall(activeGroups, config);
@@ -1469,7 +1497,7 @@ function openOrderForm() {
 
   // Populate review step
   const numEl = document.getElementById('review-order-number');
-  if (numEl) numEl.textContent = _orderNumber;
+  if (numEl) numEl.textContent = quoteRef();
   const totEl = document.getElementById('review-order-total');
   if (totEl) totEl.textContent = fmt(grandTotal, sym);
   const cont = document.getElementById('review-groups-container');
@@ -1530,6 +1558,36 @@ function clearFormError() {
 // Shopify was still catching up. Verified by hand: the same variant that
 // returned 422 throughout the old window returned 200 a minute later.
 const CART_ADD_RETRY_DELAYS_MS = [500, 1000, 2000, 3000, 4000, 5000, 5000];
+
+/**
+ * Appends this quote's summary to the cart note so it lands in the order's
+ * Notes field in Shopify Admin — the same readable per-model listing with
+ * file links that the £150+ draft-order path has always produced.
+ *
+ * Appends rather than replaces: a customer can quote once, add to cart, come
+ * back and quote again, so one cart can hold several quotes. Replacing the
+ * note would drop the earlier one — which is exactly the shape of loss this
+ * whole change exists to stop.
+ *
+ * Best-effort: a failure here must not cost the customer their checkout, so
+ * it swallows its own errors.
+ */
+async function appendCartNote(note) {
+  if (!note) return;
+  try {
+    const cartRes = await fetch('/cart.js', { headers: { Accept: 'application/json' } });
+    const existing = cartRes.ok ? ((await cartRes.json()).note || '') : '';
+    if (existing.includes(note)) return;   // resubmitted the same quote — don't duplicate it
+    const combined = existing ? `${existing}\n\n${note}` : note;
+    await fetch('/cart/update.js', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note: combined }),
+    });
+  } catch (err) {
+    console.warn('Could not write the order summary to the cart note', err);
+  }
+}
 
 async function addVariantToCart(variantId, properties) {
   let lastError;
@@ -1596,6 +1654,7 @@ async function submitOrder(e) {
       .map(i => ({
         filename: i.name,
         label: (i.label || '').trim() || null,
+        path: i.filePath ?? null,
         fileUrl: i.fileUrl ?? null,
         thumbnailUrl: i.thumbnailUrl ?? null,
         quantity: i.settings.quantity,
@@ -1605,7 +1664,7 @@ async function submitOrder(e) {
       price: (g.groupCost?.groupTotal ?? 0).toFixed(2),
       quantity: 1,
       properties: [
-        { name: '_quote_ref', value: _orderNumber ?? '' },
+        { name: '_quote_ref', value: quoteRef() },
         { name: '_model_name', value: g.name },
         { name: '_print_method', value: g.settings.printMethod },
         { name: '_primer', value: g.settings.primer },
@@ -1650,22 +1709,25 @@ async function submitOrder(e) {
         return;
       }
       // mode === 'cart' — add the priced variant to the real Shopify cart, then go to checkout.
-      // result.properties comes from the relay (the first model group's
-      // _quote_ref/_model_name/_print_method/_notes/_files_json — see
-      // index.ts's /checkout handler); _quote_ref/_customer_notes below are
+      // result.properties comes from the relay and now covers every model in
+      // the order (_models_json/_model_count/_manifest_url — see index.ts's
+      // /checkout handler); it used to carry only the first model group's,
+      // which silently lost the rest. _quote_ref/_customer_notes below are
       // the frontend's own authoritative values and take precedence over
       // anything of the same name in result.properties.
       const cartProperties = {
         ...(result.properties || {}),
-        _quote_ref: _orderNumber ?? '',
+        _quote_ref: quoteRef(),
         _customer_notes: notes,
       };
       // Adding can spend a few seconds waiting for the new variant to reach
       // the storefront, so say so rather than leaving the button looking dead.
       if (submitLabelEl) submitLabelEl.textContent = 'Adding to cart…';
-      return addVariantToCart(result.variantId, cartProperties).then(() => {
-        window.location.href = '/checkout';
-      });
+      return addVariantToCart(result.variantId, cartProperties)
+        .then(() => appendCartNote(result.note))
+        .then(() => {
+          window.location.href = '/checkout';
+        });
     })
     .catch(err => {
       console.error(err);
@@ -1682,7 +1744,14 @@ function showQuoteSuccess(email) {
   const emailEl  = document.getElementById('order-success-email');
   if (emailEl) emailEl.textContent = email;
   const numberEl = document.getElementById('order-success-number');
-  if (numberEl) numberEl.textContent = _orderNumber ?? '—';
+  if (numberEl) numberEl.textContent = quoteRef();
+
+  // This quote is submitted, so retire its reference. The cart path never
+  // reaches here (it navigates to /checkout), but the quote path leaves the
+  // page loaded — without this, a second order raised in the same tab would
+  // reuse the first one's reference and file its uploads into the first
+  // quote's storage folder.
+  _orderNumber = null;
 
   document.getElementById('order-review-wrap').style.display  = 'none';
   document.getElementById('order-form-wrap').style.display    = 'none';

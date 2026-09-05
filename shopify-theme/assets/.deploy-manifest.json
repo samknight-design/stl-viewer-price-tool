@@ -4,6 +4,10 @@
       "sha256_10": "6bb83563f8",
       "md5": "dcb0883c81b24454a1a869e2ec81165b"
     },
+    "collection-brand-override.css": {
+      "sha256_10": "1fff3fb16c",
+      "md5": "7f4cffb2392959d3522ec24b4f81d88d"
+    },
     "home-base.css": {
       "sha256_10": "c57ad650eb",
       "md5": "3039e6b84a0701b040ef4b3f97c69a8c"
@@ -73,8 +77,8 @@
       "md5": "e20f3051af174aa5cb96601ee85da0fa"
     },
     "print-calc-main.js": {
-      "sha256_10": "c3d4f2efcf",
-      "md5": "f067b0fe7904c7b71ac7f0c37974192b"
+      "sha256_10": "c1b01fad07",
+      "md5": "3ff0819e20834fdb13fd2090df5748b7"
     },
     "print-calc-stl-parser.js": {
       "sha256_10": "aaf6f76836",
@@ -87,8 +91,16 @@
     "print-calc-viewer.js": {
       "sha256_10": "7bc64f28fe",
       "md5": "be8e74dfa92625a531e177066bebf5c6"
+    },
+    "product-brand-override.css": {
+      "sha256_10": "7b8f9648ae",
+      "md5": "6f94c8b0a250d409bf7466a89b6513e4"
+    },
+    "product-mini-details.css": {
+      "sha256_10": "f01ecfe0d3",
+      "md5": "b5bc8fd4ba8dee1b1e499e3ce01f1f91"
     }
   },
-  "rewrites": 0,
-  "generatedAt": "2026-09-01T09:57:29.562Z"
+  "rewrites": 1,
+  "generatedAt": "2026-09-05T19:20:33.650Z"
 }

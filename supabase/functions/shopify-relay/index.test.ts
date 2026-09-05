@@ -18,6 +18,10 @@ function fakeDeps(overrides: Partial<RelayDeps>): RelayDeps {
     stageUpload: () => {
       throw new Error("stageUpload not stubbed");
     },
+    // Defaults to a no-op rather than throwing: manifest writing is
+    // best-effort by contract, and every checkout test would otherwise have
+    // to stub it just to exercise something else.
+    writeManifest: () => Promise.resolve(null),
     createPricedVariant: () => {
       throw new Error("createPricedVariant not stubbed");
     },
@@ -100,33 +104,189 @@ Deno.test("POST /config with correct password saves and returns ok", async () =>
   }
 });
 
-Deno.test("POST /files/stage returns the staged upload target", async () => {
+Deno.test("POST /files/stage forwards the quote ref and model name so the file is filed under them", async () => {
+  // The folder an upload lands in is the only thing tying a stored file back
+  // to its order, so these two fields have to survive the round trip.
+  let seen: Record<string, unknown> | null = null;
   const deps = fakeDeps({
-    stageUpload: (input) =>
-      Promise.resolve({
-        uploadUrl: `https://project-ref.supabase.co/storage/v1/object/upload/sign/quote-uploads/abc123/${input.filename}?token=fake-token`,
-        publicUrl: `https://project-ref.supabase.co/storage/v1/object/public/quote-uploads/abc123/${input.filename}`,
-      }),
+    stageUpload: (input) => {
+      seen = input as unknown as Record<string, unknown>;
+      const path = `${input.quoteRef}/${input.modelName}/${input.filename}`;
+      return Promise.resolve({
+        uploadUrl: `https://project-ref.supabase.co/storage/v1/object/upload/sign/quote-uploads/${path}?token=fake-token`,
+        publicUrl: `https://project-ref.supabase.co/storage/v1/object/public/quote-uploads/${path}`,
+        path,
+      });
+    },
   });
   const res = await handleRequest(
     new Request("https://relay.test/files/stage", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ filename: "model.stl", mimeType: "model/stl", fileSize: 1024 }),
+      body: JSON.stringify({
+        filename: "model.stl",
+        mimeType: "model/stl",
+        fileSize: 1024,
+        quoteRef: "AF-1",
+        modelName: "Model 3",
+      }),
     }),
     deps,
   );
   assertEquals(res.status, 200);
+  assertEquals(seen!.quoteRef, "AF-1");
+  assertEquals(seen!.modelName, "Model 3");
   assertEquals(await res.json(), {
-    uploadUrl: "https://project-ref.supabase.co/storage/v1/object/upload/sign/quote-uploads/abc123/model.stl?token=fake-token",
-    publicUrl: "https://project-ref.supabase.co/storage/v1/object/public/quote-uploads/abc123/model.stl",
+    uploadUrl: "https://project-ref.supabase.co/storage/v1/object/upload/sign/quote-uploads/AF-1/Model 3/model.stl?token=fake-token",
+    publicUrl: "https://project-ref.supabase.co/storage/v1/object/public/quote-uploads/AF-1/Model 3/model.stl",
+    path: "AF-1/Model 3/model.stl",
   });
 });
 
-Deno.test("POST /checkout below threshold creates a priced variant and returns first line item's properties", async () => {
+Deno.test("POST /checkout below threshold carries every model, not just the first", async () => {
+  // The regression this exists for: the cart path used to copy only
+  // lineItems[0].properties onto the single variant, so a three-model order
+  // reached Shopify recording one model's files and silently losing the rest.
+  // Order #1399 was paid for with nine models and recorded two files.
+  let manifested: any = null;
   const deps = fakeDeps({
     getShopConfig: () => Promise.resolve(null),
     createPricedVariant: () => Promise.resolve({ variantId: 999 }),
+    writeManifest: (quoteRef, manifest) => {
+      manifested = { quoteRef, manifest };
+      return Promise.resolve("https://p.supabase.co/storage/v1/object/public/quote-uploads/AF-9/manifest.json");
+    },
+  });
+  const res = await handleRequest(
+    new Request("https://relay.test/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        customerEmail: "jane@example.com",
+        customerName: "Jane Smith",
+        grandTotal: 15.00,
+        thresholdExceeded: false,
+        lineItems: [
+          {
+            title: "Model 1",
+            price: "5.00",
+            quantity: 1,
+            properties: [
+              { name: "_quote_ref", value: "AF-9" },
+              { name: "_model_name", value: "Model 1" },
+              { name: "_print_method", value: "resin" },
+              { name: "_primer", value: "unprimed" },
+              { name: "_assembly", value: "false" },
+              { name: "_notes", value: "" },
+              {
+                name: "_files_json",
+                value: JSON.stringify([{
+                  filename: "part1.stl",
+                  label: null,
+                  path: "AF-9/Model-1/part1.stl",
+                  fileUrl: "https://p.supabase.co/storage/v1/object/public/quote-uploads/AF-9/Model-1/part1.stl",
+                  thumbnailUrl: null,
+                  quantity: 1,
+                }]),
+              },
+            ],
+          },
+          {
+            title: "Model 2",
+            price: "5.00",
+            quantity: 1,
+            properties: [
+              { name: "_quote_ref", value: "AF-9" },
+              { name: "_model_name", value: "Model 2" },
+              { name: "_print_method", value: "resin" },
+              { name: "_primer", value: "unprimed" },
+              { name: "_assembly", value: "false" },
+              { name: "_notes", value: "" },
+              {
+                name: "_files_json",
+                value: JSON.stringify([{
+                  filename: "part2.stl",
+                  label: null,
+                  path: "AF-9/Model-2/part2.stl",
+                  fileUrl: "https://p.supabase.co/storage/v1/object/public/quote-uploads/AF-9/Model-2/part2.stl",
+                  thumbnailUrl: null,
+                  quantity: 1,
+                }]),
+              },
+            ],
+          },
+          {
+            title: "Model 3",
+            price: "5.00",
+            quantity: 1,
+            properties: [
+              { name: "_quote_ref", value: "AF-9" },
+              { name: "_model_name", value: "Model 3" },
+              { name: "_print_method", value: "resin" },
+              { name: "_primer", value: "unprimed" },
+              { name: "_assembly", value: "false" },
+              { name: "_notes", value: "" },
+              {
+                name: "_files_json",
+                value: JSON.stringify([{
+                  filename: "part3.stl",
+                  label: null,
+                  path: "AF-9/Model-3/part3.stl",
+                  fileUrl: "https://p.supabase.co/storage/v1/object/public/quote-uploads/AF-9/Model-3/part3.stl",
+                  thumbnailUrl: null,
+                  quantity: 1,
+                }]),
+              },
+            ],
+          },
+        ],
+      }),
+    }),
+    deps,
+  );
+  assertEquals(res.status, 200);
+  const payload = await res.json();
+  assertEquals(payload.mode, "cart");
+  assertEquals(payload.variantId, 999);
+  assertEquals(payload.properties._quote_ref, "AF-9");
+  assertEquals(payload.properties._model_count, "3");
+
+  // Every model's file is in the compact record on the cart line...
+  const carried = JSON.parse(payload.properties._models_json);
+  assertEquals(carried.length, 3);
+  assertEquals(
+    carried.flatMap((m: any) => m.files.map((f: any) => f.filename)),
+    ["part1.stl", "part2.stl", "part3.stl"],
+  );
+  // ...as paths rather than full URLs, so the property stays compact.
+  assertEquals(carried[2].files[0].path, "AF-9/Model-3/part3.stl");
+
+  // ...and every model's file is in the note the browser puts on the cart,
+  // which is what makes them visible in the order's Notes field in Admin.
+  for (const name of ["part1.stl", "part2.stl", "part3.stl"]) {
+    assertEquals(payload.note.includes(name), true, `note is missing ${name}`);
+  }
+
+  // ...and the full record, URLs and all, is written beside the files.
+  assertEquals(manifested.quoteRef, "AF-9");
+  assertEquals(manifested.manifest.models.length, 3);
+  assertEquals(
+    manifested.manifest.models[1].files[0].fileUrl,
+    "https://p.supabase.co/storage/v1/object/public/quote-uploads/AF-9/Model-2/part2.stl",
+  );
+  assertEquals(
+    payload.properties._manifest_url,
+    "https://p.supabase.co/storage/v1/object/public/quote-uploads/AF-9/manifest.json",
+  );
+});
+
+Deno.test("POST /checkout still succeeds when the manifest cannot be written", async () => {
+  // Manifest writing is best-effort: storage being unavailable must never
+  // cost the customer their checkout.
+  const deps = fakeDeps({
+    getShopConfig: () => Promise.resolve(null),
+    createPricedVariant: () => Promise.resolve({ variantId: 999 }),
+    writeManifest: () => Promise.resolve(null),
   });
   const res = await handleRequest(
     new Request("https://relay.test/checkout", {
@@ -151,11 +311,10 @@ Deno.test("POST /checkout below threshold creates a priced variant and returns f
     deps,
   );
   assertEquals(res.status, 200);
-  assertEquals(await res.json(), {
-    mode: "cart",
-    variantId: 999,
-    properties: { _quote_ref: "AF-1", _model_name: "Model 1" },
-  });
+  const payload = await res.json();
+  assertEquals(payload.mode, "cart");
+  assertEquals(payload.properties._quote_ref, "AF-1");
+  assertEquals("_manifest_url" in payload.properties, false);
 });
 
 Deno.test("POST /checkout above threshold creates a customer, a linked draft order, sends a notification, and returns quote mode", async () => {
@@ -544,7 +703,10 @@ Deno.test("POST /checkout accepts a grandTotal bumped up to the configured minim
     deps,
   );
   assertEquals(res.status, 200);
-  assertEquals(await res.json(), { mode: "cart", variantId: 999, properties: {} });
+  const payload = await res.json();
+  assertEquals(payload.mode, "cart");
+  assertEquals(payload.variantId, 999);
+  assertEquals(payload.properties._model_count, "1");
 });
 
 Deno.test("POST /checkout appends the quote ref to the priced variant's title so repeat default model names (e.g. 'Model 1') never collide as Shopify option values", async () => {
