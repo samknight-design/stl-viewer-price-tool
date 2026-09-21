@@ -46,7 +46,14 @@ browser runs. See §7a.
 | Shopify shop | Arcane Flame, `gid://shopify/Shop/87781310808` |
 | Hidden product | `Custom 3D Print (do not edit)` — `15907078340952` |
 | Pricing metafield | `print_calculator.pricing_config` (type `json`, shop-owned) |
-| Live theme | `196996628824` — "LIVE - 3D Calculator (all fixes, 19 Aug)" |
+| Live theme (MAIN) | `198035210584` — "PUBLISH THIS - calculator file fix (5 Sep)" |
+| Draft under test | `198754959704` — "Server-side pricing test (21 Sep) - DRAFT" |
+
+> The live theme ID moves every time a draft is published, and this table has
+> been stale before — it still said `196996628824` (19 Aug) on 2026-09-21, two
+> publishes out of date. **Never write to the ID in this table without checking
+> it.** `themes(first: 30) { nodes { id name role } }` and take the one whose
+> `role` is `MAIN`.
 | Calculator page | `https://www.arcane-flame.com/pages/3d-print-calculator` |
 | Admin page | `https://samknight-design.github.io/stl-viewer-price-tool/admin.html` |
 | GitHub Pages source | branch `worktree-shopify-integration`, path `/` |
