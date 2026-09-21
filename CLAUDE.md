@@ -36,6 +36,14 @@ still documents uploading STLs to Shopify Files, which was **abandoned** (a hard
 - **The relay's `DEFAULT_MINIMUM_ORDER_TOTAL` / `DEFAULT_CUSTOM_QUOTE_THRESHOLD`
   must mirror `DEFAULT_CONFIG` in `js/config.js`**, or checkout rejects ordinary
   orders.
+- **`supabase/functions/shopify-relay/pricing.ts` mirrors `js/calculator.js`, and
+  `pricingConfig.ts` mirrors `DEFAULT_CONFIG`.** The relay re-prices every order
+  from the uploaded STL, so a drift between the two engines re-prices orders
+  differently from the customer's screen. `pricing.test.ts` imports
+  `js/config.js` and asserts the mirror. Runbook §7a.
+- **The per-file settings in `_files_json` are load-bearing.** `scale`,
+  `presupported`, `materialId` and `plaColor` are what let the relay re-price a
+  model. Drop one and the order silently becomes unverifiable.
 - **Relay deploys are instant and need no theme publish.** Prefer fixing things
   there when both options exist.
 

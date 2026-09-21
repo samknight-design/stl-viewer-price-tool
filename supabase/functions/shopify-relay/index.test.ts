@@ -34,6 +34,11 @@ function fakeDeps(overrides: Partial<RelayDeps>): RelayDeps {
     sendQuoteNotification: () => {
       throw new Error("sendQuoteNotification not stubbed");
     },
+    // Defaults to a failure rather than a throw. Price verification treats an
+    // unreachable file as "could not verify" and carries on, so the existing
+    // checkout tests keep exercising exactly the path they always did —
+    // without this they would all start measuring STLs they never supplied.
+    downloadObject: () => Promise.reject(new Error("downloadObject not stubbed")),
     ...overrides,
   };
 }

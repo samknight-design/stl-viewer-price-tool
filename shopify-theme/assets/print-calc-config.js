@@ -6,7 +6,11 @@
 // ============================================================
 
 const CONFIG_KEY = 'stl_calc_config_v1';
-export const RELAY_BASE_URL = 'https://aqnpkvzycdjwbapfpvfl.supabase.co/functions/v1/shopify-relay';
+// STAGING BUILD — points at shopify-relay-staging, not the live relay.
+// This is the ONE deliberate divergence from js/config.js. It exists so a
+// draft theme can exercise server-side price verification without the live
+// relay being touched. REVERT THIS TO THE LIVE URL BEFORE PUBLISHING.
+export const RELAY_BASE_URL = 'https://aqnpkvzycdjwbapfpvfl.supabase.co/functions/v1/shopify-relay-staging';
 
 export const DEFAULT_CONFIG = {
   // --- Size tiers (resin) ---

@@ -166,3 +166,41 @@ export async function writeManifest(
     return null;
   }
 }
+
+/**
+ * Opens an uploaded object for reading, as a stream.
+ *
+ * Deliberately not `supabase.storage.download()`, which resolves a Blob and
+ * therefore buffers the whole object in memory — the one thing server-side
+ * measurement cannot afford on a 50 MB STL inside a 256 MB function. This
+ * goes to the REST endpoint directly so the body stays a stream that stl.ts
+ * can consume and discard chunk by chunk.
+ *
+ * It uses the authenticated endpoint with the service role key rather than
+ * the bucket's public URL, so measurement keeps working if `quote-uploads` is
+ * ever made private — which it should be; it is public read today and every
+ * customer upload is readable by anyone holding the link.
+ */
+export async function downloadObject(
+  path: string,
+): Promise<{ stream: ReadableStream<Uint8Array>; size: number | null }> {
+  const base = Deno.env.get("SUPABASE_URL")!;
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const url = `${base}/storage/v1/object/${BUCKET}/${encodeURI(path)}`;
+
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${key}`, apikey: key },
+  });
+  if (!res.ok || !res.body) {
+    // Drain any error body so the connection can be reused.
+    await res.body?.cancel().catch(() => {});
+    throw new Error(`storage GET ${res.status} for ${path}`);
+  }
+
+  const declared = res.headers.get("content-length");
+  const size = declared === null ? null : Number(declared);
+  return {
+    stream: res.body,
+    size: size !== null && Number.isFinite(size) ? size : null,
+  };
+}

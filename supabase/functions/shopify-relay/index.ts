@@ -1,10 +1,16 @@
 // supabase/functions/shopify-relay/index.ts
 import { getShopConfig, saveShopConfig } from "./config.ts";
-import { stageUpload, writeManifest } from "./files.ts";
+import { downloadObject, stageUpload, writeManifest } from "./files.ts";
 import { createPricedVariant } from "./variant.ts";
 import { createDraftOrder, type QuoteLineItem } from "./draftOrder.ts";
 import { findOrCreateCustomer } from "./customer.ts";
 import { sendQuoteNotification } from "./notify.ts";
+import { mergePricingConfig } from "./pricingConfig.ts";
+import {
+  summariseOutcome,
+  verifyOrderPricing,
+  type VerifyOutcome,
+} from "./verify.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -105,6 +111,46 @@ function buildModelSummaryLines(lineItems: QuoteLineItem[]): string[] {
     lines.push("");
     return lines;
   });
+}
+
+/**
+ * The block at the top of a draft order's note explaining why it is sitting
+ * in manual review rather than having gone straight through.
+ *
+ * Only written when re-pricing is what routed the order — an ordinary £150+
+ * quote should not be cluttered with pricing diagnostics it doesn't need.
+ * Both figures are shown because the useful question is which one is wrong:
+ * a large gap usually means a tampered request, a small one usually means the
+ * browser and the relay have drifted out of sync.
+ */
+export function verificationNoteLines(
+  verification: VerifyOutcome | null,
+  routed: boolean,
+): string[] {
+  if (!routed || !verification) return [];
+
+  if (verification.status === "skipped") {
+    return [
+      `!! Price could not be checked against the uploaded files: ${verification.reason}.`,
+      "   Confirm the price by hand before invoicing.",
+      "",
+    ];
+  }
+
+  const lines = [
+    "!! Submitted price does not match the uploaded files.",
+    `   Customer was shown: ${verification.clientTotal.toFixed(2)}`,
+    `   Measured price:     ${verification.serverTotal?.toFixed(2) ?? "n/a"}`,
+  ];
+  for (const m of verification.models) {
+    if (m.serverPrice === null) continue;
+    if (Math.abs(m.serverPrice - m.clientPrice) < 0.011) continue;
+    lines.push(
+      `   - ${m.title}: shown ${m.clientPrice.toFixed(2)}, measured ${m.serverPrice.toFixed(2)}`,
+    );
+  }
+  lines.push("");
+  return lines;
 }
 
 function extractQuoteRef(lineItems: QuoteLineItem[]): string {
@@ -226,6 +272,7 @@ export interface RelayDeps {
   createDraftOrder: typeof createDraftOrder;
   findOrCreateCustomer: typeof findOrCreateCustomer;
   sendQuoteNotification: typeof sendQuoteNotification;
+  downloadObject: typeof downloadObject;
 }
 
 const defaultDeps: RelayDeps = {
@@ -237,7 +284,35 @@ const defaultDeps: RelayDeps = {
   createDraftOrder,
   findOrCreateCustomer,
   sendQuoteNotification,
+  downloadObject,
 };
+
+/**
+ * How the relay reacts to server-side re-pricing (verify.ts).
+ *
+ *   off      — do not re-price at all.
+ *   monitor  — re-price and log, but never change what the order does.
+ *   enforce  — a mismatch, or an order that could not be measured, is routed
+ *              to manual review instead of being sold at the client's price.
+ *
+ * Defaults to `monitor`, and that default is deliberate. Enforcing on the
+ * first deploy would act on a code path that has never seen live traffic,
+ * against browsers still serving a cached frontend that does not send the
+ * per-file settings re-pricing needs — every one of those orders would land
+ * in manual review at once. Monitor first, read the `price-verify` log lines,
+ * then set PRICE_VERIFY_MODE=enforce once the theme has rolled out and the
+ * mismatch rate is understood.
+ *
+ * Note what `enforce` does NOT do: it never charges a different price from
+ * the one the customer was shown. A disputed order becomes a draft order the
+ * shop confirms by hand — the same path £150+ orders already take.
+ */
+export type PriceVerifyMode = "off" | "monitor" | "enforce";
+
+export function readVerifyMode(): PriceVerifyMode {
+  const raw = (Deno.env.get("PRICE_VERIFY_MODE") ?? "monitor").toLowerCase();
+  return raw === "off" || raw === "enforce" ? raw : "monitor";
+}
 
 export async function handleRequest(
   req: Request,
@@ -358,8 +433,42 @@ export async function handleRequest(
         typeof shopConfig?.customQuoteOrderThreshold === "number"
           ? shopConfig.customQuoteOrderThreshold
           : DEFAULT_CUSTOM_QUOTE_THRESHOLD;
-      const serverThresholdExceeded = Boolean(body.thresholdExceeded) ||
+      const thresholdRouted = Boolean(body.thresholdExceeded) ||
         body.grandTotal >= configThreshold;
+
+      // --- Server-side re-pricing -------------------------------------
+      // Everything above this point still only checks the browser's numbers
+      // against each other. This is the part that looks at the actual model:
+      // each uploaded STL is pulled from Storage, measured, and re-priced
+      // with the same engine the browser runs (verify.ts).
+      const verifyMode = readVerifyMode();
+      let verification: VerifyOutcome | null = null;
+      if (verifyMode !== "off") {
+        try {
+          verification = await verifyOrderPricing(
+            body.lineItems,
+            body.grandTotal,
+            mergePricingConfig(shopConfig as Record<string, unknown> | null),
+            { downloadObject: deps.downloadObject },
+          );
+          console.log(summariseOutcome(verification));
+        } catch (err) {
+          // Verification must never be able to take checkout down. A bug in
+          // the measurement path is a reason to stop trusting its result, not
+          // a reason to reject a customer's order.
+          console.error("shopify-relay: price verification threw", err);
+          verification = null;
+        }
+      }
+
+      // Note what enforcement does: it routes to manual review, it does not
+      // re-price the cart. Charging a different figure from the one on the
+      // customer's screen would be worse than the hole it closes.
+      const verificationRouted = verifyMode === "enforce" &&
+        verification !== null &&
+        verification.status !== "verified";
+
+      const serverThresholdExceeded = thresholdRouted || verificationRouted;
 
       const quoteRef = extractQuoteRef(body.lineItems);
 
@@ -378,6 +487,7 @@ export async function handleRequest(
         const note = [
           `Quote ${quoteRef} for ${body.customerName} (${body.customerEmail}) — review before sending invoice.`,
           "",
+          ...verificationNoteLines(verification, verificationRouted),
           ...buildModelSummaryLines(body.lineItems),
         ].join("\n");
 
@@ -394,7 +504,9 @@ export async function handleRequest(
         const { draftOrderId } = await deps.createDraftOrder({
           customerId: customer.id,
           note: capNote(note, manifestUrl),
-          tags: ["quote", `quote-ref:${quoteRef}`],
+          tags: verificationRouted
+            ? ["quote", `quote-ref:${quoteRef}`, "price-check"]
+            : ["quote", `quote-ref:${quoteRef}`],
           lineItems: body.lineItems,
         });
 

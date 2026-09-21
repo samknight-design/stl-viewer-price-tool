@@ -27,8 +27,10 @@ Browser (Shopify theme, or standalone index.html)
                                                 draft order + notify owner
 ```
 
-The browser does all the pricing. The relay re-checks the arithmetic but
-**cannot verify the price against the actual model** — see §7.
+The browser prices the order for display. Since 2026-09-21 the relay also
+re-prices it from the uploaded geometry before anything reaches Shopify — it
+pulls each STL back out of Storage, measures it, and runs the same engine the
+browser runs. See §7a.
 
 ---
 
@@ -38,7 +40,8 @@ The browser does all the pricing. The relay re-checks the arithmetic but
 |---|---|
 | Supabase project | `aqnpkvzycdjwbapfpvfl` |
 | Relay base URL | `https://aqnpkvzycdjwbapfpvfl.supabase.co/functions/v1/shopify-relay` |
-| Edge function | `shopify-relay` (v53 at time of writing), `verify_jwt: false` |
+| Edge function | `shopify-relay` (v54 at time of writing), `verify_jwt: false` |
+| Staging function | `shopify-relay-staging` — same secrets, used by draft themes |
 | Storage bucket | `quote-uploads` (public read; writes only via signed URL) |
 | Shopify shop | Arcane Flame, `gid://shopify/Shop/87781310808` |
 | Hidden product | `Custom 3D Print (do not edit)` — `15907078340952` |
@@ -173,13 +176,11 @@ If the client defaults change, change these too.
 
 ## 7. Known limitations
 
-**Prices are set by the client.** The relay checks that the submitted total
-matches the submitted line items, but both come from the browser. A crafted
-request can buy any model down to the whole-order minimum (£5) — verified by
-probe. Closing this means re-measuring the uploaded STL server-side (the file is
-already in Storage and its URL is in the payload) and recomputing the tier price.
-Deferred; the compensating control is hand-reviewing every order before printing,
-backed by clause 4.3–4.5 of the Terms of Service.
+**Prices are set by the client — CLOSED 2026-09-21.** See §7a. What remains a
+customer declaration is print *intent* (scale, material, colour, primer,
+assembly, extras, pre-supported), not the model's size. Pre-supported in
+particular is a claim worth eyeballing when you open the file, since it removes
+the support handling fee.
 
 **Variant growth.** Every sub-threshold checkout permanently adds a variant to
 `PRINT_PRODUCT_ID`. Shopify caps at 100. Test artifacts were purged on
@@ -192,6 +193,59 @@ draft-order path (over threshold) keeps everything.
 **Browser performance.** Parsing, thumbnailing and rendering an 8 MB / 169k
 triangle STL happens entirely client-side and can freeze the tab. Not a server
 concern; no hosting tier affects it.
+
+---
+
+## 7a. Server-side price verification
+
+The relay re-prices every checkout from the actual uploaded files before it
+creates a variant or a draft order.
+
+```
+POST /checkout
+  ├─ arithmetic check      submitted total vs submitted line items (as before)
+  └─ verification          for each file: Storage ──► measure ──► re-price
+                           compare against the submitted per-model prices
+```
+
+| File | Does |
+|---|---|
+| `stl.ts` | Streams an STL and returns volume + bounding box |
+| `pricing.ts` | Port of `js/calculator.js` |
+| `pricingConfig.ts` | Mirror of `DEFAULT_CONFIG` + the same metafield merge |
+| `verify.ts` | Fetch, measure, re-price, compare. Only ever reports |
+
+**`PRICE_VERIFY_MODE`** (edge function secret) decides what happens next:
+
+- `off` — do not re-price.
+- `monitor` — **default** — re-price and log a `price-verify` line, change nothing.
+- `enforce` — a mismatch, or an order that could not be measured, becomes a
+  draft order tagged `price-check` with both figures in the note.
+
+Enforcement routes to manual review; it never charges a different figure from
+the one the customer was shown.
+
+**The secret is project-wide, not per-function.** Setting it to `enforce` for a
+staging function also arms the live relay the moment the live relay is deployed
+with this code. Set it back to `monitor` before deploying to live, watch the
+logs, then arm it.
+
+An order is reported "skipped" (unverifiable, not suspicious) when the frontend
+is an older cached build that does not send per-file settings, a file has no
+storage path, a file is over `DEFAULT_MAX_VERIFY_BYTES` (64 MB), or Storage
+cannot be reached. Verification never throws into the checkout path — a bug in
+measurement must not be able to reject a real order.
+
+`stl.ts` streams rather than buffering: the browser's parser costs roughly 8x
+the file size in memory, which would OOM a 256 MB Edge Function on a file the
+50 MB bucket accepts. Measuring incrementally keeps the high-water mark at
+about one chunk.
+
+**`pricing.ts` / `pricingConfig.ts` must stay in lockstep with
+`js/calculator.js` / `js/config.js`.** Drift does not fail loudly; it quietly
+re-prices orders differently from the customer's screen and sends honest
+checkouts to review. `pricing.test.ts` imports `js/config.js` directly and
+asserts the mirror, so the parity tests fail if the two separate.
 
 ---
 

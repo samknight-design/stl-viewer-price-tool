@@ -4,14 +4,14 @@
 // Files belong to a group. Multiple groups = multiple models.
 // ============================================================
 
-import { getConfig, RELAY_BASE_URL } from './print-calc-config.js?v=8a2a3e3654';
+import { getConfig, RELAY_BASE_URL } from './print-calc-config.js?v=f7b8265f3b';
 import { parseSTLFile } from './print-calc-stl-parser.js?v=aaf6f76836';
 import { generateThumbnail, STLViewer } from './print-calc-viewer.js?v=7bc64f28fe';
 import { icon, applyStaticIcons } from './print-calc-icons.js?v=87ceb3b600';
 import {
   calcItemCost, calcGroupCost, calcOrderTotal, calcOrderMinimumShortfall,
   exceedsCustomQuoteThreshold, fmt, fmtMm,
-} from './print-calc-calculator.js?v=958ac0254a';
+} from './print-calc-calculator.js?v=295fb08230';
 
 // ---- State -----------------------------------------------------------
 let config      = null;
@@ -1658,6 +1658,16 @@ async function submitOrder(e) {
         fileUrl: i.fileUrl ?? null,
         thumbnailUrl: i.thumbnailUrl ?? null,
         quantity: i.settings.quantity,
+        // The per-file print settings the relay needs to re-price this model
+        // from the uploaded geometry instead of trusting the price below.
+        // The relay measures the STL itself; these only say HOW it is being
+        // printed. Leave one out and the relay cannot re-price the order —
+        // it falls back to "unverifiable" and, once PRICE_VERIFY_MODE is
+        // enforce, routes the order to manual review. See verify.ts.
+        scale: i.settings.scale,
+        presupported: Boolean(i.settings.presupported),
+        materialId: i.settings.materialId,
+        plaColor: i.settings.plaColor,
       }));
     return {
       title: g.name,
@@ -1670,6 +1680,9 @@ async function submitOrder(e) {
         { name: '_primer', value: g.settings.primer },
         { name: '_assembly', value: String(Boolean(g.settings.assembly)) },
         { name: '_notes', value: g.settings.notes || '' },
+        // Extras are a group-level price component, so the relay needs them
+        // to reach the same total; nothing else read them server-side before.
+        { name: '_extras', value: JSON.stringify(g.settings.extras || []) },
         { name: '_files_json', value: JSON.stringify(files) },
       ],
     };

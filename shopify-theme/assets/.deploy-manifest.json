@@ -65,20 +65,20 @@
       "md5": "cecc8c66afc64ec05aab1c9ab6ccf9cb"
     },
     "print-calc-calculator.js": {
-      "sha256_10": "958ac0254a",
-      "md5": "1fa7ba5f913a187af8ebb8b756f3707d"
+      "sha256_10": "295fb08230",
+      "md5": "31965811b81c25a6b5a61f9aa5095ea1"
     },
     "print-calc-config.js": {
-      "sha256_10": "8a2a3e3654",
-      "md5": "bb5826ba86ca66b44f944b40fe9788c6"
+      "sha256_10": "f7b8265f3b",
+      "md5": "4db7b08ec5b90456f9ec3c459bba2118"
     },
     "print-calc-icons.js": {
       "sha256_10": "87ceb3b600",
       "md5": "e20f3051af174aa5cb96601ee85da0fa"
     },
     "print-calc-main.js": {
-      "sha256_10": "c1b01fad07",
-      "md5": "3ff0819e20834fdb13fd2090df5748b7"
+      "sha256_10": "274721fe2f",
+      "md5": "9c20a10da3a2c592b9d4f6fb1bd5abaf"
     },
     "print-calc-stl-parser.js": {
       "sha256_10": "aaf6f76836",
@@ -101,6 +101,6 @@
       "md5": "b5bc8fd4ba8dee1b1e499e3ce01f1f91"
     }
   },
-  "rewrites": 1,
-  "generatedAt": "2026-09-05T19:20:33.650Z"
+  "rewrites": 2,
+  "generatedAt": "2026-09-21T17:37:57.062Z"
 }
