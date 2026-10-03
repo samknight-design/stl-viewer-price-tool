@@ -46,6 +46,7 @@ import {
 import {
   InvalidStlError,
   measureStlStream,
+  StlStalledError,
   StlTooLargeError,
 } from "./stl.ts";
 import type { StoredMeasurement } from "./measurements.ts";
@@ -286,13 +287,24 @@ export async function verifyOrderPricing(
             modelSkip = "awaiting measurement (file too large to measure inline)";
             break;
           }
-          const m = await measureStlStream(stream, maxBytes);
+          // Much tighter deadlines than measure-stl uses: a customer is
+          // waiting on this response, and a file that cannot be read quickly
+          // should become "unverifiable" (manual review) rather than hold
+          // checkout open. A stalled stream here used to hang the request
+          // until the platform killed it, returning nothing at all.
+          const m = await measureStlStream(stream, {
+            maxBytes,
+            stallMs: 5_000,
+            totalMs: 15_000,
+          });
           filesMeasuredInline++;
           geometry = { dimensions: m.dimensions, volumeMl: m.volumeMl };
           // Cache it so a retry of this basket is a pure lookup.
           if (deps.saveMeasurement) await deps.saveMeasurement(path, m);
         } catch (err) {
-          if (err instanceof StlTooLargeError) {
+          if (err instanceof StlStalledError) {
+            modelSkip = "upload appears incomplete — storage stalled mid-file";
+          } else if (err instanceof StlTooLargeError) {
             modelSkip = "awaiting measurement (file over the inline ceiling)";
           } else if (err instanceof InvalidStlError) {
             modelSkip = `unreadable STL: ${err.message}`;

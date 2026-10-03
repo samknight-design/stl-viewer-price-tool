@@ -27,7 +27,11 @@
 // nudge_stl_measurement). The check below activates automatically as soon as
 // that env var exists, so adding the secret is the only step needed.
 
-import { measureStlStream, StlTooLargeError } from "../shopify-relay/stl.ts";
+import {
+  measureStlStream,
+  StlStalledError,
+  StlTooLargeError,
+} from "../shopify-relay/stl.ts";
 import { downloadObject } from "../shopify-relay/files.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
@@ -119,7 +123,16 @@ export async function handleRequest(req: Request): Promise<Response> {
     }
 
     const started = Date.now();
-    const m = await measureStlStream(stream, MAX_BYTES);
+    // Deadlines sit well inside the platform's 150s idle limit, so a stalled
+    // or truncated upload is recorded as a readable error rather than letting
+    // the worker be killed with nothing written. An incomplete upload whose
+    // metadata claims the full size is a real case, not a theoretical one —
+    // see StlStalledError.
+    const m = await measureStlStream(stream, {
+      maxBytes: MAX_BYTES,
+      stallMs: 15_000,
+      totalMs: 100_000,
+    });
     const ms = Date.now() - started;
 
     await supabase.from("stl_measurements").upsert({
@@ -150,7 +163,14 @@ export async function handleRequest(req: Request): Promise<Response> {
       ms,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    // Name the stall case explicitly: "no data for 15000ms" on its own sends
+    // you hunting a network fault, when the actual answer is almost always
+    // that the upload never completed and the file needs sending again.
+    const message = err instanceof StlStalledError
+      ? `upload appears incomplete — storage stopped delivering bytes (${err.message})`
+      : err instanceof Error
+      ? err.message
+      : String(err);
     // Record the failure so the relay can say why it could not verify, and so
     // attempts are bounded. A file we cannot read must never silently become a
     // cheap price — the relay treats a missing measurement as unverifiable.

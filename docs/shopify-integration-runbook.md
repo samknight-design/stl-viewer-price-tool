@@ -209,18 +209,37 @@ The relay re-prices every checkout from the actual uploaded files before it
 creates a variant or a draft order.
 
 ```
-POST /checkout
-  ├─ arithmetic check      submitted total vs submitted line items (as before)
-  └─ verification          for each file: Storage ──► measure ──► re-price
-                           compare against the submitted per-model prices
+upload lands ──► trigger on storage.objects ──► measure-stl ──► stl_measurements
+                                                                      │
+POST /checkout                                                        │
+  ├─ arithmetic check    submitted total vs submitted line items      │
+  └─ verification        look up geometry ◄─────────────────────────────┘
+                         re-price, compare against submitted prices
 ```
 
-| File | Does |
+| Piece | Does |
 |---|---|
-| `stl.ts` | Streams an STL and returns volume + bounding box |
+| `stl.ts` | Streams an STL, returns volume + bounding box |
+| `measure-stl` function | Measures ONE file per invocation, caches the result |
+| `stl_measurements` table | Geometry per storage path, service role only |
+| `measurements.ts` | The relay's lookup + inline-fallback save |
 | `pricing.ts` | Port of `js/calculator.js` |
-| `pricingConfig.ts` | Mirror of `DEFAULT_CONFIG` + the same metafield merge |
-| `verify.ts` | Fetch, measure, re-price, compare. Only ever reports |
+| `pricingConfig.ts` | Mirror of `DEFAULT_CONFIG` + the metafield merge |
+| `verify.ts` | Look up, re-price, compare. Only ever reports |
+
+**Measurement is NOT in the checkout request, and must never go back there.**
+The first version parsed every file inline. One model was fine; an eight-model
+basket exhausted the edge worker's per-request CPU budget around the third
+file and the request died with **no response at all**, so the customer's
+add-to-cart did nothing. Parsing one ~18 MB / 360k-triangle model costs about
+150 ms of CPU — fine alone, fatal eight times over in one request.
+
+`verify.ts` keeps a deliberately tiny fallback for a measurement that has not
+landed yet (a checkout that beat the upload trigger), hard-capped by
+`maxInlineFiles`, default **1 file**. `verify.test.ts` has a regression test
+that pins it: an eight-model basket against an empty cache must parse at most
+one file. Do not raise that cap to "fix" cold-cache misses — a miss routes to
+manual review, which is the safe direction.
 
 **`PRICE_VERIFY_MODE`** (edge function secret) decides what happens next:
 
@@ -237,16 +256,67 @@ staging function also arms the live relay the moment the live relay is deployed
 with this code. Set it back to `monitor` before deploying to live, watch the
 logs, then arm it.
 
-An order is reported "skipped" (unverifiable, not suspicious) when the frontend
-is an older cached build that does not send per-file settings, a file has no
-storage path, a file is over `DEFAULT_MAX_VERIFY_BYTES` (64 MB), or Storage
-cannot be reached. Verification never throws into the checkout path — a bug in
-measurement must not be able to reject a real order.
+The `price-verify` log line reports `cached=` and `inline=` counts. In steady
+state `inline` should be 0; a persistently non-zero `inline` means the trigger
+is not firing and wants investigating.
 
-`stl.ts` streams rather than buffering: the browser's parser costs roughly 8x
-the file size in memory, which would OOM a 256 MB Edge Function on a file the
-50 MB bucket accepts. Measuring incrementally keeps the high-water mark at
-about one chunk.
+An order reports "skipped" (unverifiable, not suspicious) when the frontend is
+an older cached build that does not send per-file settings, a file has no
+storage path, its measurement has not arrived, the file was measured and found
+unreadable, or the fallback could not reach Storage. Verification never throws
+into the checkout path — a bug in measurement must not be able to reject a real
+order.
+
+### measure-stl is unauthenticated
+
+Like `/files/stage`. Bounded deliberately: the only input is a storage path,
+everything written derives from the real bytes (so a measurement cannot be
+forged), and it refuses anything outside `quote-uploads`, not ending `.stl`,
+over 64 MB, or already measured, giving up after 3 attempts.
+
+To close the residual invocation-burn risk, set `MEASURE_SHARED_SECRET` on the
+function and have `nudge_stl_measurement` send a matching `x-measure-secret`
+header (keep the value in Vault). The check in `measure-stl` activates as soon
+as that env var exists — no code change needed.
+
+### Incomplete uploads look like a hang, not a bad file
+
+Found on 2026-10-03. `AF-20261003-CHFO/Model-3/King Charming.stl` has a valid
+binary header declaring 307,560 triangles — implying exactly 15,378,084 bytes —
+and storage **metadata agrees**. Storage then serves 2.4 MB and stalls at
+~40 KB/s, forever. The upload never completed; the object row recorded the
+intended size anyway.
+
+Nothing catches that by inspection: the size looks right, the header looks
+right, `select (metadata->>'size')` looks right. Only reading the bytes shows
+it. The truncation check at the end of `measureStlStream` cannot help, because
+the read never ends.
+
+So measurement carries deadlines — `stallMs` (no bytes at all) and `totalMs`
+(a steady trickle) — and raises `StlStalledError`, recorded against the file as
+"upload appears incomplete". Checkout's inline fallback uses much tighter
+deadlines than `measure-stl` (5s/15s vs 15s/100s) because a customer is waiting
+on that response.
+
+**If a file reports this, ask the customer to upload it again.** It is not
+printable either. Without the deadline, one such file hung the checkout
+request until the platform killed it at 150s, returning nothing at all — which
+reached the customer as add-to-cart doing nothing whatsoever.
+
+### Backfilling
+
+The trigger only fires on new uploads. Files already in the bucket have no row,
+so their first checkout falls back to the one-file inline path and then reports
+"awaiting measurement" for the rest. To backfill, POST each path to
+`measure-stl` one at a time:
+
+```bash
+curl -s -X POST -H 'content-type: application/json' \
+  -d '{"bucket":"quote-uploads","path":"<quote-ref>/<model>/<file>.stl"}' \
+  https://aqnpkvzycdjwbapfpvfl.supabase.co/functions/v1/measure-stl
+```
+
+Sequentially, not in parallel — one file per invocation is the whole design.
 
 **`pricing.ts` / `pricingConfig.ts` must stay in lockstep with
 `js/calculator.js` / `js/config.js`.** Drift does not fail loudly; it quietly

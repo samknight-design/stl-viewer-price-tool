@@ -31,6 +31,59 @@ export interface StlMeasurement {
 export class StlTooLargeError extends Error {}
 export class InvalidStlError extends Error {}
 
+/** The stream stopped delivering bytes and never finished.
+ *
+ *  This is not hypothetical. AF-20261003-CHFO/Model-3/King Charming.stl is an
+ *  incomplete upload: its header declares 307,560 triangles (implying exactly
+ *  15,378,084 bytes) and storage METADATA agrees, but storage can only serve
+ *  2.4 MB before it stalls at ~40 KB/s and never completes. With no deadline,
+ *  measuring it simply waited — the edge function was killed at its 150s idle
+ *  limit having sent no response at all, which is how a single bad file turned
+ *  into "add to cart does nothing". A truncated file must fail fast and loudly;
+ *  the truncation check at the end of the read never runs if the read never
+ *  ends. */
+export class StlStalledError extends Error {}
+
+export interface MeasureLimits {
+  /** Hard ceiling on bytes read. */
+  maxBytes?: number;
+  /** Give up if no bytes at all arrive for this long. */
+  stallMs?: number;
+  /** Give up if the whole read exceeds this, however steady the trickle. */
+  totalMs?: number;
+}
+
+const DEFAULT_STALL_MS = 15_000;
+const DEFAULT_TOTAL_MS = 90_000;
+
+/** Races a read against the stall timeout and the overall deadline, so a
+ *  stream that stops (or crawls) can never hold the worker open. */
+async function readWithDeadline<T>(
+  reader: ReadableStreamDefaultReader<T>,
+  stallMs: number,
+  deadlineAt: number,
+): Promise<ReadableStreamReadResult<T>> {
+  const remaining = deadlineAt - Date.now();
+  if (remaining <= 0) {
+    throw new StlStalledError("exceeded the overall measurement deadline");
+  }
+  const wait = Math.min(stallMs, remaining);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      reader.read(),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new StlStalledError(`no data for ${wait}ms`)),
+          wait,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 /** Running volume + bounding-box accumulation, shared by both parsers. */
 class Accumulator {
   vol = 0;
@@ -126,8 +179,17 @@ const DETECT_BYTES = 1024;
  */
 export async function measureStlStream(
   stream: ReadableStream<Uint8Array>,
-  maxBytes = Number.POSITIVE_INFINITY,
+  limits: number | MeasureLimits = {},
 ): Promise<StlMeasurement> {
+  // The bare-number form is the original signature, kept so callers that only
+  // care about the size ceiling read naturally.
+  const opts: MeasureLimits = typeof limits === "number"
+    ? { maxBytes: limits }
+    : limits;
+  const maxBytes = opts.maxBytes ?? Number.POSITIVE_INFINITY;
+  const stallMs = opts.stallMs ?? DEFAULT_STALL_MS;
+  const deadlineAt = Date.now() + (opts.totalMs ?? DEFAULT_TOTAL_MS);
+
   const reader = stream.getReader();
   const acc = new Accumulator();
   const decoder = new TextDecoder("utf-8", { fatal: false });
@@ -237,7 +299,7 @@ export async function measureStlStream(
 
   try {
     for (;;) {
-      const { done, value } = await reader.read();
+      const { done, value } = await readWithDeadline(reader, stallMs, deadlineAt);
       if (done) break;
       if (!value || value.length === 0) continue;
 
@@ -302,7 +364,7 @@ export async function measureStlStream(
 /** Convenience wrapper for tests and small in-memory inputs. */
 export function measureStlBuffer(
   buffer: ArrayBuffer | Uint8Array,
-  maxBytes?: number,
+  maxBytes?: number | MeasureLimits,
 ): Promise<StlMeasurement> {
   const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
   const stream = new ReadableStream<Uint8Array>({
@@ -311,5 +373,5 @@ export function measureStlBuffer(
       controller.close();
     },
   });
-  return measureStlStream(stream, maxBytes);
+  return measureStlStream(stream, maxBytes ?? {});
 }

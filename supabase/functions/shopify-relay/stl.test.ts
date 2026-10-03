@@ -5,6 +5,7 @@ import {
   InvalidStlError,
   measureStlBuffer,
   measureStlStream,
+  StlStalledError,
   StlTooLargeError,
 } from "./stl.ts";
 
@@ -133,6 +134,49 @@ Deno.test("an empty mesh reports zero dimensions, not Infinity", async () => {
   assertEquals(m.triangleCount, 0);
   assertEquals(m.volumeMm3, 0);
   assertEquals(m.dimensions, { x: 0, y: 0, z: 0 });
+});
+
+Deno.test("a stalled stream fails fast instead of hanging the worker", async () => {
+  // The King Charming case: a truncated upload whose metadata claims the full
+  // size. Storage delivers part of it and then stops forever. Before the
+  // deadline existed this waited until the platform killed the function, which
+  // returned no response at all and made add-to-cart silently do nothing.
+  const bytes = binaryStl(boxTriangles(10, 20, 30));
+  const partial = bytes.subarray(0, 600);
+  const stalling = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(partial);
+      // ...and then never close and never enqueue again.
+    },
+  });
+
+  const started = Date.now();
+  await assertRejects(
+    () => measureStlStream(stalling, { stallMs: 150, totalMs: 2_000 }),
+    StlStalledError,
+  );
+  // Must give up on its own, nowhere near any platform timeout.
+  const elapsed = Date.now() - started;
+  assertEquals(elapsed < 1_500, true, `gave up after ${elapsed}ms`);
+});
+
+Deno.test("a slow-but-steady trickle still hits the overall deadline", async () => {
+  // Defeats a stall timeout by dribbling one byte at a time — the 40 KB/s
+  // behaviour the corrupt file actually showed.
+  const bytes = binaryStl(boxTriangles(10, 20, 30));
+  let i = 0;
+  const trickle = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      await new Promise((r) => setTimeout(r, 5));
+      if (i < bytes.length) controller.enqueue(bytes.subarray(i, ++i));
+      // Never closes: there is always another byte "coming".
+    },
+  });
+
+  await assertRejects(
+    () => measureStlStream(trickle, { stallMs: 1_000, totalMs: 300 }),
+    StlStalledError,
+  );
 });
 
 Deno.test("a file too small to be an STL is rejected", async () => {
