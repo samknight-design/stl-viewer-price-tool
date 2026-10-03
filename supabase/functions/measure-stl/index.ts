@@ -167,7 +167,7 @@ export async function handleRequest(req: Request): Promise<Response> {
     // you hunting a network fault, when the actual answer is almost always
     // that the upload never completed and the file needs sending again.
     const message = err instanceof StlStalledError
-      ? `upload appears incomplete — storage stopped delivering bytes (${err.message})`
+      ? `storage read did not finish in time — usually transfer speed, not a bad file; retry (${err.message})`
       : err instanceof Error
       ? err.message
       : String(err);

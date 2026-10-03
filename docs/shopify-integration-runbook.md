@@ -279,29 +279,33 @@ function and have `nudge_stl_measurement` send a matching `x-measure-secret`
 header (keep the value in Vault). The check in `measure-stl` activates as soon
 as that env var exists — no code change needed.
 
-### Incomplete uploads look like a hang, not a bad file
+### Storage reads can be very slow, and that looks like a hang
 
-Found on 2026-10-03. `AF-20261003-CHFO/Model-3/King Charming.stl` has a valid
-binary header declaring 307,560 triangles — implying exactly 15,378,084 bytes —
-and storage **metadata agrees**. Storage then serves 2.4 MB and stalls at
-~40 KB/s, forever. The upload never completed; the object row recorded the
-intended size anyway.
+Measured on 2026-10-03 with `AF-20261003-CHFO/Model-3/King Charming.stl`:
+15 MB, 307,560 triangles, a completely valid file. Read throughput for that one
+object varied from **~40 KB/s to ~190 KB/s across attempts**. One read gave up
+part-way; another completed the whole file in **78.5 seconds**. Parsing it,
+once the bytes are in hand, takes about 80 ms.
 
-Nothing catches that by inspection: the size looks right, the header looks
-right, `select (metadata->>'size')` looks right. Only reading the bytes shows
-it. The truncation check at the end of `measureStlStream` cannot help, because
-the read never ends.
+So the time is almost entirely transfer, it is unpredictable per object, and a
+large file can take well over a minute. That is survivable for measurement,
+which nobody is waiting on, and fatal inside a checkout request: measuring this
+file inline is what killed the original /checkout, which hit the platform's
+150s idle limit and returned nothing at all.
 
-So measurement carries deadlines — `stallMs` (no bytes at all) and `totalMs`
-(a steady trickle) — and raises `StlStalledError`, recorded against the file as
-"upload appears incomplete". Checkout's inline fallback uses much tighter
-deadlines than `measure-stl` (5s/15s vs 15s/100s) because a customer is waiting
-on that response.
+Hence two things. Measurement lives outside the request (above), and every read
+carries deadlines — `stallMs` for no bytes at all, `totalMs` for a steady
+trickle — raising `StlStalledError` rather than waiting indefinitely.
+`measure-stl` allows 15s/100s because it has the time to spare; checkout's
+inline fallback allows only 5s/15s because a customer is waiting on it.
 
-**If a file reports this, ask the customer to upload it again.** It is not
-printable either. Without the deadline, one such file hung the checkout
-request until the platform killed it at 150s, returning nothing at all — which
-reached the customer as add-to-cart doing nothing whatsoever.
+**A file that reports `StlStalledError` is usually fine — retry it.** Do not
+assume a bad upload and ask the customer to send it again; the first instinct
+here was that the file was truncated, and it was not. Check whether the header's
+declared triangle count matches the object size (`84 + n * 50`) before
+suspecting the file: if those agree, the upload is complete and you are looking
+at transfer speed. A genuinely short file raises `InvalidStlError` with the
+declared-vs-read counts instead, which is unambiguous.
 
 ### Backfilling
 

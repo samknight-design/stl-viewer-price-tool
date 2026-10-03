@@ -303,7 +303,7 @@ export async function verifyOrderPricing(
           if (deps.saveMeasurement) await deps.saveMeasurement(path, m);
         } catch (err) {
           if (err instanceof StlStalledError) {
-            modelSkip = "upload appears incomplete — storage stalled mid-file";
+            modelSkip = "storage read too slow to measure inline — awaiting measurement";
           } else if (err instanceof StlTooLargeError) {
             modelSkip = "awaiting measurement (file over the inline ceiling)";
           } else if (err instanceof InvalidStlError) {

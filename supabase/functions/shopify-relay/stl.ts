@@ -31,17 +31,23 @@ export interface StlMeasurement {
 export class StlTooLargeError extends Error {}
 export class InvalidStlError extends Error {}
 
-/** The stream stopped delivering bytes and never finished.
+/** The read did not finish inside its deadline.
  *
- *  This is not hypothetical. AF-20261003-CHFO/Model-3/King Charming.stl is an
- *  incomplete upload: its header declares 307,560 triangles (implying exactly
- *  15,378,084 bytes) and storage METADATA agrees, but storage can only serve
- *  2.4 MB before it stalls at ~40 KB/s and never completes. With no deadline,
- *  measuring it simply waited — the edge function was killed at its 150s idle
- *  limit having sent no response at all, which is how a single bad file turned
- *  into "add to cart does nothing". A truncated file must fail fast and loudly;
- *  the truncation check at the end of the read never runs if the read never
- *  ends. */
+ *  This is not hypothetical, and the cause is usually transfer speed rather
+ *  than a bad file. Measured on 2026-10-03 with a 15 MB / 307,560-triangle
+ *  model: throughput for that one object ranged from ~40 KB/s to ~190 KB/s
+ *  across attempts, one read giving up part-way and another completing in 78.5
+ *  seconds. Parsing it, once the bytes are in hand, takes about 80 ms — the
+ *  time is almost all transfer, and it is unpredictable per object.
+ *
+ *  With no deadline, a read like that simply waited: measuring inline is what
+ *  killed the original /checkout, which the platform cut off at its 150s idle
+ *  limit having sent no response at all — reaching the customer as add-to-cart
+ *  doing nothing. A slow read must give up and report, not hang.
+ *
+ *  This is NOT the truncation signal. A genuinely short file raises
+ *  InvalidStlError with the declared-vs-read triangle counts, which is
+ *  unambiguous; this one usually means "try again". */
 export class StlStalledError extends Error {}
 
 export interface MeasureLimits {
