@@ -6,6 +6,7 @@ import { createDraftOrder, type QuoteLineItem } from "./draftOrder.ts";
 import { findOrCreateCustomer } from "./customer.ts";
 import { sendQuoteNotification } from "./notify.ts";
 import { mergePricingConfig } from "./pricingConfig.ts";
+import { lookupMeasurements, saveMeasurement } from "./measurements.ts";
 import {
   summariseOutcome,
   verifyOrderPricing,
@@ -273,6 +274,8 @@ export interface RelayDeps {
   findOrCreateCustomer: typeof findOrCreateCustomer;
   sendQuoteNotification: typeof sendQuoteNotification;
   downloadObject: typeof downloadObject;
+  lookupMeasurements: typeof lookupMeasurements;
+  saveMeasurement: typeof saveMeasurement;
 }
 
 const defaultDeps: RelayDeps = {
@@ -285,6 +288,8 @@ const defaultDeps: RelayDeps = {
   findOrCreateCustomer,
   sendQuoteNotification,
   downloadObject,
+  lookupMeasurements,
+  saveMeasurement,
 };
 
 /**
@@ -449,7 +454,16 @@ export async function handleRequest(
             body.lineItems,
             body.grandTotal,
             mergePricingConfig(shopConfig as Record<string, unknown> | null),
-            { downloadObject: deps.downloadObject },
+            {
+              // Geometry comes from the measurement cache, written when each
+              // file was uploaded. downloadObject is only the bounded
+              // one-file fallback for a measurement that has not landed yet —
+              // see the note in verify.ts about what happened when this
+              // request did the parsing itself.
+              lookupMeasurements: deps.lookupMeasurements,
+              downloadObject: deps.downloadObject,
+              saveMeasurement: deps.saveMeasurement,
+            },
           );
           console.log(summariseOutcome(verification));
         } catch (err) {

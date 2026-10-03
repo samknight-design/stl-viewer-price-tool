@@ -39,6 +39,12 @@ function fakeDeps(overrides: Partial<RelayDeps>): RelayDeps {
     // checkout tests keep exercising exactly the path they always did —
     // without this they would all start measuring STLs they never supplied.
     downloadObject: () => Promise.reject(new Error("downloadObject not stubbed")),
+    // An empty cache plus a failing download means every order reports as
+    // unverifiable, which under the default monitor mode changes nothing — so
+    // the existing checkout tests keep exercising exactly the path they always
+    // did, without having to supply geometry they never cared about.
+    lookupMeasurements: () => Promise.resolve(new Map()),
+    saveMeasurement: () => Promise.resolve(),
     ...overrides,
   };
 }
