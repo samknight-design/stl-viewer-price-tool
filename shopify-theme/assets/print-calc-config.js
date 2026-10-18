@@ -115,8 +115,25 @@ export const DEFAULT_CONFIG = {
   // handling fee — those are resin-specific), but IS still checked
   // against a build-plate fit (fdmBuildPlate below), since a print can
   // still be physically too big for the printer regardless of price model.
+  // PLA/FDM is priced by VOLUME, never by size tier: filament used and time
+  // on the plate both scale with how much plastic is actually laid down, and a
+  // bounding box says nothing about that. A nearly-solid 50mm block and a
+  // hollow 50mm shell are the same size tier and are not remotely the same
+  // print.
+  //
+  // costPerMl on its own was the problem. At 0.12 a typical 2.4 mL mini came
+  // out at 29p — nine of the ten real files measured on 2026-10-03 priced
+  // under 50p — which does not pay for the handling every part needs whatever
+  // its size: slicing, plate prep, removal, cleanup, packing. That cost is per
+  // PART and flat, so it is charged as setupFeePerPart rather than buried in a
+  // higher rate, which would have overcharged big parts to fix small ones.
+  //
+  // minPricePerPart is the hard floor: below this a part is not worth setting
+  // up at all. It binds under ~0.13 mL; above that the rate does the work.
   fdm: {
-    costPerMl: 0.12,
+    costPerMl: 0.75,
+    setupFeePerPart: 0.40,
+    minPricePerPart: 0.50,
   },
 
   // Bambu Lab X1 Carbon's build volume is 256×256×256mm; usable space is

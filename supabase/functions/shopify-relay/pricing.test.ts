@@ -161,17 +161,20 @@ Deno.test("scale cubes the volume and scales every dimension", () => {
   assertEquals(cost.tier?.name, "Regular"); // 40mm median
 });
 
-Deno.test("PLA is priced by volume with no support fee", () => {
+Deno.test("PLA is priced by volume plus flat per-part handling, no support fee", () => {
   const cost = calcItemCost(
     CUBE_20,
     { scale: 1, quantity: 1, plaColor: "black" },
     CFG,
     "pla",
   );
-  assertEquals(cost.tier, null);
+  assertEquals(cost.tier, null, "PLA never uses size tiers");
   assertEquals(cost.priceable, true);
   assertEquals(cost.supportHandlingFee, 0);
-  assertEquals(Number(cost.unitCost.toFixed(4)), 0.96); // 8 mL * £0.12
+  assertEquals(Number(cost.volumeCost!.toFixed(4)), 6); // 8 mL x £0.75
+  assertEquals(cost.setupFee, 0.40);
+  assertEquals(Number(cost.unitCost.toFixed(4)), 6.4);
+  assertEquals(cost.minApplied, false);
 });
 
 Deno.test("PLA colour surcharge scales with the part's own cost", () => {
@@ -181,7 +184,88 @@ Deno.test("PLA colour surcharge scales with the part's own cost", () => {
     CFG,
     "pla",
   );
-  assertEquals(Number(cost.unitCost.toFixed(4)), 1.152); // 0.96 + 20%
+  // (0.40 + 6.00) + 20%
+  assertEquals(Number(cost.unitCost.toFixed(4)), 7.68);
+});
+
+Deno.test("PLA size is irrelevant to price — only volume is", () => {
+  // Same bounding box, a tenth of the volume: a hollow shell versus a solid
+  // block. Resin would price these identically off the size tier; PLA must
+  // not, because the solid one really does eat ten times the filament.
+  const solid = calcItemCost(
+    { dimensions: { x: 20, y: 20, z: 20 }, volumeMl: 8 },
+    { scale: 1, quantity: 1 },
+    CFG,
+    "pla",
+  );
+  const hollow = calcItemCost(
+    { dimensions: { x: 20, y: 20, z: 20 }, volumeMl: 0.8 },
+    { scale: 1, quantity: 1 },
+    CFG,
+    "pla",
+  );
+  assertEquals(Number(solid.unitCost.toFixed(2)), 6.40);
+  assertEquals(Number(hollow.unitCost.toFixed(2)), 1.00);
+});
+
+Deno.test("a tiny PLA part is floored at the per-part minimum", () => {
+  // The 5p problem. 0.02 mL would price at 0.40 + 0.015 = 41.5p.
+  const cost = calcItemCost(
+    { dimensions: { x: 7.1, y: 5, z: 2.1 }, volumeMl: 0.0206 },
+    { scale: 1, quantity: 1 },
+    CFG,
+    "pla",
+  );
+  assertEquals(cost.minApplied, true);
+  assertEquals(Number(cost.unitCost.toFixed(2)), 0.50);
+});
+
+Deno.test("the PLA floor applies per part, before quantity", () => {
+  // Ten uneconomic parts are ten setups, so this must be £5.00, not £0.50.
+  const cost = calcItemCost(
+    { dimensions: { x: 7.1, y: 5, z: 2.1 }, volumeMl: 0.0206 },
+    { scale: 1, quantity: 10 },
+    CFG,
+    "pla",
+  );
+  assertEquals(Number(cost.unitCost.toFixed(2)), 0.50);
+  assertEquals(Number(cost.totalCost.toFixed(2)), 5.00);
+});
+
+Deno.test("the PLA floor stops binding once volume carries the price", () => {
+  // Crossover is where 0.40 + 0.75v = 0.50, i.e. about 0.133 mL.
+  const below = calcItemCost(
+    { dimensions: { x: 5, y: 5, z: 5 }, volumeMl: 0.10 },
+    { scale: 1, quantity: 1 },
+    CFG,
+    "pla",
+  );
+  const above = calcItemCost(
+    { dimensions: { x: 5, y: 5, z: 5 }, volumeMl: 0.20 },
+    { scale: 1, quantity: 1 },
+    CFG,
+    "pla",
+  );
+  assertEquals(below.minApplied, true);
+  assertEquals(Number(below.unitCost.toFixed(2)), 0.50);
+  assertEquals(above.minApplied, false);
+  assertEquals(Number(above.unitCost.toFixed(2)), 0.55);
+});
+
+Deno.test("no PLA part can ever price below the floor, at any volume", () => {
+  for (const volumeMl of [0, 0.0001, 0.001, 0.01, 0.05, 0.1, 0.132]) {
+    const cost = calcItemCost(
+      { dimensions: { x: 5, y: 5, z: 5 }, volumeMl },
+      { scale: 1, quantity: 1 },
+      CFG,
+      "pla",
+    );
+    assertEquals(
+      cost.unitCost >= 0.50,
+      true,
+      `${volumeMl} mL priced at ${cost.unitCost}`,
+    );
+  }
 });
 
 Deno.test("assembly: first joint then per-joint, capped", () => {

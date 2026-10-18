@@ -43,7 +43,11 @@ export interface PricingConfig {
   tierBoundaryAllowanceMm?: number;
   buildPlate: BuildPlate;
   fdmBuildPlate: BuildPlate;
-  fdm?: { costPerMl?: number };
+  fdm?: {
+    costPerMl?: number;
+    setupFeePerPart?: number;
+    minPricePerPart?: number;
+  };
   plaColors?: Array<{ id: string; name: string; tier: string }>;
   plaColorSurchargePct?: Record<string, number>;
   materials: Array<{ id: string; name: string }>;
@@ -89,6 +93,10 @@ export interface ItemCost {
   surchargePct: number;
   surchargeAmount?: number;
   baseCost?: number;
+  setupFee?: number;
+  volumeCost?: number;
+  minPerPart?: number;
+  minApplied?: boolean;
   colorSurchargePct?: number;
   colorSurchargeAmount?: number;
   supportHandlingFee: number;
@@ -209,13 +217,23 @@ export function calcItemCost(
     }
 
     const costPerMl = config.fdm?.costPerMl ?? 0;
-    const baseCost = scaledVolumeMl * costPerMl;
+    const setupFee = config.fdm?.setupFeePerPart ?? 0;
+    const volumeCost = scaledVolumeMl * costPerMl;
+    // Per-part handling is flat, not volumetric — see the fdm comment in
+    // js/config.js for why it is separate from costPerMl.
+    const baseCost = setupFee + volumeCost;
     const colorInfo = config.plaColors?.find((c) => c.id === plaColor);
     const colorSurchargePct = colorInfo
       ? (config.plaColorSurchargePct?.[colorInfo.tier] ?? 0)
       : 0;
     const colorSurchargeAmount = baseCost * (colorSurchargePct / 100);
-    const unitCost = baseCost + colorSurchargeAmount;
+    // The floor is PER PART and applied BEFORE quantity: ten 20p parts are ten
+    // setups, not one, so flooring the line total instead would still leave
+    // each part uneconomic.
+    const minPerPart = config.fdm?.minPricePerPart ?? 0;
+    const rawUnitCost = baseCost + colorSurchargeAmount;
+    const unitCost = Math.max(rawUnitCost, minPerPart);
+    const minApplied = unitCost > rawUnitCost;
     const totalCost = unitCost * quantity;
     return {
       scale,
@@ -228,6 +246,10 @@ export function calcItemCost(
       priceable: true,
       fitsBuildPlate: true,
       baseCost,
+      setupFee,
+      volumeCost,
+      minPerPart,
+      minApplied,
       colorSurchargePct,
       colorSurchargeAmount,
       surchargePct: 0,

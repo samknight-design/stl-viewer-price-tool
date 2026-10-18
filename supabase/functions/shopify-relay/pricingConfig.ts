@@ -63,7 +63,7 @@ export const DEFAULT_PRICING_CONFIG: PricingConfig = {
     dental: 35,
   },
 
-  fdm: { costPerMl: 0.12 },
+  fdm: { costPerMl: 0.75, setupFeePerPart: 0.40, minPricePerPart: 0.50 },
   fdmBuildPlate: { x: 256, y: 256, z: 256, supportMarginPct: 15 },
 
   plaColors: [

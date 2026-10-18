@@ -109,12 +109,22 @@ export function calcItemCost(stlData, settings, config, printMethod = 'resin') {
     }
 
     const costPerMl  = config.fdm?.costPerMl ?? 0;
-    const baseCost   = scaledVolumeMl * costPerMl;
+    const setupFee   = config.fdm?.setupFeePerPart ?? 0;
+    const volumeCost = scaledVolumeMl * costPerMl;
+    // Per-part handling is flat, not volumetric — see the fdm comment in
+    // config.js for why it is separate from costPerMl.
+    const baseCost   = setupFee + volumeCost;
     const colorInfo  = config.plaColors?.find(c => c.id === plaColor);
     const colorSurchargePct = colorInfo ? (config.plaColorSurchargePct?.[colorInfo.tier] ?? 0) : 0;
     const colorSurchargeAmount = baseCost * (colorSurchargePct / 100);
-    const unitCost  = baseCost + colorSurchargeAmount;
-    const totalCost = unitCost * quantity;
+    // The floor is PER PART and applied BEFORE quantity: ten 20p parts are ten
+    // setups, not one, so flooring the line total instead would still leave
+    // each part uneconomic.
+    const minPerPart  = config.fdm?.minPricePerPart ?? 0;
+    const rawUnitCost = baseCost + colorSurchargeAmount;
+    const unitCost    = Math.max(rawUnitCost, minPerPart);
+    const minApplied  = unitCost > rawUnitCost;
+    const totalCost   = unitCost * quantity;
     return {
       scale, quantity,
       materialName: colorInfo ? `PLA (${colorInfo.name})` : 'PLA',
@@ -124,6 +134,10 @@ export function calcItemCost(stlData, settings, config, printMethod = 'resin') {
       priceable: true,
       fitsBuildPlate: true,
       baseCost,
+      setupFee,
+      volumeCost,
+      minPerPart,
+      minApplied,
       colorSurchargePct,
       colorSurchargeAmount,
       surchargePct: 0,

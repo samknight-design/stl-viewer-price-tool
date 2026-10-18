@@ -659,8 +659,10 @@ function buildItemDetailHTML(item, group, ctx) {
           ${c.surchargePct > 0 ? `<tr><td>${esc(c.materialName)} surcharge (+${c.surchargePct}%)</td><td>${fmt(c.surchargeAmount, sym)}</td></tr>` : ''}
           ${c.supportHandlingFee > 0 ? `<tr><td>Support handling</td><td>${fmt(c.supportHandlingFee, sym)}</td></tr>` : ''}
         ` : `
-          <tr><td>PLA volume (${c.scaledVolumeMl.toFixed(2)}mL × ${fmt(config.fdm?.costPerMl ?? 0, sym)}/mL)</td><td>${fmt(c.baseCost ?? c.unitCost, sym)}</td></tr>
+          <tr><td>PLA volume (${c.scaledVolumeMl.toFixed(2)}mL × ${fmt(config.fdm?.costPerMl ?? 0, sym)}/mL)</td><td>${fmt(c.volumeCost ?? c.baseCost ?? c.unitCost, sym)}</td></tr>
+          ${(c.setupFee ?? 0) > 0 ? `<tr><td>Part handling</td><td>${fmt(c.setupFee, sym)}</td></tr>` : ''}
           ${c.colorSurchargePct > 0 ? `<tr><td>Colour surcharge (+${c.colorSurchargePct}%)</td><td>${fmt(c.colorSurchargeAmount, sym)}</td></tr>` : ''}
+          ${c.minApplied ? `<tr><td>Minimum per part</td><td>${fmt(c.unitCost, sym)}</td></tr>` : ''}
         `}
       </table>
     </details>` : '';
