@@ -4,14 +4,14 @@
 // Files belong to a group. Multiple groups = multiple models.
 // ============================================================
 
-import { getConfig, RELAY_BASE_URL } from './print-calc-config.js?v=8a2a3e3654';
+import { getConfig, RELAY_BASE_URL } from './print-calc-config.js?v=6afaa1def9';
 import { parseSTLFile } from './print-calc-stl-parser.js?v=aaf6f76836';
 import { generateThumbnail, STLViewer } from './print-calc-viewer.js?v=7bc64f28fe';
 import { icon, applyStaticIcons } from './print-calc-icons.js?v=87ceb3b600';
 import {
   calcItemCost, calcGroupCost, calcOrderTotal, calcOrderMinimumShortfall,
   exceedsCustomQuoteThreshold, fmt, fmtMm,
-} from './print-calc-calculator.js?v=958ac0254a';
+} from './print-calc-calculator.js?v=a788078b0f';
 
 // ---- State -----------------------------------------------------------
 let config      = null;
@@ -659,8 +659,10 @@ function buildItemDetailHTML(item, group, ctx) {
           ${c.surchargePct > 0 ? `<tr><td>${esc(c.materialName)} surcharge (+${c.surchargePct}%)</td><td>${fmt(c.surchargeAmount, sym)}</td></tr>` : ''}
           ${c.supportHandlingFee > 0 ? `<tr><td>Support handling</td><td>${fmt(c.supportHandlingFee, sym)}</td></tr>` : ''}
         ` : `
-          <tr><td>PLA volume (${c.scaledVolumeMl.toFixed(2)}mL × ${fmt(config.fdm?.costPerMl ?? 0, sym)}/mL)</td><td>${fmt(c.baseCost ?? c.unitCost, sym)}</td></tr>
+          <tr><td>PLA volume (${c.scaledVolumeMl.toFixed(2)}mL × ${fmt(config.fdm?.costPerMl ?? 0, sym)}/mL)</td><td>${fmt(c.volumeCost ?? c.baseCost ?? c.unitCost, sym)}</td></tr>
+          ${(c.setupFee ?? 0) > 0 ? `<tr><td>Part handling</td><td>${fmt(c.setupFee, sym)}</td></tr>` : ''}
           ${c.colorSurchargePct > 0 ? `<tr><td>Colour surcharge (+${c.colorSurchargePct}%)</td><td>${fmt(c.colorSurchargeAmount, sym)}</td></tr>` : ''}
+          ${c.minApplied ? `<tr><td>Minimum per part</td><td>${fmt(c.unitCost, sym)}</td></tr>` : ''}
         `}
       </table>
     </details>` : '';
