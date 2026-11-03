@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import { OrbitControls }  from 'three/addons/controls/OrbitControls.js';
 import { mergeVertices }  from 'three/addons/utils/BufferGeometryUtils.js';
-import { trianglesToPositions } from './print-calc-stl-parser.js?v=aaf6f76836';
+import { trianglesToPositions } from './print-calc-stl-parser.js?v=554c57de76';
 
 // ---- Viewer Themes ---------------------------------------------------
 // Each theme drives background, model colour, specular response, and lighting.

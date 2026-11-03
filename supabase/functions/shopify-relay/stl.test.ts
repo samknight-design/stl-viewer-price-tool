@@ -136,6 +136,61 @@ Deno.test("an empty mesh reports zero dimensions, not Infinity", async () => {
   assertEquals(m.dimensions, { x: 0, y: 0, z: 0 });
 });
 
+// ---- Non-finite vertices ----------------------------------------------
+// Real exports (18 of ~3,400 DM Stash files) contain a few NaN triangles in
+// millions. One NaN used to make the whole volume NaN, which priced PLA as NaN
+// and pushed primer to its maximum tier.
+
+/** A 10x20x30 box padded with good-but-distant duplicates, so a handful of
+ *  bad triangles stays under the 1% skip threshold. */
+function boxWithBadTriangles(bad: number[][], padding = 400): number[][] {
+  const box = boxTriangles(10, 20, 30);
+  // Degenerate (zero-area) triangles add no volume and stay inside the box.
+  const filler = Array.from({ length: padding }, () => [0, 0, 0, 1, 1, 1, 2, 2, 2]);
+  return [...box, ...filler, ...bad];
+}
+
+Deno.test("binary STL: NaN triangles are skipped, not summed into NaN", async () => {
+  const nanTri = [NaN, 0, 0, 1, 1, 1, 2, 2, 2];
+  const m = await measureStlBuffer(binaryStl(boxWithBadTriangles([nanTri, nanTri])));
+  assertEquals(m.skippedTriangles, 2);
+  assertEquals(m.triangleCount, 412);
+  assertEquals(Math.round(m.volumeMm3), 6000);
+  assertEquals(m.dimensions, { x: 10, y: 20, z: 30 });
+});
+
+Deno.test("skipped triangles still count against the header, so no false truncation", async () => {
+  const infTri = [0, Infinity, 0, 1, 1, 1, 2, 2, 2];
+  // Declared count == records in the file; would throw if skipped ones were
+  // left out of the comparison.
+  const m = await measureStlBuffer(binaryStl(boxWithBadTriangles([infTri])));
+  assertEquals(m.skippedTriangles, 1);
+});
+
+Deno.test("ASCII STL: a `nan` vertex is skipped without misaligning later triangles", async () => {
+  const tris = boxWithBadTriangles([]);
+  const text = new TextDecoder().decode(asciiStl(tris));
+  // Corrupt one vertex of the first triangle as an exporter would write it.
+  const corrupted = text.replace(/vertex 0 0 0/, "vertex nan nan nan");
+  const m = await measureStlBuffer(new TextEncoder().encode(corrupted));
+  assertEquals(m.skippedTriangles, 1);
+  assertEquals(m.triangleCount, tris.length - 1);
+  // Losing one face of the box changes the volume, but it stays finite and
+  // every later vertex still lands in its own triangle (bounds are intact).
+  assertEquals(Number.isFinite(m.volumeMm3), true);
+  assertEquals(m.dimensions, { x: 10, y: 20, z: 30 });
+});
+
+Deno.test("a mesh with more than 1% bad triangles is refused as damaged", async () => {
+  const nanTri = [NaN, NaN, NaN, 1, 1, 1, 2, 2, 2];
+  const bad = Array.from({ length: 20 }, () => nanTri);
+  await assertRejects(
+    () => measureStlBuffer(binaryStl(boxWithBadTriangles(bad, 100))),
+    InvalidStlError,
+    "damaged geometry",
+  );
+});
+
 Deno.test("a stalled stream fails fast instead of hanging the worker", async () => {
   // The King Charming case: a truncated upload whose metadata claims the full
   // size. Storage delivers part of it and then stops forever. Before the

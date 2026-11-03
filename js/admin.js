@@ -3,7 +3,7 @@
 // ============================================================
 
 import { getConfigWithSource, saveConfig, DEFAULT_CONFIG } from './config.js?v=15';
-import { calcItemCost, fmt, fmtMl, fmtHours } from './calculator.js?v=15';
+import { calcItemCost, fmt, fmtMl, fmtHours } from './calculator.js?v=16';
 import { icon, applyStaticIcons } from './icons.js?v=1';
 
 let config;

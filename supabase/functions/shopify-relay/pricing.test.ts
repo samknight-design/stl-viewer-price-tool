@@ -268,6 +268,30 @@ Deno.test("no PLA part can ever price below the floor, at any volume", () => {
   }
 });
 
+Deno.test("a non-finite volume is unpriceable on both print methods, never NaN", () => {
+  const broken = { dimensions: { x: 20, y: 20, z: 20 }, volumeMl: NaN };
+  for (const method of ["resin", "pla"]) {
+    const cost = calcItemCost(broken, { scale: 1, quantity: 1 }, CFG, method);
+    assertEquals(cost.priceable, false, method);
+    assertEquals(cost.unreadable, true, method);
+    assertEquals(cost.totalCost, 0, method);
+    assertEquals(cost.scaledVolumeMl, 0, method);
+  }
+});
+
+Deno.test("an unreadable part adds nothing to primer or the group total", () => {
+  const broken = { dimensions: { x: 20, y: 20, z: 20 }, volumeMl: NaN };
+  const item = {
+    status: "ready",
+    settings: { quantity: 1, scale: 1 },
+    cost: calcItemCost(broken, { scale: 1, quantity: 1 }, CFG, "pla"),
+  };
+  const g = calcGroupCost([item], { primer: "grey", printMethod: "pla" }, CFG);
+  assertEquals(g.oversizedCount, 1);
+  assertEquals(g.totalPartCount, 0);
+  assertEquals(Number.isFinite(g.groupTotal), true);
+});
+
 Deno.test("assembly: first joint then per-joint, capped", () => {
   assertEquals(calcAssemblyCost(1, CFG), 0);
   assertEquals(calcAssemblyCost(2, CFG), 5);

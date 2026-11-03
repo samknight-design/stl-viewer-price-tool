@@ -24,6 +24,8 @@ export interface StlMeasurement {
   volumeMl: number;
   dimensions: { x: number; y: number; z: number };
   triangleCount: number;
+  /** Triangles dropped for a NaN/infinite coordinate; not in triangleCount. */
+  skippedTriangles: number;
   isAscii: boolean;
   bytesRead: number;
 }
@@ -90,10 +92,22 @@ async function readWithDeadline<T>(
   }
 }
 
+/** Mirrors MAX_SKIPPED_TRIANGLE_FRACTION in js/stl-parser.js.
+ *
+ *  Some real exports carry triangles with NaN coordinates (18 of ~3,400 files
+ *  in the DM Stash library, a few hundred bad triangles in millions). One NaN
+ *  poisons the whole volume sum, so those triangles are skipped. Losing more
+ *  than this fraction means the mesh itself is broken, and the browser
+ *  refuses the file rather than pricing it, so we refuse it too. Keep the
+ *  value and the skip rule identical on both sides, or every such file will
+ *  report a price mismatch. */
+export const MAX_SKIPPED_TRIANGLE_FRACTION = 0.01;
+
 /** Running volume + bounding-box accumulation, shared by both parsers. */
 class Accumulator {
   vol = 0;
   triangleCount = 0;
+  skippedTriangles = 0;
   mnX = Infinity;
   mnY = Infinity;
   mnZ = Infinity;
@@ -106,6 +120,16 @@ class Accumulator {
     v2x: number, v2y: number, v2z: number,
     v3x: number, v3y: number, v3z: number,
   ): void {
+    // Same skip rule as dropNonFiniteTriangles in js/stl-parser.js.
+    if (
+      !Number.isFinite(v1x) || !Number.isFinite(v1y) || !Number.isFinite(v1z) ||
+      !Number.isFinite(v2x) || !Number.isFinite(v2y) || !Number.isFinite(v2z) ||
+      !Number.isFinite(v3x) || !Number.isFinite(v3y) || !Number.isFinite(v3z)
+    ) {
+      this.skippedTriangles++;
+      return;
+    }
+
     // Signed volume of the tetrahedron from the origin (divergence theorem).
     // Identical expression to calcVolumeAndBounds in js/stl-parser.js.
     this.vol +=
@@ -152,6 +176,7 @@ class Accumulator {
           z: this.mxZ - this.mnZ,
         },
       triangleCount: this.triangleCount,
+      skippedTriangles: this.skippedTriangles,
       isAscii,
       bytesRead,
     };
@@ -169,7 +194,10 @@ export function detectAscii(head: Uint8Array): boolean {
   return /facet\s+normal|endloop|endfacet/i.test(preview);
 }
 
-const VERTEX_RE = /vertex\s+([\d.eE+\-]+)\s+([\d.eE+\-]+)\s+([\d.eE+\-]+)/;
+// Any token, as in js/stl-parser.js: a `nan` vertex must still count as a
+// vertex (and then be skipped), or every later vertex lands in the wrong
+// triangle.
+const VERTEX_RE = /vertex\s+(\S+)\s+(\S+)\s+(\S+)/;
 const RECORD_BYTES = 50; // 12 normal + 36 vertices + 2 attribute bytes
 const HEADER_BYTES = 84; // 80 header + 4 triangle count
 const DETECT_BYTES = 1024;
@@ -223,7 +251,7 @@ export async function measureStlStream(
     for (const line of complete.split("\n")) {
       const m = VERTEX_RE.exec(line);
       if (!m) continue;
-      pending.push(parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3]));
+      pending.push(Number(m[1]), Number(m[2]), Number(m[3]));
       if (pending.length === 9) {
         acc.addTriangle(
           pending[0], pending[1], pending[2],
@@ -348,11 +376,23 @@ export async function measureStlStream(
       // The browser treats a short binary file as fatal rather than pricing a
       // partial mesh; match that, or a truncated upload would quietly price as
       // a smaller (cheaper) model than the customer intends to print.
-      if (declaredTriangles > 0 && acc.triangleCount !== declaredTriangles) {
+      // Skipped triangles were still read, so they count towards the total.
+      const recordsRead = acc.triangleCount + acc.skippedTriangles;
+      if (declaredTriangles > 0 && recordsRead !== declaredTriangles) {
         throw new InvalidStlError(
-          `STL truncated: header declares ${declaredTriangles} triangles, read ${acc.triangleCount}`,
+          `STL truncated: header declares ${declaredTriangles} triangles, read ${recordsRead}`,
         );
       }
+    }
+
+    const seen = acc.triangleCount + acc.skippedTriangles;
+    if (
+      acc.skippedTriangles > 0 &&
+      acc.skippedTriangles / seen > MAX_SKIPPED_TRIANGLE_FRACTION
+    ) {
+      throw new InvalidStlError(
+        `damaged geometry: ${acc.skippedTriangles} of ${seen} triangles have non-finite coordinates`,
+      );
     }
 
     return acc.finish(mode === "ascii", bytesRead);

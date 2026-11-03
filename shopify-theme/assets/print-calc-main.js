@@ -4,14 +4,14 @@
 // Files belong to a group. Multiple groups = multiple models.
 // ============================================================
 
-import { getConfig, RELAY_BASE_URL } from './print-calc-config.js?v=f7b8265f3b';
-import { parseSTLFile } from './print-calc-stl-parser.js?v=aaf6f76836';
-import { generateThumbnail, STLViewer } from './print-calc-viewer.js?v=7bc64f28fe';
-import { icon, applyStaticIcons } from './print-calc-icons.js?v=87ceb3b600';
+import { getConfig, RELAY_BASE_URL } from './print-calc-config.js?v=4d0e9a18e1';
+import { parseSTLFile } from './print-calc-stl-parser.js?v=554c57de76';
+import { generateThumbnail, STLViewer } from './print-calc-viewer.js?v=1636f3ede5';
+import { icon, applyStaticIcons } from './print-calc-icons.js?v=ee665e071a';
 import {
   calcItemCost, calcGroupCost, calcOrderTotal, calcOrderMinimumShortfall,
   exceedsCustomQuoteThreshold, fmt, fmtMm,
-} from './print-calc-calculator.js?v=295fb08230';
+} from './print-calc-calculator.js?v=affc191f12';
 
 // ---- State -----------------------------------------------------------
 let config      = null;
@@ -538,7 +538,10 @@ function buildItemHTML(item, group, showMoveControl) {
   // Anything the customer must not miss stays on the collapsed row.
   const flags = [];
   if (c && !c.priceable) {
-    flags.push(`<span class="part-flag part-flag-error">${icon('alertTriangle', { size: 13 })} Too large to print — scale down or split into parts</span>`);
+    const why = c.unreadable
+      ? "Couldn't measure this file — please upload a repaired STL"
+      : 'Too large to print — scale down or split into parts';
+    flags.push(`<span class="part-flag part-flag-error">${icon('alertTriangle', { size: 13 })} ${why}</span>`);
   }
   if (item.warning) {
     flags.push(`<span class="part-flag part-flag-warn">${icon('alertTriangle', { size: 13 })} ${esc(item.warning)}</span>`);
@@ -985,6 +988,10 @@ async function addFileToGroup(file, targetGroup) {
     if (item.data.triangleCount === 0) {
       throw new Error('File appears empty — no geometry found. Please re-export the model and try again.');
     }
+    const { x, y, z } = item.data.dimensions;
+    if (![item.data.volumeMl, x, y, z].every(Number.isFinite)) {
+      throw new Error("We couldn't measure this file — its geometry is damaged. Please repair the mesh (most slicers and Meshmixer can do this) and upload the repaired STL.");
+    }
     if (item.data.volumeMl <= 0.001) {
       item.warning = 'Volume is near zero — this model may have mesh errors. The price estimate may be inaccurate. Please check your file in your slicer before submitting.';
     }
@@ -1227,7 +1234,7 @@ function renderOrderSummary() {
           <div class="summary-line">
             <span class="sum-name" title="${esc(i.name)}">${esc(shortName(partLabel(i)))}</span>
             <span class="sum-qty">×${i.settings.quantity}</span>
-            <span class="sum-price">${i.cost?.priceable ? fmt(i.cost.totalCost, sym) : '<span class="text-error">Too large</span>'}</span>
+            <span class="sum-price">${i.cost?.priceable ? fmt(i.cost.totalCost, sym) : `<span class="text-error">${i.cost?.unreadable ? 'Unreadable' : 'Too large'}</span>`}</span>
           </div>
           <div class="sum-file-detail">
             ${esc(i.cost.materialName)} · ${Math.round(i.settings.scale * 100)}% scale${g.settings.printMethod === 'pla' ? '' : ` · ${i.settings.presupported ? '<span style="color:var(--green)">Pre-sup.</span>' : 'Std. supports'}`}
@@ -1448,7 +1455,10 @@ function openOrderForm() {
 
   const hasOversized = activeGroups.some(g => (g.groupCost?.oversizedCount ?? 0) > 0);
   if (hasOversized) {
-    showToast('One or more files are too large to price automatically. Please scale them down or remove them before requesting a quote.', 'error');
+    const anyUnreadable = activeGroups.some(g => g.items.some(i => i.status === 'ready' && i.cost?.unreadable));
+    showToast(anyUnreadable
+      ? 'One or more files could not be measured or are too large to price automatically. Please repair, scale down or remove them before requesting a quote.'
+      : 'One or more files are too large to price automatically. Please scale them down or remove them before requesting a quote.', 'error');
     return;
   }
 

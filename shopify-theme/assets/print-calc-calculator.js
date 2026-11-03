@@ -4,7 +4,7 @@
 // unchanged assembly/primer add-ons.
 // ============================================================
 
-import { getMaterial } from './print-calc-config.js?v=f7b8265f3b';
+import { getMaterial } from './print-calc-config.js?v=4d0e9a18e1';
 
 // ---- Build plate fit check --------------------------------------------
 
@@ -90,6 +90,28 @@ export function calcItemCost(stlData, settings, config, printMethod = 'resin') {
     z: stlData.dimensions.z * scale,
   };
   const scaledVolumeMl = stlData.volumeMl * Math.pow(scale, 3);
+
+  // A non-finite measurement must never reach a price: NaN volume makes the
+  // PLA cost NaN and silently drops primer to its top tier, and NaN
+  // dimensions compare as "fits" against every tier. The parser already
+  // strips bad triangles, so this is the backstop, not the main defence.
+  const measurable = [scaledVolumeMl, scaledDims.x, scaledDims.y, scaledDims.z].every(Number.isFinite);
+  if (!measurable) {
+    return {
+      scale, quantity,
+      materialName: printMethod === 'pla' ? 'PLA' : material.name,
+      presupported: printMethod === 'pla' ? false : presupported,
+      scaledDims, scaledVolumeMl: 0,
+      tier: null,
+      priceable: false,
+      unreadable: true,
+      fitsBuildPlate: false,
+      surchargePct: 0,
+      supportHandlingFee: 0,
+      unitCost: 0,
+      totalCost: 0,
+    };
+  }
 
   if (printMethod === 'pla') {
     if (!fitsBuildPlate(scaledDims, config.fdmBuildPlate)) {

@@ -1,6 +1,6 @@
 // ============================================================
 // stl-parser.js — Parse binary & ASCII STL files
-// Returns: { triangles, volumeMm3, volumeMl, dimensions, triangleCount }
+// Returns: { triangles, volumeMm3, volumeMl, dimensions, triangleCount, skippedTriangles }
 // ============================================================
 
 /**
@@ -16,9 +16,19 @@ export async function parseSTLFile(file, onProgress) {
 
 export function parseSTLBuffer(buffer, filename = '') {
   const isAscii = detectAscii(buffer);
-  const triangles = isAscii
+  const raw = isAscii
     ? parseAscii(new TextDecoder().decode(buffer))
     : parseBinary(buffer);
+
+  const { positions: triangles, skipped } = dropNonFiniteTriangles(raw);
+  const total = raw.length / 9;
+  if (skipped > 0 && skipped / total > MAX_SKIPPED_TRIANGLE_FRACTION) {
+    throw new Error(
+      `This file has damaged geometry (${skipped.toLocaleString()} of ${total.toLocaleString()} ` +
+      "triangles have invalid coordinates), so we can't measure it. Please repair the mesh " +
+      '(most slicers and Meshmixer can do this) and upload the repaired STL.'
+    );
+  }
 
   const { volumeMm3, dimensions } = calcVolumeAndBounds(triangles);
 
@@ -29,8 +39,49 @@ export function parseSTLBuffer(buffer, filename = '') {
     volumeMl: volumeMm3 / 1000,   // cm³ = mL
     dimensions,          // { x, y, z } in mm
     triangleCount: triangles.length / 9,
+    skippedTriangles: skipped,
     isAscii,
   };
+}
+
+// ---- Non-finite vertices -----------------------------------------------
+// Some real exports contain triangles with NaN (or infinite) coordinates —
+// 18 of ~3,400 files in the DM Stash library, typically a few hundred bad
+// triangles in a mesh of millions. One NaN poisons the whole volume sum, and
+// a NaN volume then prices PLA as NaN and drops primer through to its
+// maximum tier (every NaN comparison fails). So those triangles are removed
+// before measuring, and before the viewer sees them (a NaN vertex also
+// breaks three.js's bounding sphere). Losing a handful of triangles moves the
+// volume negligibly; losing more than this fraction means the mesh itself is
+// broken and any price would be a guess, so the file is rejected instead.
+//
+// Mirrored in supabase/functions/shopify-relay/stl.ts — keep the threshold
+// and the skip rule identical, or the relay's price check will disagree with
+// the price the customer was shown.
+const MAX_SKIPPED_TRIANGLE_FRACTION = 0.01;
+
+function dropNonFiniteTriangles(positions) {
+  let skipped = 0;
+  for (let i = 0; i < positions.length; i += 9) {
+    if (!triangleIsFinite(positions, i)) skipped++;
+  }
+  if (skipped === 0) return { positions, skipped };
+
+  const kept = new Float32Array(positions.length - skipped * 9);
+  let idx = 0;
+  for (let i = 0; i < positions.length; i += 9) {
+    if (!triangleIsFinite(positions, i)) continue;
+    kept.set(positions.subarray(i, i + 9), idx);
+    idx += 9;
+  }
+  return { positions: kept, skipped };
+}
+
+function triangleIsFinite(positions, i) {
+  for (let k = i; k < i + 9; k++) {
+    if (!Number.isFinite(positions[k])) return false;
+  }
+  return true;
 }
 
 // ---- ASCII detection ---------------------------------------------------
@@ -83,10 +134,14 @@ function parseBinary(buffer) {
 // ---- ASCII STL parser --------------------------------------------------
 function parseAscii(text) {
   const positions = [];
-  const vertexRe = /vertex\s+([\d.eE+\-]+)\s+([\d.eE+\-]+)\s+([\d.eE+\-]+)/g;
+  // Any token, not just numeric characters: a vertex written as `nan` or
+  // `-inf` must still count as a vertex (and come out non-finite, to be
+  // skipped above). Matching digits only dropped that line, which shifted
+  // every later vertex into the wrong triangle.
+  const vertexRe = /vertex\s+(\S+)\s+(\S+)\s+(\S+)/g;
   let m;
   while ((m = vertexRe.exec(text)) !== null) {
-    positions.push(parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3]));
+    positions.push(Number(m[1]), Number(m[2]), Number(m[3]));
   }
   return Float32Array.from(positions);
 }

@@ -89,6 +89,8 @@ export interface ItemCost {
   scaledVolumeMl: number;
   tier: SizeTier | null;
   priceable: boolean;
+  /** Set when the measurement itself was non-finite. */
+  unreadable?: boolean;
   fitsBuildPlate: boolean;
   surchargePct: number;
   surchargeAmount?: number;
@@ -196,6 +198,30 @@ export function calcItemCost(
     z: stlData.dimensions.z * scale,
   };
   const scaledVolumeMl = stlData.volumeMl * Math.pow(scale, 3);
+
+  // Mirrors the backstop in js/calculator.js: a non-finite measurement must
+  // never reach a price (NaN volume prices PLA as NaN and drops primer to its
+  // top tier; NaN dimensions compare as "fits" every tier).
+  const measurable = [scaledVolumeMl, scaledDims.x, scaledDims.y, scaledDims.z]
+    .every(Number.isFinite);
+  if (!measurable) {
+    return {
+      scale,
+      quantity,
+      materialName: printMethod === "pla" ? "PLA" : material.name,
+      presupported: printMethod === "pla" ? false : presupported,
+      scaledDims,
+      scaledVolumeMl: 0,
+      tier: null,
+      priceable: false,
+      unreadable: true,
+      fitsBuildPlate: false,
+      surchargePct: 0,
+      supportHandlingFee: 0,
+      unitCost: 0,
+      totalCost: 0,
+    };
+  }
 
   if (printMethod === "pla") {
     if (!fitsBuildPlate(scaledDims, config.fdmBuildPlate)) {
