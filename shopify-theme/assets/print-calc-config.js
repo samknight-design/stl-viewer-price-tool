@@ -5,6 +5,8 @@
 // briefly unreachable — it is not the source of truth.
 // ============================================================
 
+import { applyFormula } from './print-calc-pricing-formula.js?v=7f51bf9104';
+
 const CONFIG_KEY = 'stl_calc_config_v1';
 // STAGING BUILD — points at shopify-relay-staging, not the live relay.
 // This is the ONE deliberate divergence from js/config.js. It exists so a
@@ -281,9 +283,18 @@ export async function getConfigWithSource() {
   return { config: { ...DEFAULT_CONFIG }, source: 'default' };
 }
 
+/**
+ * The config the calculator prices with: the stored config with the
+ * size-and-volume formula folded in (pricing-formula.js). The formula's
+ * settings live under `formula` in the stored config; missing ones use the
+ * defaults. Only the calculator calls this — admin.js deliberately loads the
+ * raw config with getConfigWithSource(), because logging in saves what it
+ * loaded, and the folded-in materials and assembly figures must never be
+ * written back over the stored config.
+ */
 export async function getConfig() {
   const { config } = await getConfigWithSource();
-  return config;
+  return applyFormula(config, config.formula);
 }
 
 export async function saveConfig(config, adminPassword) {

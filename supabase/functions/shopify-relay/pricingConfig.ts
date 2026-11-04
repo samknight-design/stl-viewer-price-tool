@@ -18,6 +18,7 @@
 // symbol) are deliberately omitted — they cannot affect a price.
 
 import type { PricingConfig } from "./pricing.ts";
+import { mergeFormula } from "./formula.ts";
 
 export const DEFAULT_PRICING_CONFIG: PricingConfig = {
   sizeTiers: [
@@ -120,6 +121,36 @@ export const DEFAULT_PRICING_CONFIG: PricingConfig = {
  * maxPlatePrice, so the length checks are not cosmetic.
  */
 export function mergePricingConfig(
+  saved: Record<string, unknown> | null | undefined,
+): PricingConfig {
+  return applyFormula(mergeSavedConfig(saved), saved?.formula);
+}
+
+/**
+ * Mirrors applyFormula in js/pricing-formula.js, which getConfig() in
+ * js/config.js applies to every config the calculator prices with: resin
+ * materials come from the formula, assembly from its finishes, and the primer
+ * ladder is scaled by primerAdjustPct (rounded up to 50p).
+ */
+export function applyFormula(config: PricingConfig, savedFormula: unknown): PricingConfig {
+  const formula = mergeFormula(savedFormula);
+  const f = formula.finishes;
+  const scale = 1 + f.primerAdjustPct / 100;
+  const up50 = (v: number) => Math.ceil(v * scale * 2) / 2;
+  return {
+    ...config,
+    formula,
+    materials: formula.resin.materials.map(({ id, name }: { id: string; name: string }) => ({ id, name })),
+    assemblyBase: f.assemblyFirst,
+    assemblyPerJoint: f.assemblyPerJoint,
+    assemblyMax: f.assemblyMax,
+    primerTiers: (config.primerTiers ?? []).map((t) => ({ ...t, price: up50(t.price) })),
+    primerMinPrice: up50(config.primerMinPrice ?? 0),
+    primerMaxPrice: up50(config.primerMaxPrice ?? 0),
+  };
+}
+
+function mergeSavedConfig(
   saved: Record<string, unknown> | null | undefined,
 ): PricingConfig {
   if (!saved) return { ...DEFAULT_PRICING_CONFIG };

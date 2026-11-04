@@ -10,7 +10,8 @@ import {
   fitsBuildPlate,
   type PricingConfig,
 } from "./pricing.ts";
-import { DEFAULT_PRICING_CONFIG, mergePricingConfig } from "./pricingConfig.ts";
+import { applyFormula, DEFAULT_PRICING_CONFIG, mergePricingConfig } from "./pricingConfig.ts";
+import { mergeFormula } from "./formula.ts";
 
 // The browser's own config module, imported directly. This is the point of
 // the parity block below: pricingConfig.ts is a hand-kept mirror, and a mirror
@@ -351,6 +352,7 @@ Deno.test("merge: a saved scalar wins, an empty array falls back", () => {
   assertEquals(merged.sizeTiers, DEFAULT_PRICING_CONFIG.sizeTiers);
 });
 
-Deno.test("merge: a null config is the defaults", () => {
-  assertEquals(mergePricingConfig(null), { ...DEFAULT_PRICING_CONFIG });
+Deno.test("merge: a null config is the defaults, with the default formula folded in", () => {
+  assertEquals(mergePricingConfig(null), applyFormula({ ...DEFAULT_PRICING_CONFIG }, undefined));
+  assertEquals(mergePricingConfig(null).formula, mergeFormula(undefined));
 });

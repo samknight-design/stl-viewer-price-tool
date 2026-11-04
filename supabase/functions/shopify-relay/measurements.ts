@@ -20,6 +20,8 @@ export interface StoredMeasurement {
   path: string;
   volumeMl: number;
   dimensions: { x: number; y: number; z: number };
+  /** Null for files measured before surface area was recorded (2026-11). */
+  areaMm2: number | null;
   sizeBytes: number | null;
   triangleCount: number | null;
   /** Null when the row exists but no successful measurement has landed yet. */
@@ -53,7 +55,7 @@ export async function lookupMeasurements(
     const { data, error } = await db()
       .from("stl_measurements")
       .select(
-        "path, volume_ml, dim_x, dim_y, dim_z, size_bytes, triangle_count, measured_at, error",
+        "path, volume_ml, dim_x, dim_y, dim_z, area_mm2, size_bytes, triangle_count, measured_at, error",
       )
       .eq("bucket_id", BUCKET)
       .in("path", paths);
@@ -74,6 +76,7 @@ export async function lookupMeasurements(
           y: Number(row.dim_y),
           z: Number(row.dim_z),
         },
+        areaMm2: row.area_mm2 === null || row.area_mm2 === undefined ? null : Number(row.area_mm2),
         sizeBytes: row.size_bytes === null ? null : Number(row.size_bytes),
         triangleCount: row.triangle_count === null
           ? null
@@ -97,6 +100,7 @@ export async function saveMeasurement(
   m: {
     volumeMl: number;
     dimensions: { x: number; y: number; z: number };
+    areaMm2?: number;
     triangleCount: number;
     isAscii: boolean;
     bytesRead: number;
@@ -110,6 +114,7 @@ export async function saveMeasurement(
       dim_x: m.dimensions.x,
       dim_y: m.dimensions.y,
       dim_z: m.dimensions.z,
+      area_mm2: m.areaMm2 ?? null,
       triangle_count: m.triangleCount,
       is_ascii: m.isAscii,
       size_bytes: m.bytesRead,

@@ -49,6 +49,7 @@ function cubeMeasurement(path: string): StoredMeasurement {
     path,
     volumeMl: 8,
     dimensions: { x: 20, y: 20, z: 20 },
+    areaMm2: 2400,
     sizeBytes: 684,
     triangleCount: 12,
     measuredAt: "2026-10-03T18:00:00Z",

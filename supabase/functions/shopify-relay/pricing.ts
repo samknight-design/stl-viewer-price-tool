@@ -15,6 +15,8 @@
 // What is NOT ported: the display formatters (fmt/fmtMl/fmtMm/fmtHours) and
 // calcOrderMinimumShortfall, which only exist to drive UI copy.
 
+import { type Formula, type FormulaPrice, formulaPartPrice } from "./formula.ts";
+
 export interface Dimensions {
   x: number;
   y: number;
@@ -63,6 +65,8 @@ export interface PricingConfig {
   customQuoteOrderThreshold: number;
   supportSizeInflationPct?: number;
   supportHandlingFeePct?: number;
+  /** The size-and-volume formula, folded in by mergePricingConfig. */
+  formula?: Formula;
 }
 
 export interface ItemSettings {
@@ -102,6 +106,8 @@ export interface ItemCost {
   colorSurchargePct?: number;
   colorSurchargeAmount?: number;
   supportHandlingFee: number;
+  /** Set when the formula priced the part. */
+  formula?: FormulaPrice;
   unitCost: number;
   totalCost: number;
 }
@@ -178,7 +184,7 @@ export function calcSizeTier(
  * callers check instead of `tier` (always null for PLA by design).
  */
 export function calcItemCost(
-  stlData: { dimensions: Dimensions; volumeMl: number },
+  stlData: { dimensions: Dimensions; volumeMl: number; areaMm2?: number | null },
   settings: ItemSettings,
   config: PricingConfig,
   printMethod = "resin",
@@ -221,6 +227,12 @@ export function calcItemCost(
       unitCost: 0,
       totalCost: 0,
     };
+  }
+
+  // The size-and-volume formula. Mirrors js/calculator.js: mergePricingConfig
+  // always folds one in, and the tier and per-mL code below is the fallback.
+  if (config.formula) {
+    return formulaItemCost(stlData, settings, config, printMethod, scaledDims, scaledVolumeMl);
   }
 
   if (printMethod === "pla") {
@@ -345,6 +357,86 @@ export function calcItemCost(
     supportHandlingFee,
     unitCost,
     totalCost,
+  };
+}
+
+// ---- Formula pricing ---------------------------------------------------
+// Port of formulaItemCost in js/calculator.js.
+
+function formulaItemCost(
+  stlData: { dimensions: Dimensions; volumeMl: number; areaMm2?: number | null },
+  settings: ItemSettings,
+  config: PricingConfig,
+  printMethod: string,
+  scaledDims: Dimensions,
+  scaledVolumeMl: number,
+): ItemCost {
+  const { scale = 1.0, quantity = 1, materialId, presupported = false, plaColor } = settings;
+  const isPla = printMethod === "pla";
+  const f = config.formula!;
+  const base = {
+    scale,
+    quantity,
+    presupported: isPla ? false : presupported,
+    scaledDims,
+    scaledVolumeMl,
+    tier: null,
+    supportHandlingFee: 0,
+  };
+  const unpriced = (extra: Partial<ItemCost> & { materialName: string }): ItemCost => ({
+    ...base,
+    priceable: false,
+    fitsBuildPlate: false,
+    surchargePct: 0,
+    unitCost: 0,
+    totalCost: 0,
+    ...extra,
+  });
+
+  const grow = isPla || presupported ? 1 : 1 + f.resin.supports.extraSizePct / 100;
+  const fitDims = { x: scaledDims.x * grow, y: scaledDims.y * grow, z: scaledDims.z * grow };
+  if (!fitsBuildPlate(fitDims, isPla ? config.fdmBuildPlate : config.buildPlate)) {
+    return unpriced({
+      materialName: isPla ? "PLA" : getMaterial(config, materialId).name,
+      fitsBuildPlate: false,
+    });
+  }
+
+  const scaledAreaMm2 = Number.isFinite(stlData.areaMm2)
+    ? (stlData.areaMm2 as number) * scale * scale
+    : undefined;
+  const r = formulaPartPrice({
+    volumeMl: scaledVolumeMl,
+    dimensions: scaledDims,
+    areaMm2: scaledAreaMm2,
+    presupported,
+    method: isPla ? "pla" : "resin",
+    materialId: isPla ? undefined : materialId,
+  }, f);
+  if (!r) return unpriced({ materialName: "PLA", unreadable: true, fitsBuildPlate: true });
+
+  let materialName = r.materialName;
+  let colorSurchargePct = 0;
+  let colorSurchargeAmount = 0;
+  if (isPla) {
+    const colorInfo = config.plaColors?.find((c) => c.id === plaColor);
+    colorSurchargePct = colorInfo ? (config.plaColorSurchargePct?.[colorInfo.tier] ?? 0) : 0;
+    colorSurchargeAmount = r.price * (colorSurchargePct / 100);
+    if (colorInfo) materialName = `${r.materialName} (${colorInfo.name})`;
+  }
+  const unitCost = r.price + colorSurchargeAmount;
+  return {
+    ...base,
+    materialName,
+    priceable: true,
+    fitsBuildPlate: true,
+    formula: r,
+    surchargePct: r.modifierPct,
+    colorSurchargePct,
+    colorSurchargeAmount,
+    minApplied: r.minApplied,
+    unitCost,
+    totalCost: unitCost * quantity,
   };
 }
 

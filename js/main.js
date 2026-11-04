@@ -550,7 +550,9 @@ function buildItemHTML(item, group, showMoveControl) {
   const specBits = [];
   if (c && c.priceable) {
     specBits.push(`${fmtMm(dims.x)} × ${fmtMm(dims.y)} × ${fmtMm(dims.z)}`);
-    specBits.push(c.tier ? `${esc(c.tier.name)} tier` : 'priced by volume');
+    specBits.push(c.tier ? `${esc(c.tier.name)} tier`
+      : c.formula ? (c.formula.grams != null ? `about ${Math.round(c.formula.grams)} g of filament` : 'priced by size and volume')
+      : 'priced by volume');
     if (scaled) specBits.push(`${Math.round(item.settings.scale * 100)}% scale`);
     if (isPla) {
       const pc = (config.plaColors || []).find(p => p.id === item.settings.plaColor);
@@ -619,6 +621,24 @@ function buildItemHTML(item, group, showMoveControl) {
 
 // ---- Part detail (expanded) ------------------------------------------
 
+// The breakdown for a part priced by the size-and-volume formula. The
+// formula is one smooth curve rather than a sum of fees, so this explains
+// what it was priced on instead of itemising made-up line items.
+function formulaBreakdownHTML(c, sym) {
+  const f = c.formula;
+  const rows = [];
+  if (f.grams != null) {
+    rows.push(`<tr><td>FDM print: about ${Math.round(f.grams)} g of filament</td><td>${fmt(f.price, sym)}</td></tr>`);
+  } else {
+    const supportNote = c.presupported ? '' : ', with room for the supports we add';
+    rows.push(`<tr><td>Resin print: ${f.pricedVolumeMl.toFixed(1)} mL, ${Math.round(f.pricedLongestMm)} mm longest side${supportNote}</td><td>${fmt(f.price, sym)}</td></tr>`);
+  }
+  if (f.modifierPct) rows.push(`<tr><td>Includes ${esc(f.materialName)} (${f.modifierPct > 0 ? '+' : ''}${f.modifierPct}%)</td><td></td></tr>`);
+  if (c.colorSurchargePct > 0) rows.push(`<tr><td>Colour surcharge (+${c.colorSurchargePct}%)</td><td>${fmt(c.colorSurchargeAmount, sym)}</td></tr>`);
+  if (f.minApplied) rows.push(`<tr><td>Minimum price per part applied</td><td></td></tr>`);
+  return rows.join('');
+}
+
 function buildItemDetailHTML(item, group, ctx) {
   const { isPla, ps, c, sym, showMoveControl } = ctx;
 
@@ -657,7 +677,7 @@ function buildItemDetailHTML(item, group, ctx) {
     <details class="cost-details">
       <summary>How this price is worked out</summary>
       <table class="breakdown-table">
-        ${c.tier ? `
+        ${c.formula ? formulaBreakdownHTML(c, sym) : c.tier ? `
           <tr><td>Size tier: ${esc(c.tier.name)} (up to ${c.tier.maxDimensionMm ? c.tier.maxDimensionMm + 'mm' : 'build plate'})</td><td>${fmt(c.tier.price, sym)}</td></tr>
           ${c.surchargePct > 0 ? `<tr><td>${esc(c.materialName)} surcharge (+${c.surchargePct}%)</td><td>${fmt(c.surchargeAmount, sym)}</td></tr>` : ''}
           ${c.supportHandlingFee > 0 ? `<tr><td>Support handling</td><td>${fmt(c.supportHandlingFee, sym)}</td></tr>` : ''}
@@ -1151,7 +1171,7 @@ function buildReviewGroupHTML(group, sym) {
           <div class="review-file-name">${esc(shortName(partLabel(i), 38))}</div>
           <div class="review-file-meta">
             ${esc(i.cost.materialName)} &middot; ×${i.settings.quantity}
-            &middot; ${i.cost.tier ? esc(i.cost.tier.name) + ' tier' : 'volume-priced'}
+            &middot; ${i.cost.tier ? esc(i.cost.tier.name) + ' tier' : i.cost.formula ? 'priced by size and volume' : 'volume-priced'}
           </div>
         </div>
         <div class="review-file-cost">${fmt(i.cost.totalCost, sym)}</div>

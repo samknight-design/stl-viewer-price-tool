@@ -75,6 +75,17 @@ Deno.test("binary STL: volume and bounding box of a known box", async () => {
   assertEquals(Math.round(m.volumeMm3), 6000);
   assertEquals(Number(m.volumeMl.toFixed(6)), 6);
   assertEquals(m.dimensions, { x: 10, y: 20, z: 30 });
+  // 2 × (10·20 + 10·30 + 20·30) = 2200 mm² — feeds the FDM filament estimate.
+  assertEquals(Math.round(m.areaMm2 * 1000) / 1000, 2200);
+});
+
+Deno.test("surface area matches the browser parser exactly", async () => {
+  const { parseSTLBuffer } = await import("../../../js/stl-parser.js");
+  const bytes = binaryStl(boxTriangles(12.5, 31.7, 8.2));
+  const server = await measureStlBuffer(bytes);
+  const browser = parseSTLBuffer(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), "box.stl");
+  assertEquals(server.areaMm2, browser.areaMm2);
+  assertEquals(server.volumeMl, browser.volumeMl);
 });
 
 Deno.test("ASCII STL: same box measures the same", async () => {

@@ -4,7 +4,8 @@
 // unchanged assembly/primer add-ons.
 // ============================================================
 
-import { getMaterial } from './print-calc-config.js?v=4d0e9a18e1';
+import { getMaterial } from './print-calc-config.js?v=d007575fb7';
+import { formulaPartPrice } from './print-calc-pricing-formula.js?v=7f51bf9104';
 
 // ---- Build plate fit check --------------------------------------------
 
@@ -112,6 +113,11 @@ export function calcItemCost(stlData, settings, config, printMethod = 'resin') {
       totalCost: 0,
     };
   }
+
+  // The size-and-volume formula (pricing-formula.js). getConfig() always
+  // folds one in; the tier and per-mL code below is the fallback for a config
+  // that somehow arrives without it.
+  if (config.formula) return formulaItemCost(stlData, settings, config, printMethod, scaledDims, scaledVolumeMl);
 
   if (printMethod === 'pla') {
     if (!fitsBuildPlate(scaledDims, config.fdmBuildPlate)) {
@@ -226,6 +232,76 @@ export function calcItemCost(stlData, settings, config, printMethod = 'resin') {
     supportHandlingFee,
     unitCost,
     totalCost,
+  };
+}
+
+// ---- Formula pricing ---------------------------------------------------
+
+/**
+ * One part priced by the formula. Same result shape as the tier path, with
+ * `formula` holding the breakdown (see formulaPartPrice). The support
+ * allowance and any support fee are inside the formula price, so
+ * supportHandlingFee is always 0 here. PLA has no material picker: it uses
+ * the formula's default FDM material, and the colour surcharge still applies
+ * on top as a % of the part's price.
+ */
+function formulaItemCost(stlData, settings, config, printMethod, scaledDims, scaledVolumeMl) {
+  const { scale = 1.0, quantity = 1, materialId, presupported = false, plaColor } = settings;
+  const isPla = printMethod === 'pla';
+  const f = config.formula;
+  const base = {
+    scale, quantity,
+    presupported: isPla ? false : presupported,
+    scaledDims, scaledVolumeMl,
+    tier: null,
+    supportHandlingFee: 0,
+  };
+  const unpriced = (extra) => ({ ...base, priceable: false, surchargePct: 0, unitCost: 0, totalCost: 0, ...extra });
+
+  // A bare resin upload grows by the supports allowance before it prints, so
+  // the plate check uses the grown size — the same model can't fit as bare
+  // and fail as pre-supported.
+  const grow = isPla || presupported ? 1 : 1 + f.resin.supports.extraSizePct / 100;
+  const fitDims = { x: scaledDims.x * grow, y: scaledDims.y * grow, z: scaledDims.z * grow };
+  if (!fitsBuildPlate(fitDims, isPla ? config.fdmBuildPlate : config.buildPlate)) {
+    return unpriced({ materialName: isPla ? 'PLA' : getMaterial(config, materialId).name, fitsBuildPlate: false });
+  }
+
+  // Surface area scales with the square of the scale; it only feeds the FDM
+  // filament estimate.
+  const scaledAreaMm2 = Number.isFinite(stlData.areaMm2) ? stlData.areaMm2 * scale * scale : undefined;
+  const r = formulaPartPrice({
+    volumeMl: scaledVolumeMl,
+    dimensions: scaledDims,
+    areaMm2: scaledAreaMm2,
+    presupported,
+    method: isPla ? 'pla' : 'resin',
+    materialId: isPla ? undefined : materialId,
+  }, f);
+  if (!r) return unpriced({ materialName: 'PLA', unreadable: true, fitsBuildPlate: true });
+
+  let materialName = r.materialName;
+  let colorSurchargePct = 0;
+  let colorSurchargeAmount = 0;
+  if (isPla) {
+    const colorInfo = config.plaColors?.find(c => c.id === plaColor);
+    colorSurchargePct = colorInfo ? (config.plaColorSurchargePct?.[colorInfo.tier] ?? 0) : 0;
+    colorSurchargeAmount = r.price * (colorSurchargePct / 100);
+    if (colorInfo) materialName = `${r.materialName} (${colorInfo.name})`;
+  }
+  const unitCost = r.price + colorSurchargeAmount;
+  return {
+    ...base,
+    materialName,
+    priceable: true,
+    fitsBuildPlate: true,
+    formula: r,
+    surchargePct: r.modifierPct,
+    colorSurchargePct,
+    colorSurchargeAmount,
+    minApplied: r.minApplied,
+    unitCost,
+    totalCost: unitCost * quantity,
   };
 }
 

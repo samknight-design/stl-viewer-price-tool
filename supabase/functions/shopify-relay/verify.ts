@@ -106,6 +106,7 @@ export interface VerifyDeps {
     m: {
       volumeMl: number;
       dimensions: { x: number; y: number; z: number };
+      areaMm2?: number;
       triangleCount: number;
       isAscii: boolean;
       bytesRead: number;
@@ -264,11 +265,25 @@ export async function verifyOrderPricing(
       const path = pathFrom(file)!;
       const stored = measured.get(path);
 
-      let geometry: { dimensions: { x: number; y: number; z: number }; volumeMl: number } | null =
-        null;
+      let geometry: {
+        dimensions: { x: number; y: number; z: number };
+        volumeMl: number;
+        areaMm2?: number;
+      } | null = null;
 
       if (stored?.measuredAt) {
-        geometry = { dimensions: stored.dimensions, volumeMl: stored.volumeMl };
+        // An FDM part is priced from its estimated filament, which needs the
+        // surface area. Files measured before area was recorded have none, so
+        // they can't be verified — skipped (manual review), never a mismatch.
+        if (model.printMethod === "pla" && stored.areaMm2 === null) {
+          modelSkip = "measured before surface area was recorded (FDM needs it)";
+          break;
+        }
+        geometry = {
+          dimensions: stored.dimensions,
+          volumeMl: stored.volumeMl,
+          areaMm2: stored.areaMm2 ?? undefined,
+        };
         filesFromCache++;
       } else if (stored?.error) {
         // Measured and genuinely unreadable — no point parsing it again here.
@@ -298,7 +313,7 @@ export async function verifyOrderPricing(
             totalMs: 15_000,
           });
           filesMeasuredInline++;
-          geometry = { dimensions: m.dimensions, volumeMl: m.volumeMl };
+          geometry = { dimensions: m.dimensions, volumeMl: m.volumeMl, areaMm2: m.areaMm2 };
           // Cache it so a retry of this basket is a pure lookup.
           if (deps.saveMeasurement) await deps.saveMeasurement(path, m);
         } catch (err) {

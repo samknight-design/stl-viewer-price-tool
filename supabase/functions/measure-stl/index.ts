@@ -142,6 +142,7 @@ export async function handleRequest(req: Request): Promise<Response> {
       dim_x: m.dimensions.x,
       dim_y: m.dimensions.y,
       dim_z: m.dimensions.z,
+      area_mm2: m.areaMm2,
       triangle_count: m.triangleCount,
       is_ascii: m.isAscii,
       size_bytes: m.bytesRead,

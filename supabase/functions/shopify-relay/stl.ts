@@ -23,6 +23,8 @@ export interface StlMeasurement {
   volumeMm3: number;
   volumeMl: number;
   dimensions: { x: number; y: number; z: number };
+  /** Outer surface area, for the FDM filament estimate. */
+  areaMm2: number;
   triangleCount: number;
   /** Triangles dropped for a NaN/infinite coordinate; not in triangleCount. */
   skippedTriangles: number;
@@ -106,6 +108,7 @@ export const MAX_SKIPPED_TRIANGLE_FRACTION = 0.01;
 /** Running volume + bounding-box accumulation, shared by both parsers. */
 class Accumulator {
   vol = 0;
+  area = 0;
   triangleCount = 0;
   skippedTriangles = 0;
   mnX = Infinity;
@@ -136,6 +139,13 @@ class Accumulator {
       v1x * (v2y * v3z - v2z * v3y) +
       v1y * (v2z * v3x - v2x * v3z) +
       v1z * (v2x * v3y - v2y * v3x);
+
+    // Surface area: half the cross product's length. Identical expression to
+    // calcVolumeAndBounds in js/stl-parser.js.
+    const ux = v2x - v1x, uy = v2y - v1y, uz = v2z - v1z;
+    const wx = v3x - v1x, wy = v3y - v1y, wz = v3z - v1z;
+    const cx = uy * wz - uz * wy, cy = uz * wx - ux * wz, cz = ux * wy - uy * wx;
+    this.area += Math.sqrt(cx * cx + cy * cy + cz * cz) / 2;
 
     if (v1x < this.mnX) this.mnX = v1x;
     if (v1x > this.mxX) this.mxX = v1x;
@@ -175,6 +185,7 @@ class Accumulator {
           y: this.mxY - this.mnY,
           z: this.mxZ - this.mnZ,
         },
+      areaMm2: this.area,
       triangleCount: this.triangleCount,
       skippedTriangles: this.skippedTriangles,
       isAscii,

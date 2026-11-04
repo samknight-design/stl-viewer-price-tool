@@ -30,13 +30,14 @@ export function parseSTLBuffer(buffer, filename = '') {
     );
   }
 
-  const { volumeMm3, dimensions } = calcVolumeAndBounds(triangles);
+  const { volumeMm3, dimensions, areaMm2 } = calcVolumeAndBounds(triangles);
 
   return {
     filename,
     triangles,           // Flat Float32Array: 9 floats/triangle (v1xyz,v2xyz,v3xyz)
     volumeMm3,
     volumeMl: volumeMm3 / 1000,   // cm³ = mL
+    areaMm2,             // outer surface area, for the FDM filament estimate
     dimensions,          // { x, y, z } in mm
     triangleCount: triangles.length / 9,
     skippedTriangles: skipped,
@@ -149,6 +150,7 @@ function parseAscii(text) {
 // ---- Volume & bounding box via divergence theorem ---------------------
 function calcVolumeAndBounds(positions) {
   let vol = 0;
+  let area = 0;
   let mnX = Infinity, mnY = Infinity, mnZ = Infinity;
   let mxX = -Infinity, mxY = -Infinity, mxZ = -Infinity;
 
@@ -163,6 +165,13 @@ function calcVolumeAndBounds(positions) {
       v1y * (v2z * v3x - v2x * v3z) +
       v1z * (v2x * v3y - v2y * v3x);
 
+    // Surface area (half the cross product's length). Only the FDM filament
+    // estimate uses it. Same expression as StlAccumulator in the relay's stl.ts.
+    const ux = v2x - v1x, uy = v2y - v1y, uz = v2z - v1z;
+    const wx = v3x - v1x, wy = v3y - v1y, wz = v3z - v1z;
+    const cx = uy * wz - uz * wy, cy = uz * wx - ux * wz, cz = ux * wy - uy * wx;
+    area += Math.sqrt(cx * cx + cy * cy + cz * cz) / 2;
+
     if (v1x < mnX) mnX = v1x; if (v1x > mxX) mxX = v1x;
     if (v1y < mnY) mnY = v1y; if (v1y > mxY) mxY = v1y;
     if (v1z < mnZ) mnZ = v1z; if (v1z > mxZ) mxZ = v1z;
@@ -176,6 +185,7 @@ function calcVolumeAndBounds(positions) {
 
   return {
     volumeMm3: Math.abs(vol) / 6,
+    areaMm2: area,
     dimensions: { x: mxX - mnX, y: mxY - mnY, z: mxZ - mnZ },
   };
 }
