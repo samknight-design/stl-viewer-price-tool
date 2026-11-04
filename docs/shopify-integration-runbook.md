@@ -41,13 +41,13 @@ browser runs. See §7a.
 | Supabase project | `aqnpkvzycdjwbapfpvfl` |
 | Relay base URL | `https://aqnpkvzycdjwbapfpvfl.supabase.co/functions/v1/shopify-relay` |
 | Edge function | `shopify-relay` (v54 at time of writing), `verify_jwt: false` |
-| Staging function | `shopify-relay-staging` — same secrets, used by draft themes |
+| Staging function | `shopify-relay-staging` — same secrets, used by draft themes. v5 pinned at `24ad779` (formula pricing); `measure-stl` v4 pinned there too |
 | Storage bucket | `quote-uploads` (public read; writes only via signed URL) |
 | Shopify shop | Arcane Flame, `gid://shopify/Shop/87781310808` |
 | Hidden product | `Custom 3D Print (do not edit)` — `15907078340952` |
 | Pricing metafield | `print_calculator.pricing_config` (type `json`, shop-owned) |
 | Live theme (MAIN) | `198035210584` — "PUBLISH THIS - calculator file fix (5 Sep)" |
-| Draft under test | `198754959704` — "Server-side pricing test (21 Sep) - DRAFT" |
+| Draft under test | `198754959704` — "PREVIEW - formula pricing (4 Nov) - DRAFT" (reused: the store is at Shopify's 20-theme limit, so `themeDuplicate` silently returns nothing) |
 
 > The live theme ID moves every time a draft is published, and this table has
 > been stale before — it still said `196996628824` (19 Aug) on 2026-09-21, two
@@ -156,6 +156,27 @@ check for which theme is actually serving is the `server-timing` response header
 ---
 
 ## 6. Pricing configuration
+
+**Size-and-volume formula (branch `store-pricing-formula`, Nov 2026).** Resin
+and PLA parts are priced by `js/pricing-formula.js` (port:
+`supabase/functions/shopify-relay/formula.ts`, pinned by `formula.test.ts`),
+not by `sizeTiers` / `fdm.costPerMl`. Its settings are the pricing trainer's
+Pricing settings (`trainer/pricing-trainer.html`, Export settings) and live
+under a `formula` key in the `pricing_config` metafield. With no `formula` key
+the code defaults apply, which equal the trainer's defaults. `getConfig()`
+folds the formula in for the calculator only; the admin page loads and saves
+the raw config, so it never writes folded figures back. FDM needs surface
+area: `stl_measurements.area_mm2` (nullable; older rows have none, and the
+relay skips an FDM file without it rather than pricing it).
+
+To change formula prices: export settings from the trainer, then set them as
+`formula` inside the `pricing_config` metafield (keep every other key). The
+live relay (v54) and live theme ignore the key until this branch ships.
+
+**Before publishing the preview theme:** revert `RELAY_BASE_URL` in
+`shopify-theme/assets/print-calc-config.js` to the live relay, and deploy the
+live `shopify-relay` from this branch at the same time — the live relay must
+price with the same formula the published theme shows.
 
 Precedence at runtime: **shop metafield > `DEFAULT_CONFIG` in `js/config.js`**.
 
