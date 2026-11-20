@@ -4,14 +4,15 @@
 // Files belong to a group. Multiple groups = multiple models.
 // ============================================================
 
-import { getConfig, RELAY_BASE_URL } from './print-calc-config.js?v=84f26171c4';
+import { getConfig, RELAY_BASE_URL } from './print-calc-config.js?v=67d0bab1cc';
+import { swatchBackground } from './print-calc-pricing-formula.js?v=66cb1e3cf2';
 import { parseSTLFile } from './print-calc-stl-parser.js?v=af51be9c13';
 import { generateThumbnail, STLViewer } from './print-calc-viewer.js?v=2acba5d7ed';
 import { icon, applyStaticIcons } from './print-calc-icons.js?v=ee665e071a';
 import {
   calcItemCost, calcGroupCost, calcOrderTotal, calcOrderMinimumShortfall,
   exceedsCustomQuoteThreshold, fmt, fmtMm,
-} from './print-calc-calculator.js?v=4451af1208';
+} from './print-calc-calculator.js?v=b45f08b3ed';
 
 // ---- State -----------------------------------------------------------
 let config      = null;
@@ -671,6 +672,7 @@ function formulaBreakdownHTML(c, sym) {
   if (f.modifierPct) rows.push(`<tr><td>Includes ${esc(f.materialName)} (${f.modifierPct > 0 ? '+' : ''}${f.modifierPct}%)</td><td></td></tr>`);
   if (c.colorSurchargePct > 0) rows.push(`<tr><td>Colour surcharge (+${c.colorSurchargePct}%)</td><td>${fmt(c.colorSurchargeAmount, sym)}</td></tr>`);
   if (c.quantityDiscount > 0) rows.push(`<tr><td>Discount on extra copies</td><td>−${fmt(c.quantityDiscount, sym)}</td></tr>`);
+  if (c.labourFee > 0) rows.push(`<tr><td>Handling${c.quantity > 1 ? ` (${fmt(c.labourFee, sym)} × ${c.quantity})` : ''}</td><td>${fmt(c.labourFee * c.quantity, sym)}</td></tr>`);
   if (f.minApplied) rows.push(`<tr><td>Minimum price per part applied</td><td></td></tr>`);
   return rows.join('');
 }
@@ -691,7 +693,7 @@ function buildItemDetailHTML(item, group, ctx) {
           return `
             <button type="button" class="pla-swatch-btn" data-action="pla-color-select" data-id="${item.id}" data-color-id="${esc(pc.id)}"
                     title="${esc(pc.name)}${badge ? ' (' + badge + ')' : ''}" aria-label="${esc(pc.name)}" aria-pressed="${active}">
-              <span class="pla-swatch ${active ? 'active' : ''}" style="background:${esc(pc.hex)};">
+              <span class="pla-swatch ${active ? 'active' : ''}" style="background:${esc(swatchBackground(pc.hex, pc.finish))};">
                 ${active ? `<span class="primer-check">${icon('check', { size: 13 })}</span>` : ''}
               </span>
               <span class="pla-swatch-label">${esc(pc.name)}${badge ? `<span class="pla-swatch-badge">${badge}</span>` : ''}</span>

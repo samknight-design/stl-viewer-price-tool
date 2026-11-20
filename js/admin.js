@@ -20,7 +20,8 @@
 
 import {
   FORMULA_DEFAULTS, mergeFormula, formulaPartPrice, findMaterial, quantityLineTotal, applyFormula,
-} from './pricing-formula.js?v=2';
+  labourFee, FINISHES, swatchBackground,
+} from './pricing-formula.js?v=3';
 import { RELAY_BASE_URL, DEFAULT_CONFIG } from './config.js?v=15';
 import { calcItemCost, calcGroupCost, calcOrderTotal } from './calculator.js?v=16';
 
@@ -163,6 +164,8 @@ const SECTIONS = [
       S('resin.minPrice', 'Cheapest resin part', 0, 30, 0.5, '£', () => 'No resin part costs less than this.'),
       S('fdm.minPrice', 'Cheapest FDM part', 0, 30, 0.5, '£', () => 'No FDM part costs less than this.'),
       S('discounts.quantityPct', 'Discount on extra copies', 0, 75, 1, '%', () => 'Each copy of a part after the first is this much cheaper.'),
+      S('resin.labour.perPart', 'Handling per resin part', 0, 10, 0.05, '£', () => 'Added to every resin part and copy; never discounted.'),
+      S('fdm.labour.perPart', 'Handling per FDM part', 0, 10, 0.05, '£', () => 'Added to every FDM part and copy; never discounted.'),
       S('order.minimumOrderTotal', 'Minimum order', 0, 50, 0.5, '£', () => 'Small orders are raised to this total.'),
       S('order.customQuoteThreshold', 'Hand-quote orders from', 25, 1000, 5, '£', () => 'Orders at or above this go to you for a quote instead of checkout.'),
       { kind: 'select', path: 'order.roundTo', label: 'Round part prices up to', options: ROUND_OPTIONS, number: true },
@@ -212,6 +215,18 @@ const SECTIONS = [
     ],
   }] },
 
+  { id: 'labour', title: 'Labour & handling', prefixes: ['resin.labour', 'fdm.labour'], cards: ['resin', 'fdm'].map((m) => ({
+    title: m === 'resin' ? 'Resin handling' : 'FDM handling',
+    intro: m === 'resin'
+      ? 'Every resin part needs washing, curing, support removal, checking and bagging, whatever its size. These fees cover that time. They go on after every discount, per copy.'
+      : 'Every FDM part needs removing, cleaning up and bagging. These fees go on after every discount, per copy.',
+    fields: [
+      S(`${m}.labour.perPart`, 'Handling per part', 0, 10, 0.05, '£', (v) => `20 parts add ${money(20 * v)} of handling.`),
+      S(`${m}.labour.smallPartFee`, 'Extra for small parts', 0, 10, 0.05, '£', (v, f) => `Each part under ${f[m].labour.smallPartMaxMl} ml adds this on top: tiny parts are the fiddliest.`),
+      S(`${m}.labour.smallPartMaxMl`, 'A small part is under', 0, m === 'resin' ? 20 : 50, 0.1, 'ml', () => m === 'resin' ? 'A 32mm hand or weapon is about 0.3–1 ml; a 32mm body about 5 ml.' : 'Small FDM parts: clips, dowels, tokens.'),
+    ],
+  })) },
+
   { id: 'fdm', title: 'FDM pricing', prefixes: ['fdm.enabled', 'fdm.label', 'fdm.description', 'fdm.adjustPct', 'fdm.startingCharge', 'fdm.filament', 'fdm.minPrice', 'fdm.shellMm', 'fdm.infillPct'], cards: [{
     title: 'How an FDM part is priced',
     intro: 'Starting charge + a price for its filament, then the overall adjustment, the filament\'s modifier and the colour surcharge, raised to the minimum and rounded up.',
@@ -247,6 +262,13 @@ const SECTIONS = [
   { id: 'discounts', title: 'Discounts', prefixes: ['discounts'], cards: [{
     title: 'Extra copies',
     fields: [S('discounts.quantityPct', 'Discount on each extra copy', 0, 75, 1, '%', (v) => `Ordering 4 of a £10 part: ${money(10 + 3 * 10 * (1 - v / 100))}.`)],
+  }, {
+    title: 'Keeping discounts fair',
+    intro: 'Discounts reward bigger orders of real models. These stop a basket of many tiny parts earning a large discount on work that isn\'t cheaper to do. Handling fees are never discounted.',
+    fields: [
+      S('discounts.minPartMl', 'No discounts on parts under', 0, 20, 0.1, 'ml', (v) => v > 0 ? `Parts under ${v} ml get no copy discount and don't count towards multi-part tiers.` : 'Off: every part can be discounted.'),
+      S('discounts.maxMultiPartDiscount', 'Most a multi-part discount can save', 0, 100, 1, '£', (v) => v > 0 ? `No model saves more than ${money(v)}.` : 'Off: no cap (0).'),
+    ],
   }] },
   { id: 'finishing', title: 'Assembly & primer', prefixes: ['finishes'], cards: [{
     title: 'Assembly',
@@ -396,6 +418,25 @@ function listCard({ title, intro, cls, path, head, row, addLabel, addItem, defau
 const cell = (key, value, type = 'text', step) =>
   `<input type="${type}" data-key="${key}" value="${esc(value)}"${step ? ` step="${step}"` : ''} aria-label="${esc(key)}">`;
 
+// Finish swatches and icons. The swatch is drawn the same way the
+// calculator draws it (swatchBackground in pricing-formula.js).
+const FINISH_ICONS = {
+  solid: '<circle cx="12" cy="12" r="8" fill="currentColor"/>',
+  matte: '<circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="currentColor"/>',
+  silk: '<path d="M3 14c3-5 6 3 9-2s6 3 9-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M3 19c3-5 6 3 9-2s6 3 9-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity=".5"/>',
+  metallic: '<path d="M12 3l3 6 6 3-6 3-3 6-3-6-6-3 6-3z" fill="currentColor"/>',
+  pearl: '<circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 9a5 5 0 0 1 5-2" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><circle cx="18" cy="5" r="1.5" fill="currentColor"/>',
+  translucent: '<path d="M12 3c4 5 6 8 6 11a6 6 0 0 1-12 0c0-3 2-6 6-11z" fill="none" stroke="currentColor" stroke-width="2"/>',
+  glow: '<circle cx="12" cy="12" r="4" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+};
+const finishIcon = (finish) => `<svg class="finish-icon" viewBox="0 0 24 24" aria-hidden="true">${FINISH_ICONS[finish] ?? FINISH_ICONS.solid}</svg>`;
+const swatchHTML = (c) => `<span class="swatch" data-swatch style="background:${swatchBackground(c.hex, c.finish)}" title="${esc(FINISHES[c.finish] ?? 'Solid')}"></span>`;
+function finishSelect(finish, withIcon) {
+  const sel = `<select data-key="finish" aria-label="Finish">${Object.entries(FINISHES).map(([id, label]) =>
+    `<option value="${id}"${id === (finish || 'solid') ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select>`;
+  return withIcon ? `<span class="finish-pick" data-finish-icon>${finishIcon(finish)}${sel}</span>` : sel;
+}
+
 function materialsHTML() {
   return [
     listCard({
@@ -408,16 +449,16 @@ function materialsHTML() {
     listCard({
       title: 'Filaments', cls: 'rows-filaments', path: 'fdm.materials', defaultFirst: true,
       intro: 'Density turns the estimated filament volume into grams (PLA 1.24, PETG 1.27, ABS 1.04, TPU 1.21 g/ml).',
-      head: ['Name', 'Price change %', 'Density g/ml', ''],
-      row: (m) => cell('name', m.name) + cell('modifierPct', m.modifierPct, 'number', 1) + cell('gPerMl', m.gPerMl ?? 1.24, 'number', 0.01),
-      addLabel: 'Add filament', addItem: { id: '', name: 'New filament', modifierPct: 0, gPerMl: 1.24 },
+      head: ['Name', 'Price change %', 'Density g/ml', 'Type', ''],
+      row: (m) => cell('name', m.name) + cell('modifierPct', m.modifierPct, 'number', 1) + cell('gPerMl', m.gPerMl ?? 1.24, 'number', 0.01) + finishSelect(m.finish, true),
+      addLabel: 'Add filament', addItem: { id: '', name: 'New filament', modifierPct: 0, gPerMl: 1.24, finish: 'solid' },
     }),
     listCard({
       title: 'Filament colours', cls: 'rows-colours', path: 'fdm.colours',
-      intro: 'Customers pick a colour per FDM part. The surcharge is a percentage of that part\'s price.',
-      head: ['', 'Colour', 'Surcharge %', ''],
-      row: (c) => cell('hex', c.hex, 'color') + cell('name', c.name) + cell('surchargePct', c.surchargePct, 'number', 1),
-      addLabel: 'Add colour', addItem: { id: '', name: 'New colour', hex: '#888888', surchargePct: 0 },
+      intro: 'Customers pick a colour per FDM part. The finish changes how the swatch looks to them (silk, metallic, pearlescent…); the surcharge is a percentage of that part\'s price.',
+      head: ['Pick', 'Swatch', 'Colour', 'Finish', 'Surcharge %', ''],
+      row: (c) => cell('hex', c.hex, 'color') + swatchHTML(c) + cell('name', c.name) + finishSelect(c.finish) + cell('surchargePct', c.surchargePct, 'number', 1),
+      addLabel: 'Add colour', addItem: { id: '', name: 'New colour', hex: '#888888', surchargePct: 0, finish: 'solid' },
     }),
   ].join('');
 }
@@ -504,7 +545,7 @@ function configFor(f) {
 
 function exampleModel(f) {
   const cfg = configFor(f);
-  const sizes = { 32: [6, 49, 3, 28], 75: [49, 108, 31, 63] };
+  const sizes = { 32: [6, 49, 3, 28], 75: [49, 108, 31, 63], tiny: [0.4, 15, 0.4, 15] };
   const [bodyMl, bodyMm, partMl, partMm] = sizes[tryState.size];
   const items = Array.from({ length: tryState.parts }, (_, i) => {
     const ml = i === 0 ? bodyMl : partMl, mm = i === 0 ? bodyMm : partMm;
@@ -514,8 +555,10 @@ function exampleModel(f) {
   });
   const gc = calcGroupCost(items, { assembly: tryState.assembled, primer: tryState.primed ? (cfg.primerOptions[1]?.id ?? 'unprimed') : 'unprimed', extras: [] }, cfg);
   const total = calcOrderTotal([{ groupCost: gc }], cfg);
-  return { gc, total, cfg };
+  return { gc, total, cfg, items };
 }
+
+const labourIn = (ex) => ex.items.reduce((s, i) => s + (i.cost.labourFee ?? 0) * i.settings.quantity, 0);
 
 function renderPreview() {
   const base = compareTo === 'saved' ? saved : mergeFormula(undefined);
@@ -543,10 +586,13 @@ function renderPreview() {
     // Feed the exact grams in: a part whose whole volume is "shell" uses
     // volume × density, so volume = grams ÷ density.
     const r = formulaPartPrice({ volumeMl: tryState.grams / (mat.gPerMl || 1.24), dimensions: { x: 1, y: 1, z: 1 }, areaMm2: 1e12, method: 'pla', materialId: tryState.materialId }, draft);
-    tryResult = r ? { unit: r.price, line: quantityLineTotal(r.price, tryState.qty, draft), note: `${tryState.grams} g of ${esc(r.materialName)} · about ${Math.round((49 + 1.96 * tryState.grams) / 60 * 10) / 10} h on the printer` } : null;
+    const lab = labourFee(tryState.grams / (mat.gPerMl || 1.24), 'pla', draft);
+    tryResult = r ? { unit: r.price + lab, line: quantityLineTotal(r.price, tryState.qty, draft) + lab * tryState.qty, note: `${tryState.grams} g of ${esc(r.materialName)} · about ${Math.round((49 + 1.96 * tryState.grams) / 60 * 10) / 10} h on the printer${lab ? ` · incl. ${money(lab)} handling` : ''}` } : null;
   } else {
     const r = formulaPartPrice({ volumeMl: tryState.ml, dimensions: { x: tryState.mm * 0.6, y: tryState.mm * 0.8, z: tryState.mm }, presupported: tryState.presupported, method: 'resin', materialId: tryState.materialId }, draft);
-    tryResult = r ? { unit: r.price, line: quantityLineTotal(r.price, tryState.qty, draft), note: `${esc(r.materialName)} · priced on ${r.pricedVolumeMl.toFixed(1)} ml, ${Math.round(r.pricedLongestMm)} mm${r.minApplied ? ' · minimum applied' : ''}` } : null;
+    const lab = labourFee(tryState.ml, 'resin', draft);
+    const eligible = tryState.ml >= draft.discounts.minPartMl;
+    tryResult = r ? { unit: r.price + lab, line: quantityLineTotal(r.price, tryState.qty, draft, eligible) + lab * tryState.qty, note: `${esc(r.materialName)} · priced on ${r.pricedVolumeMl.toFixed(1)} ml, ${Math.round(r.pricedLongestMm)} mm${r.minApplied ? ' · minimum applied' : ''}${lab ? ` · incl. ${money(lab)} handling` : ''}${!eligible ? ' · too small to discount' : ''}` } : null;
   }
 
   const ex = exampleModel(draft);
@@ -577,12 +623,12 @@ function renderPreview() {
     ${draft.resin.enabled ? `<section class="card">
       <h2>Example model</h2>
       <div class="try">
-        <label>Scale<select id="e-size"><option value="32"${tryState.size === '32' ? ' selected' : ''}>32mm figure</option><option value="75"${tryState.size === '75' ? ' selected' : ''}>75mm figure</option></select></label>
+        <label>Scale<select id="e-size"><option value="32"${tryState.size === '32' ? ' selected' : ''}>32mm figure</option><option value="75"${tryState.size === '75' ? ' selected' : ''}>75mm figure</option><option value="tiny"${tryState.size === 'tiny' ? ' selected' : ''}>Tiny bits (0.4 ml each)</option></select></label>
         <label>Parts<input type="number" id="e-parts" min="1" max="30" step="1" value="${tryState.parts}"></label>
         <label style="flex-direction:row;display:flex;gap:6px;align-items:center"><input type="checkbox" id="e-asm" ${tryState.assembled ? 'checked' : ''}> Assembled</label>
         <label style="flex-direction:row;display:flex;gap:6px;align-items:center"><input type="checkbox" id="e-prime" ${tryState.primed ? 'checked' : ''}> Primed</label>
         <div class="try-result">
-          Parts ${money(ex.gc.fileSubtotal)}${ex.gc.multiPartDiscount > 0 ? ` · multi-part −${money(ex.gc.multiPartDiscount)} (${ex.gc.multiPartPct}%)` : ''}${ex.gc.assemblyCost ? ` · assembly ${money(ex.gc.assemblyCost)}` : ''}${ex.gc.primerTotal ? ` · primer ${money(ex.gc.primerTotal)}` : ''}<br>
+          Parts ${money(ex.gc.fileSubtotal)}${labourIn(ex) > 0 ? ` (incl. ${money(labourIn(ex))} handling)` : ''}${ex.gc.multiPartDiscount > 0 ? ` · multi-part −${money(ex.gc.multiPartDiscount)} (${ex.gc.multiPartPct}%)` : ''}${ex.gc.assemblyCost ? ` · assembly ${money(ex.gc.assemblyCost)}` : ''}${ex.gc.primerTotal ? ` · primer ${money(ex.gc.primerTotal)}` : ''}<br>
           <span class="big">${money(ex.total)}</span> <span class="sub">${baseLabel.toLowerCase()}: ${money(exBase.total)}${ex.total >= draft.order.customQuoteThreshold ? ' · goes to a hand quote' : ''}${ex.total > ex.gc.groupTotal ? ' · raised to the minimum order' : ''}</span>
         </div>
       </div>
@@ -643,6 +689,10 @@ $('panel').addEventListener('input', (e) => {
     const list = getPath(draft, listRow.closest('[data-list]').dataset.list);
     const item = list[+listRow.dataset.i];
     item[t.dataset.key] = t.type === 'number' ? (Number.isFinite(Number(t.value)) ? Number(t.value) : item[t.dataset.key]) : t.value;
+    const sw = listRow.querySelector('[data-swatch]');
+    if (sw) sw.style.background = swatchBackground(item.hex, item.finish);
+    const ic = listRow.querySelector('[data-finish-icon] svg');
+    if (ic && t.dataset.key === 'finish') ic.outerHTML = finishIcon(item.finish);
     changed();
   }
 });
@@ -757,6 +807,7 @@ function cleaned(f) {
   withIds(out.finishes.primer.colours, 'label');
   for (const m of out.fdm.materials) if (!(m.gPerMl > 0)) m.gPerMl = 1.24;
   for (const c of [...out.fdm.colours, ...out.finishes.primer.colours]) if (!/^#[0-9a-f]{6}$/i.test(c.hex || '')) c.hex = '#888888';
+  for (const c of [...out.fdm.colours, ...out.fdm.materials]) if (!FINISHES[c.finish]) c.finish = 'solid';
   out.discounts.multiPart = out.discounts.multiPart
     .filter((t) => t.minParts >= 2 && t.pct > 0 && t.pct < 100).sort((a, b) => a.minParts - b.minParts);
   out.finishes.primer.tiers = out.finishes.primer.tiers

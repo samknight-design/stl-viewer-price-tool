@@ -173,3 +173,39 @@ Deno.test("formula: a new filament prices on its own density and modifier", () =
   assertEquals(petg.materialName, "PETG");
   assertEquals(petg.price > pla.price, true);
 });
+
+Deno.test("formula: labour — 100 tiny parts can't ride a big multi-part discount", () => {
+  const saved = { formula: {
+    resin: { labour: { perPart: 0.5, smallPartFee: 0.75, smallPartMaxMl: 2 } },
+    discounts: { quantityPct: 20, multiPart: [{ minParts: 10, pct: 15 }], minPartMl: 1, maxMultiPartDiscount: 8 },
+  } };
+  const serverConfig = mergePricingConfig(saved);
+  const browserConfig = browserFormula.applyFormula({ ...DEFAULT_PRICING_CONFIG, ...saved }, saved.formula);
+  const tiny = { volumeMl: 0.4, dimensions: { x: 8, y: 10, z: 15 }, areaMm2: 400 };   // under both thresholds
+  const mid = { volumeMl: 6, dimensions: { x: 28, y: 33, z: 49 }, areaMm2: 2000 };
+
+  // One tiny part: £3.00 minimum + £0.50 handling + £0.75 small-part fee.
+  const one = calcItemCost(tiny, { quantity: 1, presupported: true }, serverConfig, "resin");
+  assertEquals(one.unitCost, 4.25);
+  assertEquals(one.discountEligible, false);
+  // 100 copies: no quantity discount (too small), labour on every copy.
+  const hundred = calcItemCost(tiny, { quantity: 100, presupported: true }, serverConfig, "resin");
+  assertEquals(hundred.totalCost, 425);
+  assertEquals(hundred.quantityDiscount, 0);
+  // Tiny parts neither count towards nor receive the multi-part discount.
+  const tinyItems = Array.from({ length: 12 }, () => ({ status: "ready", settings: { quantity: 1 }, cost: calcItemCost(tiny, { quantity: 1, presupported: true }, serverConfig, "resin") }));
+  assertEquals(calcGroupCost(tinyItems, {}, serverConfig).multiPartDiscount, 0);
+  // Twelve mid parts do get it — on their print price only, capped at £8.
+  const midItems = Array.from({ length: 12 }, () => ({ status: "ready", settings: { quantity: 1 }, cost: calcItemCost(mid, { quantity: 1, presupported: true }, serverConfig, "resin") }));
+  const g = calcGroupCost(midItems, {}, serverConfig);
+  assertEquals(g.multiPartPct, 15);
+  assertEquals(g.multiPartDiscount, 8);          // 15% of 12 × £5.50 = £9.90, capped
+  // Browser and server agree on all of it.
+  for (const [stl, q] of [[tiny, 1], [tiny, 100], [mid, 3]] as const) {
+    const s = calcItemCost(stl, { quantity: q, presupported: true }, serverConfig, "resin");
+    const b = browserCalc.calcItemCost(stl, { quantity: q, presupported: true }, browserConfig, "resin");
+    assertEquals([s.unitCost, s.totalCost, s.discountableTotal], [b.unitCost, b.totalCost, b.discountableTotal]);
+  }
+  const bMid = Array.from({ length: 12 }, () => ({ status: "ready", settings: { quantity: 1 }, cost: browserCalc.calcItemCost(mid, { quantity: 1, presupported: true }, browserConfig, "resin") }));
+  assertEquals(browserCalc.calcGroupCost(bMid, {}, browserConfig).groupTotal, g.groupTotal);
+});

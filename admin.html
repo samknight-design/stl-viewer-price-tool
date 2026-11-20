@@ -70,8 +70,10 @@
       padding: 18px max(16px, env(safe-area-inset-right)) 60px max(16px, env(safe-area-inset-left));
       max-width: 1500px; margin: 0 auto;
     }
-    @media (max-width: 1150px) { .layout { grid-template-columns: 170px minmax(0, 1fr); } .preview { grid-column: 1 / -1; position: static !important; } }
-    @media (max-width: 720px) { .layout { grid-template-columns: minmax(0, 1fr); } nav.sections { position: static !important; flex-direction: row; flex-wrap: wrap; } }
+    /* Narrower: the preview drops under the settings, in the settings column,
+       so the sticky section menu never sits over it. */
+    @media (max-width: 1150px) { .layout { grid-template-columns: 170px minmax(0, 1fr); } .preview { grid-column: 2; position: static !important; } }
+    @media (max-width: 720px) { .layout { grid-template-columns: minmax(0, 1fr); } .preview { grid-column: 1; } nav.sections { position: static !important; flex-direction: row; flex-wrap: wrap; } }
     nav.sections { position: sticky; top: 74px; display: flex; flex-direction: column; gap: 2px; }
     nav.sections button { text-align: left; background: transparent; border: 0; border-radius: 8px; padding: 8px 10px; color: var(--muted); }
     nav.sections button[aria-current="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: inset 3px 0 0 var(--accent); }
@@ -104,8 +106,12 @@
     .row { display: grid; gap: 8px; align-items: center; }
     .row-head { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
     .rows-materials .row { grid-template-columns: minmax(140px, 1fr) 110px 190px; }
-    .rows-filaments .row { grid-template-columns: minmax(140px, 1fr) 100px 100px 190px; }
-    .rows-colours .row { grid-template-columns: 40px minmax(120px, 1fr) 100px 90px; }
+    .rows-filaments .row { grid-template-columns: minmax(140px, 1fr) 100px 100px 190px 190px; }
+    .rows-colours .row { grid-template-columns: 40px 40px minmax(120px, 1fr) 150px 100px 90px; }
+    .swatch { width: 36px; height: 30px; border-radius: 6px; border: 1px solid var(--line); display: block; }
+    .finish-pick { display: flex; align-items: center; gap: 6px; }
+    .finish-pick select { flex: 1; }
+    .finish-icon { width: 20px; height: 20px; flex: none; color: var(--accent); }
     .rows-primer-colours .row { grid-template-columns: 40px minmax(140px, 1fr) 90px; }
     .rows-tiers .row { grid-template-columns: 120px 120px 90px; }
     .row-actions { justify-content: flex-end; }

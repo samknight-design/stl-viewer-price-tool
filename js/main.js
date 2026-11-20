@@ -5,6 +5,7 @@
 // ============================================================
 
 import { getConfig, RELAY_BASE_URL } from './config.js?v=15';
+import { swatchBackground } from './pricing-formula.js?v=3';
 import { parseSTLFile } from './stl-parser.js?v=10';
 import { generateThumbnail, STLViewer } from './viewer.js?v=12';
 import { icon, applyStaticIcons } from './icons.js?v=1';
@@ -671,6 +672,7 @@ function formulaBreakdownHTML(c, sym) {
   if (f.modifierPct) rows.push(`<tr><td>Includes ${esc(f.materialName)} (${f.modifierPct > 0 ? '+' : ''}${f.modifierPct}%)</td><td></td></tr>`);
   if (c.colorSurchargePct > 0) rows.push(`<tr><td>Colour surcharge (+${c.colorSurchargePct}%)</td><td>${fmt(c.colorSurchargeAmount, sym)}</td></tr>`);
   if (c.quantityDiscount > 0) rows.push(`<tr><td>Discount on extra copies</td><td>−${fmt(c.quantityDiscount, sym)}</td></tr>`);
+  if (c.labourFee > 0) rows.push(`<tr><td>Handling${c.quantity > 1 ? ` (${fmt(c.labourFee, sym)} × ${c.quantity})` : ''}</td><td>${fmt(c.labourFee * c.quantity, sym)}</td></tr>`);
   if (f.minApplied) rows.push(`<tr><td>Minimum price per part applied</td><td></td></tr>`);
   return rows.join('');
 }
@@ -691,7 +693,7 @@ function buildItemDetailHTML(item, group, ctx) {
           return `
             <button type="button" class="pla-swatch-btn" data-action="pla-color-select" data-id="${item.id}" data-color-id="${esc(pc.id)}"
                     title="${esc(pc.name)}${badge ? ' (' + badge + ')' : ''}" aria-label="${esc(pc.name)}" aria-pressed="${active}">
-              <span class="pla-swatch ${active ? 'active' : ''}" style="background:${esc(pc.hex)};">
+              <span class="pla-swatch ${active ? 'active' : ''}" style="background:${esc(swatchBackground(pc.hex, pc.finish))};">
                 ${active ? `<span class="primer-check">${icon('check', { size: 13 })}</span>` : ''}
               </span>
               <span class="pla-swatch-label">${esc(pc.name)}${badge ? `<span class="pla-swatch-badge">${badge}</span>` : ''}</span>

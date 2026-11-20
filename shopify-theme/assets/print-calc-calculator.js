@@ -4,8 +4,11 @@
 // unchanged assembly/primer add-ons.
 // ============================================================
 
-import { getMaterial } from './print-calc-config.js?v=84f26171c4';
-import { formulaPartPrice, quantityLineTotal, multiPartDiscountPct } from './print-calc-pricing-formula.js?v=d245c23ed4';
+import { getMaterial } from './print-calc-config.js?v=67d0bab1cc';
+import {
+  formulaPartPrice, quantityLineTotal, labourFee, discountEligible,
+  multiPartDiscount as multiPartDiscount_,
+} from './print-calc-pricing-formula.js?v=66cb1e3cf2';
 
 // ---- Build plate fit check --------------------------------------------
 
@@ -290,9 +293,15 @@ function formulaItemCost(stlData, settings, config, printMethod, scaledDims, sca
     colorSurchargeAmount = r.price * (colorSurchargePct / 100);
     if (colorInfo) materialName = `${r.materialName} (${colorInfo.name})`;
   }
-  const unitCost = r.price + colorSurchargeAmount;
-  // Copies after the first get the quantity discount (pricing-formula.js).
-  const totalCost = quantityLineTotal(unitCost, quantity, f);
+  // Copies after the first get the quantity discount — unless the part is
+  // too small to discount. Labour goes on afterwards, per copy, and is never
+  // discounted (pricing-formula.js labourFee).
+  const eligible = discountEligible(scaledVolumeMl, f);
+  const printUnit = r.price + colorSurchargeAmount;
+  const printTotal = quantityLineTotal(printUnit, quantity, f, eligible);
+  const labour = labourFee(scaledVolumeMl, isPla ? 'pla' : 'resin', f);
+  const unitCost = printUnit + labour;
+  const totalCost = Math.round((printTotal + labour * quantity) * 100) / 100;
   return {
     ...base,
     materialName,
@@ -304,7 +313,10 @@ function formulaItemCost(stlData, settings, config, printMethod, scaledDims, sca
     colorSurchargeAmount,
     minApplied: r.minApplied,
     unitCost,
-    quantityDiscount: Math.round((unitCost * quantity - totalCost) * 100) / 100,
+    labourFee: labour,
+    discountEligible: eligible,
+    discountableTotal: eligible ? printTotal : 0,
+    quantityDiscount: Math.round((printUnit * quantity - printTotal) * 100) / 100,
     totalCost,
   };
 }
@@ -376,8 +388,16 @@ export function calcGroupCost(items, groupSettings, config) {
 
   // Multi-part discount: a model with enough parts takes a % off its parts
   // (never off assembly or primer). Only the formula has tiers.
-  const multiPartPct = config.formula ? multiPartDiscountPct(totalPartCount, config.formula) : 0;
-  const multiPartDiscount = Math.round(fileSubtotal * multiPartPct) / 100;
+  // Counted and charged only on parts big enough to discount, and never on
+  // their labour; capped per model (pricing-formula.js multiPartDiscount).
+  let multiPartPct = 0;
+  let multiPartDiscount = 0;
+  if (config.formula) {
+    const eligible = priceableItems.filter(i => i.cost.discountEligible !== false);
+    const eligibleParts = eligible.reduce((s, i) => s + i.settings.quantity, 0);
+    const discountable = eligible.reduce((s, i) => s + (i.cost.discountableTotal ?? i.cost.totalCost), 0);
+    ({ pct: multiPartPct, amount: multiPartDiscount } = multiPartDiscount_(eligibleParts, discountable, config.formula));
+  }
 
   const groupTotal = fileSubtotal - multiPartDiscount + extrasCost + assemblyCost + primerResult.total;
 

@@ -25,7 +25,11 @@
 //
 // Discounts (inside a model's price, before assembly and primer):
 //   - every copy of a part after the first gets the quantity discount;
-//   - a model with enough parts gets the multi-part discount for its tier.
+//   - a model with enough parts gets the multi-part discount for its tier,
+//     capped per model;
+//   - parts under the discount minimum size get neither, and don't count.
+// Labour (handling per part, plus a small-part fee under a size) goes on
+// after every discount, per copy, and is never discounted.
 //
 // The relay prices every order again with
 // supabase/functions/shopify-relay/formula.ts, a line-for-line port.
@@ -49,6 +53,7 @@ export const FORMULA_DEFAULTS = Object.freeze({
     minPrice: 3,
     supports: { extraVolumePct: 22.5, extraVolumeMl: 2.5, extraSizePct: 8, handlingFee: 0 },
     materials: [{ id: 'abs-like', name: 'ABS-like resin', modifierPct: 0 }],
+    labour: { perPart: 0, smallPartFee: 0, smallPartMaxMl: 2 },
     buildPlate: { x: 211.68, y: 118.37, z: 220, marginPct: 20 },
   },
   fdm: {
@@ -61,30 +66,33 @@ export const FORMULA_DEFAULTS = Object.freeze({
     minPrice: 3,
     shellMm: 0.8,
     infillPct: 8,
-    materials: [{ id: 'matte-pla', name: 'Matte PLA', modifierPct: 0, gPerMl: 1.24 }],
+    materials: [{ id: 'matte-pla', name: 'Matte PLA', modifierPct: 0, gPerMl: 1.24, finish: 'matte' }],
+    labour: { perPart: 0, smallPartFee: 0, smallPartMaxMl: 5 },
     colours: [
-      { id: 'white', name: 'White', hex: '#f2f2ee', surchargePct: 0 },
-      { id: 'black', name: 'Black', hex: '#1c1c1c', surchargePct: 0 },
-      { id: 'dark-grey', name: 'Dark Grey', hex: '#4d4d4d', surchargePct: 0 },
-      { id: 'red', name: 'Red', hex: '#c0392b', surchargePct: 10 },
-      { id: 'orange', name: 'Orange', hex: '#e2711d', surchargePct: 10 },
-      { id: 'yellow', name: 'Yellow', hex: '#f0c414', surchargePct: 10 },
-      { id: 'green', name: 'Green', hex: '#1f8a3d', surchargePct: 10 },
-      { id: 'blue', name: 'Blue', hex: '#1a5fb4', surchargePct: 10 },
-      { id: 'purple', name: 'Purple', hex: '#7d3c98', surchargePct: 10 },
-      { id: 'pink', name: 'Pink', hex: '#e88ab0', surchargePct: 10 },
-      { id: 'brown', name: 'Brown', hex: '#6d4c33', surchargePct: 10 },
-      { id: 'gold', name: 'Gold', hex: '#cfa036', surchargePct: 20 },
-      { id: 'silver', name: 'Silver', hex: '#b8bcc0', surchargePct: 20 },
-      { id: 'copper', name: 'Copper', hex: '#b3673f', surchargePct: 20 },
-      { id: 'pearl-white', name: 'Pearl White', hex: '#efe8df', surchargePct: 20 },
-      { id: 'pearl-blue', name: 'Pearl Blue', hex: '#a9c3d6', surchargePct: 20 },
+      { id: 'white', name: 'White', hex: '#f2f2ee', surchargePct: 0, finish: 'solid' },
+      { id: 'black', name: 'Black', hex: '#1c1c1c', surchargePct: 0, finish: 'solid' },
+      { id: 'dark-grey', name: 'Dark Grey', hex: '#4d4d4d', surchargePct: 0, finish: 'solid' },
+      { id: 'red', name: 'Red', hex: '#c0392b', surchargePct: 10, finish: 'solid' },
+      { id: 'orange', name: 'Orange', hex: '#e2711d', surchargePct: 10, finish: 'solid' },
+      { id: 'yellow', name: 'Yellow', hex: '#f0c414', surchargePct: 10, finish: 'solid' },
+      { id: 'green', name: 'Green', hex: '#1f8a3d', surchargePct: 10, finish: 'solid' },
+      { id: 'blue', name: 'Blue', hex: '#1a5fb4', surchargePct: 10, finish: 'solid' },
+      { id: 'purple', name: 'Purple', hex: '#7d3c98', surchargePct: 10, finish: 'solid' },
+      { id: 'pink', name: 'Pink', hex: '#e88ab0', surchargePct: 10, finish: 'solid' },
+      { id: 'brown', name: 'Brown', hex: '#6d4c33', surchargePct: 10, finish: 'solid' },
+      { id: 'gold', name: 'Gold', hex: '#cfa036', surchargePct: 20, finish: 'metallic' },
+      { id: 'silver', name: 'Silver', hex: '#b8bcc0', surchargePct: 20, finish: 'metallic' },
+      { id: 'copper', name: 'Copper', hex: '#b3673f', surchargePct: 20, finish: 'metallic' },
+      { id: 'pearl-white', name: 'Pearl White', hex: '#efe8df', surchargePct: 20, finish: 'pearl' },
+      { id: 'pearl-blue', name: 'Pearl Blue', hex: '#a9c3d6', surchargePct: 20, finish: 'pearl' },
     ],
     buildPlate: { x: 256, y: 256, z: 256, marginPct: 15 },
   },
   discounts: {
     quantityPct: 0,
     multiPart: [],          // [{ minParts: 3, pct: 5 }, …], best matching tier wins
+    minPartMl: 0,           // parts smaller than this get no discounts and don't count towards tiers
+    maxMultiPartDiscount: 0, // the most a multi-part discount can take off one model (0 = no cap)
   },
   finishes: {
     assemblyFirst: 5,
@@ -233,11 +241,67 @@ export function formulaPartPrice(part, formula) {
 }
 
 /** A part's line total for `quantity` copies: the first at full price, the
- *  rest with the quantity discount. Rounded to pennies. */
-export function quantityLineTotal(unitPrice, quantity, formula) {
+ *  rest with the quantity discount (none for a part too small to discount).
+ *  Rounded to pennies. Labour is added separately and never discounted. */
+export function quantityLineTotal(unitPrice, quantity, formula, eligible = true) {
   const q = Math.max(1, Math.floor(quantity) || 1);
-  const extra = (q - 1) * unitPrice * (1 - formula.discounts.quantityPct / 100);
+  const pct = eligible ? formula.discounts.quantityPct : 0;
+  const extra = (q - 1) * unitPrice * (1 - pct / 100);
   return Math.round((unitPrice + extra) * 100) / 100;
+}
+
+/**
+ * Handling labour for one copy of a part: the per-part fee, plus the
+ * small-part fee when the part is under the small-part size. Tiny resin parts
+ * take as long to clean, cure, check and bag as big ones, so this keeps a
+ * basket of a hundred tiny parts from being priced like a few grams of resin.
+ * Added after every discount — labour is never discounted.
+ */
+export function labourFee(volumeMl, method, formula) {
+  const l = (method === 'pla' ? formula.fdm : formula.resin).labour;
+  return l.perPart + (volumeMl < l.smallPartMaxMl ? l.smallPartFee : 0);
+}
+
+/** Parts below the discount minimum size get no discounts and don't count
+ *  towards the multi-part tiers. */
+export function discountEligible(volumeMl, formula) {
+  return volumeMl >= formula.discounts.minPartMl;
+}
+
+/** A model's multi-part discount: the best tier for its eligible part count,
+ *  as a % of its eligible parts' (non-labour) total, capped per model. */
+export function multiPartDiscount(eligibleParts, discountableSubtotal, formula) {
+  const pct = multiPartDiscountPct(eligibleParts, formula);
+  let amount = Math.round(discountableSubtotal * pct) / 100;
+  const cap = formula.discounts.maxMultiPartDiscount;
+  if (cap > 0 && amount > cap) amount = cap;
+  return { pct, amount };
+}
+
+/** Display only (not ported to the relay): a CSS background for a colour
+ *  swatch with its finish, used by the calculator and the admin page. */
+export const FINISHES = Object.freeze({
+  solid: 'Solid', matte: 'Matte', silk: 'Silk', metallic: 'Metallic',
+  pearl: 'Pearlescent', translucent: 'Translucent', glow: 'Glow in the dark',
+});
+export function swatchBackground(hex, finish) {
+  const c = /^#[0-9a-f]{6}$/i.test(hex || '') ? hex : '#888888';
+  switch (finish) {
+    case 'silk':
+      return `linear-gradient(135deg, ${c} 0%, rgba(255,255,255,.55) 45%, ${c} 60%, rgba(0,0,0,.18) 100%), ${c}`;
+    case 'metallic':
+      return `linear-gradient(135deg, rgba(0,0,0,.35) 0%, rgba(255,255,255,.75) 40%, rgba(255,255,255,.1) 55%, rgba(0,0,0,.3) 100%), ${c}`;
+    case 'pearl':
+      return `linear-gradient(135deg, rgba(255,190,225,.55) 0%, rgba(190,225,255,.55) 35%, rgba(255,250,215,.55) 65%, rgba(210,190,255,.55) 100%), ${c}`;
+    case 'translucent':
+      return `linear-gradient(${c}99, ${c}99), repeating-conic-gradient(#ffffff 0 25%, #d9d9d9 0 50%) 0 0 / 10px 10px`;
+    case 'glow':
+      return `radial-gradient(circle at 50% 50%, rgba(255,255,255,.65) 0%, ${c} 55%, ${c} 100%)`;
+    case 'matte':
+      return `linear-gradient(rgba(255,255,255,.06), rgba(0,0,0,.06)), ${c}`;
+    default:
+      return c;
+  }
 }
 
 /** The multi-part discount % for a model with this many parts (best tier). */
@@ -262,14 +326,14 @@ export function applyFormula(config, savedFormula) {
     ...config,
     formula,
     materials: formula.resin.materials.map(({ id, name, modifierPct }) => ({ id, name, modifierPct })),
-    fdmMaterials: formula.fdm.materials.map(({ id, name, modifierPct }) => ({ id, name, modifierPct })),
+    fdmMaterials: formula.fdm.materials.map(({ id, name, modifierPct, finish }) => ({ id, name, modifierPct, finish })),
     printMethods: {
       resin: { enabled: formula.resin.enabled, label: formula.resin.label, description: formula.resin.description },
       pla: { enabled: formula.fdm.enabled, label: formula.fdm.label, description: formula.fdm.description },
     },
     // Each colour is its own surcharge "tier", so the existing colour code
     // reads per-colour surcharges unchanged.
-    plaColors: formula.fdm.colours.map(({ id, name, hex }) => ({ id, name, hex, tier: id })),
+    plaColors: formula.fdm.colours.map(({ id, name, hex, finish }) => ({ id, name, hex, finish, tier: id })),
     plaColorSurchargePct: Object.fromEntries(formula.fdm.colours.map((c) => [c.id, c.surchargePct])),
     primerOptions: [{ id: 'unprimed', label: 'Unprimed' }, ...f.primer.colours.filter((c) => c.id !== 'unprimed')],
     primerTiers: f.primer.tiers.map((t) => ({ maxVolumeMl: t.maxMl, price: t.price })),

@@ -5,7 +5,7 @@
 // briefly unreachable — it is not the source of truth.
 // ============================================================
 
-import { applyFormula } from './print-calc-pricing-formula.js?v=d245c23ed4';
+import { applyFormula } from './print-calc-pricing-formula.js?v=66cb1e3cf2';
 
 const CONFIG_KEY = 'stl_calc_config_v1';
 // STAGING BUILD — points at shopify-relay-staging, not the live relay.
