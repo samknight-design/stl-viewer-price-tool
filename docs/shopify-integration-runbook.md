@@ -40,13 +40,13 @@ browser runs. See §7a.
 |---|---|
 | Supabase project | `aqnpkvzycdjwbapfpvfl` |
 | Relay base URL | `https://aqnpkvzycdjwbapfpvfl.supabase.co/functions/v1/shopify-relay` |
-| Edge function | `shopify-relay` (v54 at time of writing), `verify_jwt: false` |
+| Edge function | `shopify-relay` v55 (2026-11-20): a shim importing committed source from raw GitHub, pinned at `2a0a2c9`. Redeploy with a new SHA to change it. `verify_jwt: false`, `import_map_path: deno.json` |
 | Staging function | `shopify-relay-staging` — same secrets, used by draft themes. v5 pinned at `24ad779` (formula pricing); `measure-stl` v4 pinned there too |
 | Storage bucket | `quote-uploads` (public read; writes only via signed URL) |
 | Shopify shop | Arcane Flame, `gid://shopify/Shop/87781310808` |
 | Hidden product | `Custom 3D Print (do not edit)` — `15907078340952` |
 | Pricing metafield | `print_calculator.pricing_config` (type `json`, shop-owned) |
-| Live theme (MAIN) | `198035210584` — "PUBLISH THIS - calculator file fix (5 Sep)" |
+| Live theme (MAIN) | `198754959704` — "PUBLISH THIS - pricing admin (20 Nov)", published 2026-11-20 |
 | Draft under test | `198754959704` — "PREVIEW - formula pricing (4 Nov) - DRAFT" (reused: the store is at Shopify's 20-theme limit, so `themeDuplicate` silently returns nothing) |
 
 > The live theme ID moves every time a draft is published, and this table has
@@ -171,7 +171,7 @@ relay skips an FDM file without it rather than pricing it).
 
 To change formula prices: export settings from the trainer, then set them as
 `formula` inside the `pricing_config` metafield (keep every other key). The
-live relay (v54) and live theme ignore the key until this branch ships.
+live relay (v55) and live theme use it since 2026-11-20.
 
 **Before publishing the preview theme:** revert `RELAY_BASE_URL` in
 `shopify-theme/assets/print-calc-config.js` to the live relay, and deploy the
