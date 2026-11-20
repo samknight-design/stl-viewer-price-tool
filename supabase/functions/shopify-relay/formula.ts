@@ -43,6 +43,8 @@ export interface Formula {
   order: { roundTo: number; minimumOrderTotal: number; customQuoteThreshold: number };
   resin: {
     enabled: boolean;
+    label: string;
+    description: string;
     adjustPct: number;
     startingCharge: number;
     volume: CurveTerm & { refMl: number };
@@ -54,6 +56,8 @@ export interface Formula {
   };
   fdm: {
     enabled: boolean;
+    label: string;
+    description: string;
     adjustPct: number;
     startingCharge: number;
     filament: CurveTerm & { refG: number };
@@ -72,7 +76,7 @@ export interface Formula {
     primer: {
       tiers: Array<{ maxMl: number; price: number }>;
       maxPrice: number;
-      colours: Array<{ id: string; label: string }>;
+      colours: Array<{ id: string; label: string; hex?: string }>;
     };
   };
 }
@@ -84,6 +88,8 @@ export const FORMULA_DEFAULTS: Formula = Object.freeze({
   order: { roundTo: 0.5, minimumOrderTotal: 5, customQuoteThreshold: 150 },
   resin: {
     enabled: true,
+    label: "Resin",
+    description: "Finest detail, best for miniatures.",
     adjustPct: 0,
     startingCharge: -1.69,
     volume: { price: 7.43, refMl: 25, curve: 0.5 },
@@ -95,6 +101,8 @@ export const FORMULA_DEFAULTS: Formula = Object.freeze({
   },
   fdm: {
     enabled: true,
+    label: "PLA",
+    description: "Tougher and cheaper on bigger parts. You pick a colour per part.",
     adjustPct: 0,
     startingCharge: 0,
     filament: { price: 12.16, refG: 100, curve: 0.5 },
@@ -138,9 +146,9 @@ export const FORMULA_DEFAULTS: Formula = Object.freeze({
       ],
       maxPrice: 20,
       colours: [
-        { id: "black", label: "Black Primer" },
-        { id: "grey", label: "Grey Primer" },
-        { id: "white", label: "White Primer" },
+        { id: "black", label: "Black Primer", hex: "#1a1a1a" },
+        { id: "grey", label: "Grey Primer", hex: "#9a9a9a" },
+        { id: "white", label: "White Primer", hex: "#f6f3ec" },
       ],
     },
   },

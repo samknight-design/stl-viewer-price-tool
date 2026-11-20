@@ -1248,3 +1248,13 @@ input.mat-color { padding: 2px; height: 32px; cursor: pointer; background: trans
   .mobile-summary-bar { padding-right: 118px; }
   .mobile-summary-bar .btn { padding: 8px 14px; font-size: .78rem; }
 }
+
+/* Material picker: the print method switch plus, when a method has more than
+   one material (set in the pricing admin), its material dropdown. */
+.mset-material { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.mset-value { font-size: .84em; font-weight: 500; color: var(--text); }
+.mset-select {
+  background: var(--bg2); border: 1px solid var(--card-border); border-radius: var(--radius-sm);
+  color: var(--text); font-family: var(--body-font); font-size: .8em; padding: 6px 10px; min-height: 32px;
+}
+.mset-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }

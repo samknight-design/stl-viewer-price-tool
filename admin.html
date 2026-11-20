@@ -3,249 +3,174 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin — 3D Print Calculator Settings</title>
-  <link rel="stylesheet" href="css/style.css?v=14">
-  <script type="importmap">
-  {
-    "imports": {
-      "three":         "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"
+  <meta name="robots" content="noindex, nofollow">
+  <title>Pricing Admin · Arcane Flame</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+  <style>
+    /* Layout: a login card, then a three-column workspace — section nav,
+       settings, and a sticky live preview. Numbers in mono. */
+    :root {
+      --bg: #f2f3f1; --surface: #ffffff; --ink: #1b2123; --muted: #5d6a6e; --line: #dde2e1;
+      --accent: #0c5f73; --accent-soft: #e3eff2; --good: #1f7a45; --warn: #a2501c; --bad: #b3261e;
+      --on-accent: #ffffff;
+      --font-ui: "IBM Plex Sans", system-ui, "Segoe UI", sans-serif;
+      --font-num: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+      color-scheme: light;
     }
-  }
-  </script>
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #12171a; --surface: #1a2125; --ink: #e6ecec; --muted: #94a3a6; --line: #2c373b;
+        --accent: #5fb7cb; --accent-soft: #183039; --good: #6fca93; --warn: #e79c68; --bad: #f2867c;
+        --on-accent: #0d1416; color-scheme: dark;
+      }
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 var(--font-ui); }
+    button, input, select, textarea { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    h1, h2, h3 { margin: 0; text-wrap: balance; }
+    .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+
+    .btn { font-weight: 600; color: var(--on-accent); background: var(--accent); border: 0; border-radius: 8px; padding: 9px 16px; }
+    .btn.quiet { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+    .btn.small { padding: 5px 10px; font-size: 12px; }
+    .btn.danger { background: transparent; color: var(--bad); border: 1px solid var(--line); }
+    .btn:disabled { opacity: .5; cursor: default; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    input[type="text"], input[type="number"], input[type="password"], select, textarea {
+      background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; min-width: 0;
+    }
+    input[type="number"] { font-family: var(--font-num); text-align: right; }
+    input[type="color"] { width: 36px; height: 30px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; }
+    input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+    /* Login */
+    .login { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
+    .login-card { width: min(380px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 28px; display: grid; gap: 14px; }
+    .login-card p { margin: 0; color: var(--muted); }
+    .login-card input { width: 100%; }
+    .error { color: var(--bad); min-height: 1.4em; margin: 0; }
+
+    /* Workspace */
+    .top {
+      position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line);
+      display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+      padding: 12px max(16px, env(safe-area-inset-right)) 12px max(16px, env(safe-area-inset-left));
+    }
+    .top h1 { font-size: 18px; }
+    .status { font-size: 13px; color: var(--muted); }
+    .status.dirty { color: var(--warn); font-weight: 600; }
+    .status.ok { color: var(--good); }
+    .top .actions { margin-left: auto; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .layout {
+      display: grid; grid-template-columns: 190px minmax(0, 1fr) minmax(0, 400px); gap: 18px; align-items: start;
+      padding: 18px max(16px, env(safe-area-inset-right)) 60px max(16px, env(safe-area-inset-left));
+      max-width: 1500px; margin: 0 auto;
+    }
+    @media (max-width: 1150px) { .layout { grid-template-columns: 170px minmax(0, 1fr); } .preview { grid-column: 1 / -1; position: static !important; } }
+    @media (max-width: 720px) { .layout { grid-template-columns: minmax(0, 1fr); } nav.sections { position: static !important; flex-direction: row; flex-wrap: wrap; } }
+    nav.sections { position: sticky; top: 74px; display: flex; flex-direction: column; gap: 2px; }
+    nav.sections button { text-align: left; background: transparent; border: 0; border-radius: 8px; padding: 8px 10px; color: var(--muted); }
+    nav.sections button[aria-current="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: inset 3px 0 0 var(--accent); }
+    nav.sections .dot { color: var(--warn); margin-left: 4px; }
+    .panel { display: grid; gap: 16px; min-width: 0; }
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 14px; min-width: 0; }
+    .card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+    .card h2 { font-size: 16px; }
+    .card h3 { font-size: 14px; }
+    .card .intro { margin: -6px 0 0; color: var(--muted); max-width: 72ch; }
+    .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px 22px; }
+
+    /* One setting */
+    .field { display: grid; gap: 4px; padding-left: 10px; border-left: 3px solid transparent; }
+    .field.changed { border-left-color: var(--accent); }
+    .field-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .field-top label { font-weight: 500; }
+    .field-val { display: flex; align-items: center; gap: 6px; }
+    .field-val input[type="number"] { width: 96px; }
+    .unit { color: var(--muted); font-size: 12px; min-width: 18px; }
+    .hint { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+    .hint .def { white-space: nowrap; }
+    .link { background: none; border: 0; padding: 0; color: var(--accent); font-size: 12px; text-decoration: underline; }
+    .toggle { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+    .toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
+    .text-field input, .text-field textarea { width: 100%; }
+
+    /* Editable lists */
+    .rows { display: grid; gap: 8px; }
+    .row { display: grid; gap: 8px; align-items: center; }
+    .row-head { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+    .rows-materials .row { grid-template-columns: minmax(140px, 1fr) 110px 190px; }
+    .rows-filaments .row { grid-template-columns: minmax(140px, 1fr) 100px 100px 190px; }
+    .rows-colours .row { grid-template-columns: 40px minmax(120px, 1fr) 100px 90px; }
+    .rows-primer-colours .row { grid-template-columns: 40px minmax(140px, 1fr) 90px; }
+    .rows-tiers .row { grid-template-columns: 120px 120px 90px; }
+    .row-actions { justify-content: flex-end; }
+    .row input { width: 100%; }
+    .chip { font-size: 11px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--good); color: var(--good); white-space: nowrap; }
+    .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    @media (max-width: 640px) {
+      .rows-materials .row, .rows-filaments .row, .rows-colours .row, .rows-primer-colours .row { grid-template-columns: 1fr 1fr; }
+      .row-head { display: none !important; }
+    }
+
+    /* Preview */
+    .preview { position: sticky; top: 74px; display: grid; gap: 14px; }
+    .preview table { width: 100%; border-collapse: collapse; }
+    .preview th, .preview td { padding: 6px 4px; text-align: left; vertical-align: top; }
+    .preview th { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line); }
+    .preview td.r, .preview th.r { text-align: right; }
+    .preview tbody tr + tr td { border-top: 1px solid var(--line); }
+    .sub { display: block; color: var(--muted); font-size: 12px; }
+    .up { color: var(--good); font-weight: 600; }
+    .down { color: var(--warn); font-weight: 600; }
+    .try { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; align-items: end; }
+    .try label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
+    .try input, .try select { width: 100%; }
+    .try-result { grid-column: 1 / -1; background: var(--accent-soft); border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.6; }
+    .big { font-family: var(--font-num); font-size: 20px; font-weight: 500; }
+    .notice { padding: 10px 14px; border-radius: 8px; background: var(--accent-soft); }
+    .notice.warn { color: var(--warn); }
+    .confirm { display: inline-flex; align-items: center; gap: 8px; color: var(--warn); font-size: 13px; flex-wrap: wrap; }
+    .history li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); }
+    .history { list-style: none; margin: 0; padding: 0; }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  </style>
 </head>
 <body>
 
-<!-- ── Password gate ─────────────────────────────────────────────── -->
-<div class="auth-overlay" id="auth-overlay">
-  <div class="auth-panel" id="auth-panel">
-    <div style="margin-bottom:12px" data-icon-only="lock" data-icon-size="32"></div>
-    <h2>Admin Access</h2>
-    <p>Enter the admin password to manage pricing settings.</p>
-    <form id="auth-form">
-      <div class="form-field">
-        <input type="password" id="auth-password" placeholder="Password" autofocus>
-      </div>
-      <button class="btn btn-primary" style="width:100%" type="submit">Login</button>
-      <p class="auth-error" id="auth-error"></p>
-    </form>
-    <p style="margin-top:16px;font-size:.75rem;color:var(--text-dimmer)">
-      Locked out? The password is stored as an ADMIN_PASSWORD secret on the Supabase project — reset it with the Supabase CLI or dashboard.
-    </p>
+<section class="login" id="login">
+  <form class="login-card" id="login-form">
+    <h1>Pricing admin</h1>
+    <p>Sign in with the admin password to change what the online calculator charges.</p>
+    <input type="password" id="login-password" autocomplete="current-password" placeholder="Admin password" required>
+    <button class="btn" type="submit" id="login-btn">Sign in</button>
+    <button class="btn quiet" type="button" id="explore-btn">Explore without signing in</button>
+    <p class="error" id="login-error" role="alert"></p>
+    <p style="font-size:12px">Forgotten it? The password is the <code>ADMIN_PASSWORD</code> secret on the Supabase project.</p>
+  </form>
+</section>
+
+<div id="app" hidden>
+  <header class="top">
+    <h1>Pricing admin</h1>
+    <span class="status" id="status" aria-live="polite"></span>
+    <div class="actions">
+      <span id="discard-slot"></span>
+      <button class="btn" type="button" id="save-btn" disabled>Save and publish</button>
+      <button class="btn quiet small" type="button" id="signout-btn">Sign out</button>
+    </div>
+  </header>
+  <div class="layout">
+    <nav class="sections" id="sections" aria-label="Settings sections"></nav>
+    <main class="panel" id="panel"></main>
+    <aside class="preview" id="preview" aria-label="Live price preview"></aside>
   </div>
 </div>
 
-<!-- ── Admin page body ───────────────────────────────────────────── -->
-<div class="admin-wrap">
-
-  <div class="admin-header">
-    <div>
-      <h1 data-icon="settings" data-icon-size="22">Pricing Settings</h1>
-      <p>Configure resin costs, materials, and markup. Changes save to browser storage.</p>
-    </div>
-    <div class="flex gap-8">
-      <a href="index.html" class="btn btn-ghost btn-sm" data-icon="arrowLeft">Calculator</a>
-    </div>
-  </div>
-
-  <form id="config-form" onsubmit="return false">
-
-    <!-- ── Core pricing ──────────────────────────────────────────── -->
-    <div class="section">
-      <div class="section-header" data-icon="dollarSign">Core Pricing</div>
-      <div class="section-body">
-        <div class="form-grid">
-
-          <div class="form-field-adm">
-            <label for="inp-resin-cost">Default resin cost (per mL)</label>
-            <div class="flex items-center gap-8">
-              <span class="text-dim" style="white-space:nowrap" id="lbl-currency-prefix">£</span>
-              <input type="number" id="inp-resin-cost" min="0" step="0.001" value="0.08">
-            </div>
-            <p class="field-hint">Base material cost. Overridden per material below.</p>
-          </div>
-
-          <div class="form-field-adm">
-            <label for="inp-support">Support material (%)</label>
-            <input type="number" id="inp-support" min="0" max="100" step="1" value="20">
-            <p class="field-hint">Extra volume added for support structures.</p>
-          </div>
-
-          <div class="form-field-adm">
-            <label for="inp-machine-hourly">Machine time cost (per hour)</label>
-            <input type="number" id="inp-machine-hourly" min="0" step="0.01" value="2.50">
-            <p class="field-hint">Electricity + machine depreciation per hour.</p>
-          </div>
-
-          <div class="form-field-adm">
-            <label for="inp-print-speed">Print speed (mL per hour)</label>
-            <input type="number" id="inp-print-speed" min="1" step="0.5" value="15">
-            <p class="field-hint">Average mL printed per hour (affects time cost).</p>
-          </div>
-
-          <div class="form-field-adm">
-            <label for="inp-markup">Profit markup (%)</label>
-            <input type="number" id="inp-markup" min="0" step="1" value="40">
-            <p class="field-hint">Applied to total base cost.</p>
-          </div>
-
-          <div class="form-field-adm">
-            <label for="inp-minimum">Minimum order total</label>
-            <input type="number" id="inp-minimum" min="0" step="0.01" value="5.00">
-            <p class="field-hint">If the whole order comes to less than this, it's bumped up to this amount. Individual items can be cheaper.</p>
-          </div>
-
-          <div class="form-field-adm">
-            <label for="inp-labour-base">Labour base fee (per model group)</label>
-            <input type="number" id="inp-labour-base" min="0" step="0.01" value="2.00">
-            <p class="field-hint">Flat labour charge added once per model group for handling &amp; finishing.</p>
-          </div>
-
-          <div class="form-field-adm">
-            <label for="inp-currency-symbol">Currency symbol</label>
-            <input type="text" id="inp-currency-symbol" maxlength="4" value="£" style="max-width:80px">
-            <p class="field-hint">e.g. £, €, $</p>
-          </div>
-
-        </div>
-
-        <div style="margin-top:16px">
-          <label class="flex items-center gap-8" style="cursor:pointer;font-size:.875rem">
-            <input type="checkbox" id="chk-show-breakdown" checked>
-            Show itemised cost breakdown to customers
-          </label>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Assembly pricing ─────────────────────────────────────────── -->
-    <div class="section">
-      <div class="section-header" data-icon="puzzle">Assembly Pricing</div>
-      <div class="section-body">
-        <p style="font-size:.82rem;color:var(--text-dim);margin-bottom:18px">
-          Applied per model group when the customer requests assembly. Formula:
-          <code style="color:var(--accent-light)">base + (joints − 1) × perJoint</code>, capped at max.
-        </p>
-        <div class="form-grid">
-
-          <div class="form-field-adm">
-            <label for="inp-assembly-base">Base cost (2 parts)</label>
-            <input type="number" id="inp-assembly-base" min="0" step="0.01" value="5.00">
-            <p class="field-hint">Cost for joining 2 parts (first joint).</p>
-          </div>
-
-          <div class="form-field-adm">
-            <label for="inp-assembly-per-joint">Per extra joint</label>
-            <input type="number" id="inp-assembly-per-joint" min="0" step="0.01" value="3.50">
-            <p class="field-hint">Added for each joint beyond the first (3rd part, 4th, …).</p>
-          </div>
-
-          <div class="form-field-adm">
-            <label for="inp-assembly-max">Maximum assembly cost</label>
-            <input type="number" id="inp-assembly-max" min="0" step="0.50" value="40.00">
-            <p class="field-hint">Cap — large kits won't exceed this.</p>
-          </div>
-
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Primer pricing ───────────────────────────────────────────── -->
-    <div class="section">
-      <div class="section-header" data-icon="paintbrush">Primer Pricing</div>
-      <div class="section-body">
-        <p style="font-size:.82rem;color:var(--text-dim);margin-bottom:18px">
-          Applied once per model group (not per part), from the combined print volume of
-          all its parts, using a volume tier ladder (edit <code style="color:var(--accent-light)">primerTiers</code>
-          in config.js — not yet exposed here). The min/max below are safety clamps around it.
-        </p>
-        <div class="form-grid">
-
-          <div class="form-field-adm">
-            <label for="inp-primer-min">Minimum primer price</label>
-            <input type="number" id="inp-primer-min" min="0" step="0.10" value="0.50">
-            <p class="field-hint">Floor — even a tiny primed model costs at least this.</p>
-          </div>
-
-          <div class="form-field-adm">
-            <label for="inp-primer-max">Maximum primer price</label>
-            <input type="number" id="inp-primer-max" min="0" step="0.50" value="20.00">
-            <p class="field-hint">Cap — large kits won't exceed this.</p>
-          </div>
-
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Materials ─────────────────────────────────────────────── -->
-    <div class="section">
-      <div class="section-header">
-        <span data-icon="flask">Materials</span>
-        <button class="btn btn-secondary btn-sm" type="button" id="add-material" data-icon="plus" data-icon-size="14">Add Material</button>
-      </div>
-      <div class="section-body">
-        <div style="display:grid;grid-template-columns:1fr 160px 42px 1fr 32px;gap:8px;font-size:.75rem;color:var(--text-dim);padding:0 0 6px">
-          <span>Name</span><span>Cost / mL</span><span>Colour</span><span>Description</span><span></span>
-        </div>
-        <div id="materials-list"></div>
-      </div>
-    </div>
-
-    <!-- ── Business info ─────────────────────────────────────────── -->
-    <div class="section">
-      <div class="section-header" data-icon="store">Business Info</div>
-      <div class="section-body">
-        <div class="form-grid">
-          <div class="form-field-adm">
-            <label for="inp-biz-name">Business name</label>
-            <input type="text" id="inp-biz-name" value="3D Print Shop">
-          </div>
-          <div class="form-field-adm">
-            <label for="inp-biz-email">Contact email</label>
-            <input type="email" id="inp-biz-email" placeholder="orders@example.com">
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Actions ───────────────────────────────────────────────── -->
-    <div class="flex gap-8" style="flex-wrap:wrap">
-      <button class="btn btn-primary" type="button" id="save-btn" data-icon="save">Save Settings</button>
-      <button class="btn btn-secondary" type="button" id="export-btn" data-icon="download">Export JSON</button>
-      <button class="btn btn-ghost" type="button" id="reset-btn" data-icon="undo">Reset to Defaults</button>
-    </div>
-
-  </form><!-- /#config-form -->
-
-  <!-- ── Live pricing preview ──────────────────────────────────── -->
-  <div class="section" style="margin-top:28px">
-    <div class="section-header" data-icon="barChart">Live Pricing Preview <small style="font-weight:400;color:var(--text-dim)">(updates as you type)</small></div>
-    <div class="section-body" style="overflow-x:auto">
-      <table class="preview-table">
-        <thead>
-          <tr>
-            <th>Sample</th>
-            <th>Volume</th>
-            <th>Resin</th>
-            <th>Print time</th>
-            <th>Machine</th>
-            <th>Base cost</th>
-            <th>Markup</th>
-            <th>Unit price</th>
-          </tr>
-        </thead>
-        <tbody id="preview-tbody">
-          <tr><td colspan="8" style="color:var(--text-dim);padding:20px">Save or change settings to preview…</td></tr>
-        </tbody>
-      </table>
-      <p style="font-size:.75rem;color:var(--text-dimmer);margin-top:10px">
-        Preview uses the first material in the list. Support material and markup included.
-      </p>
-    </div>
-  </div>
-
-</div><!-- /.admin-wrap -->
-
-<script type="module" src="js/admin.js?v=3"></script>
+<script type="module" src="js/admin.js?v=20"></script>
 </body>
 </html>

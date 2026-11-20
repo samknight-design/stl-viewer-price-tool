@@ -89,13 +89,31 @@ function findItem(id) {
   return null;
 }
 
+// Print methods (names, help text, on/off) and each method's materials come
+// from the pricing settings, folded into the config by getConfig().
+function methodInfo(method) {
+  return config?.printMethods?.[method]
+    ?? { enabled: true, label: method === 'pla' ? 'PLA' : 'Resin', description: '' };
+}
+function defaultMethod() {
+  return methodInfo('resin').enabled === false && methodInfo('pla').enabled !== false ? 'pla' : 'resin';
+}
+function materialsFor(method) {
+  return (method === 'pla' ? config?.fdmMaterials : config?.materials) || config?.materials || [];
+}
+function defaultMaterialId(method) {
+  return materialsFor(method)[0]?.id;
+}
+
 function defaultGroupSettings() {
+  const printMethod = defaultMethod();
   return {
     assembly: false,
     primer: 'unprimed',
     extras: [],
     notes: '',
-    printMethod: 'resin',
+    printMethod,
+    materialId: defaultMaterialId(printMethod),
   };
 }
 
@@ -330,7 +348,7 @@ function buildGroupHTML(group) {
   // Summary chips — what the model's settings currently add up to, in one
   // line, so the settings panel can stay shut without hiding the answer.
   const chips = [
-    isPlaModel ? 'PLA' : 'Resin',
+    methodInfo(isPlaModel ? 'pla' : 'resin').label,
     primerLabel,
     canAssemble ? (assemblyActive ? 'Assembled' : 'Loose parts') : null,   // chip stays terse; the control carries the full wording
     group.settings.notes?.trim() ? 'Notes added' : null,
@@ -385,6 +403,7 @@ function buildGroupHTML(group) {
 /** The extras that made up a model's total, as a compact inline list. */
 function buildModelFootBreakdown(gc, assemblyActive, sym) {
   const bits = [];
+  if (gc.multiPartDiscount > 0) bits.push(`multi-part discount −${fmt(gc.multiPartDiscount, sym)}`);
   if (assemblyActive)      bits.push(`assembly +${fmt(gc.assemblyCost, sym)}`);
   if (gc.isPrimed)         bits.push(`primer +${fmt(gc.primerTotal, sym)}`);
   if (gc.plaColorCost > 0) bits.push(`colour +${fmt(gc.plaColorCost, sym)}`);
@@ -407,6 +426,38 @@ function shortPrimerLabel(option) {
   return option.label.replace(/\s*primer\s*$/i, '');
 }
 
+// The print method switch (only the methods switched on in the pricing
+// settings) and, when a method has more than one, its material picker.
+function buildMaterialSettingHTML(group, isPlaModel) {
+  const resin = methodInfo('resin'), pla = methodInfo('pla');
+  const offered = [['resin', resin], ['pla', pla]].filter(([, m]) => m.enabled !== false);
+  const current = isPlaModel ? 'pla' : 'resin';
+  const tip = offered.filter(([, m]) => m.description)
+    .map(([, m]) => `<strong>${esc(m.label)}</strong> — ${esc(m.description)}`).join('<br>');
+  const methodHTML = offered.length > 1
+    ? `<span class="seg seg-sm">${offered.map(([id, m]) =>
+        `<button class="seg-btn ${current === id ? 'active' : ''}" data-action="print-method" data-val="${id}">${esc(m.label)}</button>`).join('')}</span>`
+    : `<span class="mset-value">${esc(methodInfo(current).label)}</span>`;
+  const mats = materialsFor(current);
+  const chosen = mats.some(m => m.id === group.settings.materialId) ? group.settings.materialId : mats[0]?.id;
+  const materialHTML = mats.length > 1 ? `
+      <select class="mset-select" data-action="material-select" aria-label="${esc(methodInfo(current).label)} type">
+        ${mats.map(m => `<option value="${esc(m.id)}"${m.id === chosen ? ' selected' : ''}>${esc(m.name)}${m.modifierPct ? ` (${m.modifierPct > 0 ? '+' : ''}${m.modifierPct}%)` : ''}</option>`).join('')}
+      </select>` : '';
+  return `
+      <div class="mset">
+        <span class="mset-head">
+          <span class="mset-label">Material</span>
+          ${tip ? `<span class="info-tip-wrap">
+            <button type="button" class="info-tip-btn" data-action="toggle-info"
+                    aria-label="Which material?" aria-expanded="false">${icon('helpCircle', { size: 14 })}</button>
+            <span class="info-tip-content" role="tooltip">${tip}</span>
+          </span>` : ''}
+        </span>
+        <span class="mset-material">${methodHTML}${materialHTML}</span>
+      </div>`;
+}
+
 function buildModelSettingsHTML(group, ctx) {
   const { isPlaModel, canAssemble, assemblyActive, totalParts, gc, sym } = ctx;
 
@@ -414,7 +465,7 @@ function buildModelSettingsHTML(group, ctx) {
   const primerSwatchesHTML = config.primerOptions.map(p => {
     const active = group.settings.primer === p.id;
     const isNone = p.id === 'unprimed';
-    const color  = primerColors[p.id] || '#c9a15a';
+    const color  = p.hex || primerColors[p.id] || '#c9a15a';
     return `
       <button type="button" class="primer-swatch-btn" data-action="primer-select" data-primer-id="${esc(p.id)}"
               title="${esc(p.label)}" aria-label="${esc(p.label)}" aria-pressed="${active}">
@@ -434,23 +485,7 @@ function buildModelSettingsHTML(group, ctx) {
   return `
     <div class="model-settings">
 
-      <div class="mset">
-        <span class="mset-head">
-          <span class="mset-label">Material</span>
-          <span class="info-tip-wrap">
-            <button type="button" class="info-tip-btn" data-action="toggle-info"
-                    aria-label="Resin or PLA?" aria-expanded="false">${icon('helpCircle', { size: 14 })}</button>
-            <span class="info-tip-content" role="tooltip">
-              <strong>Resin</strong> — finest detail, best for miniatures.<br>
-              <strong>PLA</strong> — tougher and cheaper on bigger parts. You pick a colour per part.
-            </span>
-          </span>
-        </span>
-        <span class="seg seg-sm">
-          <button class="seg-btn ${!isPlaModel ? 'active' : ''}" data-action="print-method" data-val="resin">Resin</button>
-          <button class="seg-btn ${isPlaModel ? 'active' : ''}" data-action="print-method" data-val="pla">PLA</button>
-        </span>
-      </div>
+      ${buildMaterialSettingHTML(group, isPlaModel)}
 
       <div class="mset">
         <span class="mset-head">
@@ -635,6 +670,7 @@ function formulaBreakdownHTML(c, sym) {
   }
   if (f.modifierPct) rows.push(`<tr><td>Includes ${esc(f.materialName)} (${f.modifierPct > 0 ? '+' : ''}${f.modifierPct}%)</td><td></td></tr>`);
   if (c.colorSurchargePct > 0) rows.push(`<tr><td>Colour surcharge (+${c.colorSurchargePct}%)</td><td>${fmt(c.colorSurchargeAmount, sym)}</td></tr>`);
+  if (c.quantityDiscount > 0) rows.push(`<tr><td>Discount on extra copies</td><td>−${fmt(c.quantityDiscount, sym)}</td></tr>`);
   if (f.minApplied) rows.push(`<tr><td>Minimum price per part applied</td><td></td></tr>`);
   return rows.join('');
 }
@@ -793,6 +829,9 @@ function handleGroupClick(e, group, card) {
       const val = btn.dataset.val === 'pla' ? 'pla' : 'resin';
       if (group.settings.printMethod !== val) {
         group.settings.printMethod = val;
+        // Each method has its own materials; switching starts on its default.
+        group.settings.materialId = defaultMaterialId(val);
+        group.items.forEach(i => { i.settings.materialId = group.settings.materialId; });
         group.items.forEach(recomputeItemCost);
         recomputeGroup(group);
         renderAll();
@@ -846,6 +885,14 @@ function handleGroupChange(e, group) {
   const el     = e.target;
   const action = el.dataset.action;
   const id     = el.dataset.id;
+
+  if (action === 'material-select') {
+    group.settings.materialId = el.value;
+    group.items.forEach(i => { i.settings.materialId = el.value; recomputeItemCost(i); });
+    recomputeGroup(group);
+    renderAll();
+    return;
+  }
 
   if (action === 'move-item') {
     if (el.value === '__new__') {
@@ -995,7 +1042,12 @@ async function addFileToGroup(file, targetGroup) {
     id: iId(), file, name: file.name, size: file.size,
     status: 'loading', data: null, thumbnail: null,
     label: '',
-    settings: { scale: 1.0, quantity: 1, materialId: config.materials[0].id, presupported: false, plaColor: 'black' },
+    settings: {
+      scale: 1.0, quantity: 1,
+      materialId: targetGroup.settings.materialId ?? defaultMaterialId(targetGroup.settings.printMethod),
+      presupported: false,
+      plaColor: config.plaColors?.some(c => c.id === 'black') ? 'black' : config.plaColors?.[0]?.id,
+    },
     cost: null, warning: null,
   };
   targetGroup.items.push(item);
@@ -1184,6 +1236,8 @@ function buildReviewGroupHTML(group, sym) {
   }).join('');
 
   const otherExtras = [];
+  if (gc.multiPartDiscount > 0)
+    otherExtras.push(`<div class="review-extra-row"><span>${icon('layers', { size: 13 })} Multi-part discount (${gc.multiPartPct}%)</span><span>−${fmt(gc.multiPartDiscount, sym)}</span></div>`);
   if (gc.assemblyCost > 0)
     otherExtras.push(`<div class="review-extra-row"><span>${icon('puzzle', { size: 13 })} Assembly</span><span>+${fmt(gc.assemblyCost, sym)}</span></div>`);
   if (gc.isPrimed)
@@ -1259,6 +1313,11 @@ function renderOrderSummary() {
           <div class="sum-file-detail">
             ${esc(i.cost.materialName)} · ${Math.round(i.settings.scale * 100)}% scale${g.settings.printMethod === 'pla' ? '' : ` · ${i.settings.presupported ? '<span style="color:var(--green)">Pre-sup.</span>' : 'Std. supports'}`}
           </div>`).join('')}
+        ${gc.multiPartDiscount > 0 ? `
+          <div class="summary-line summary-line-extra">
+            <span class="sum-name">${icon('layers', { size: 13 })} Multi-part discount</span><span></span>
+            <span class="sum-price">−${fmt(gc.multiPartDiscount, sym)}</span>
+          </div>` : ''}
         ${gc.extrasCost > 0 ? `
           <div class="summary-line summary-line-extra">
             <span class="sum-name">${icon('plus', { size: 13 })} Extras</span><span></span>

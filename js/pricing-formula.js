@@ -40,6 +40,8 @@ export const FORMULA_DEFAULTS = Object.freeze({
   order: { roundTo: 0.5, minimumOrderTotal: 5, customQuoteThreshold: 150 },
   resin: {
     enabled: true,
+    label: 'Resin',
+    description: 'Finest detail, best for miniatures.',
     adjustPct: 0,
     startingCharge: -1.69,
     volume: { price: 7.43, refMl: 25, curve: 0.5 },
@@ -51,6 +53,8 @@ export const FORMULA_DEFAULTS = Object.freeze({
   },
   fdm: {
     enabled: true,
+    label: 'PLA',
+    description: 'Tougher and cheaper on bigger parts. You pick a colour per part.',
     adjustPct: 0,
     startingCharge: 0,
     filament: { price: 12.16, refG: 100, curve: 0.5 },
@@ -94,9 +98,9 @@ export const FORMULA_DEFAULTS = Object.freeze({
       ],
       maxPrice: 20,
       colours: [
-        { id: 'black', label: 'Black Primer' },
-        { id: 'grey', label: 'Grey Primer' },
-        { id: 'white', label: 'White Primer' },
+        { id: 'black', label: 'Black Primer', hex: '#1a1a1a' },
+        { id: 'grey', label: 'Grey Primer', hex: '#9a9a9a' },
+        { id: 'white', label: 'White Primer', hex: '#f6f3ec' },
       ],
     },
   },
@@ -257,8 +261,12 @@ export function applyFormula(config, savedFormula) {
   return {
     ...config,
     formula,
-    materials: formula.resin.materials.map(({ id, name }) => ({ id, name })),
-    fdmMaterials: formula.fdm.materials.map(({ id, name }) => ({ id, name })),
+    materials: formula.resin.materials.map(({ id, name, modifierPct }) => ({ id, name, modifierPct })),
+    fdmMaterials: formula.fdm.materials.map(({ id, name, modifierPct }) => ({ id, name, modifierPct })),
+    printMethods: {
+      resin: { enabled: formula.resin.enabled, label: formula.resin.label, description: formula.resin.description },
+      pla: { enabled: formula.fdm.enabled, label: formula.fdm.label, description: formula.fdm.description },
+    },
     // Each colour is its own surcharge "tier", so the existing colour code
     // reads per-colour surcharges unchanged.
     plaColors: formula.fdm.colours.map(({ id, name, hex }) => ({ id, name, hex, tier: id })),
