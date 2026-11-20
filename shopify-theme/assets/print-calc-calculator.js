@@ -4,7 +4,7 @@
 // unchanged assembly/primer add-ons.
 // ============================================================
 
-import { getMaterial } from './print-calc-config.js?v=67d0bab1cc';
+import { getMaterial } from './print-calc-config.js?v=4f41ddb1de';
 import {
   formulaPartPrice, quantityLineTotal, labourFee, discountEligible,
   multiPartDiscount as multiPartDiscount_,
