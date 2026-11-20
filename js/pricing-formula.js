@@ -318,6 +318,16 @@ export function multiPartDiscountPct(partCount, formula) {
  * calculator UI read it without special cases: materials, colours, primer,
  * assembly, printer sizes and order rules all come from the formula.
  */
+/** Stock state of a material or colour: 'in' (default), 'out' (shown but
+ *  can't be picked) or 'off' (hidden from customers). Display only: the
+ *  relay still prices any item, so an order placed just before a switch
+ *  is never rejected. */
+export const STOCK_STATES = ['in', 'out', 'off'];
+export function stockOf(item) {
+  return STOCK_STATES.includes(item?.stock) ? item.stock : 'in';
+}
+const shown = (item) => stockOf(item) !== 'off';
+
 export function applyFormula(config, savedFormula) {
   const formula = mergeFormula(savedFormula);
   const f = formula.finishes;
@@ -325,17 +335,17 @@ export function applyFormula(config, savedFormula) {
   return {
     ...config,
     formula,
-    materials: formula.resin.materials.map(({ id, name, modifierPct }) => ({ id, name, modifierPct })),
-    fdmMaterials: formula.fdm.materials.map(({ id, name, modifierPct, finish }) => ({ id, name, modifierPct, finish })),
+    materials: formula.resin.materials.filter(shown).map((m) => ({ id: m.id, name: m.name, modifierPct: m.modifierPct, stock: stockOf(m) })),
+    fdmMaterials: formula.fdm.materials.filter(shown).map((m) => ({ id: m.id, name: m.name, modifierPct: m.modifierPct, finish: m.finish, stock: stockOf(m) })),
     printMethods: {
       resin: { enabled: formula.resin.enabled, label: formula.resin.label, description: formula.resin.description },
       pla: { enabled: formula.fdm.enabled, label: formula.fdm.label, description: formula.fdm.description },
     },
     // Each colour is its own surcharge "tier", so the existing colour code
     // reads per-colour surcharges unchanged.
-    plaColors: formula.fdm.colours.map(({ id, name, hex, finish }) => ({ id, name, hex, finish, tier: id })),
+    plaColors: formula.fdm.colours.filter(shown).map((c) => ({ id: c.id, name: c.name, hex: c.hex, finish: c.finish, tier: c.id, stock: stockOf(c) })),
     plaColorSurchargePct: Object.fromEntries(formula.fdm.colours.map((c) => [c.id, c.surchargePct])),
-    primerOptions: [{ id: 'unprimed', label: 'Unprimed' }, ...f.primer.colours.filter((c) => c.id !== 'unprimed')],
+    primerOptions: [{ id: 'unprimed', label: 'Unprimed' }, ...f.primer.colours.filter((c) => c.id !== 'unprimed' && shown(c)).map((c) => ({ ...c, stock: stockOf(c) }))],
     primerTiers: f.primer.tiers.map((t) => ({ maxVolumeMl: t.maxMl, price: t.price })),
     primerMinPrice: 0,
     primerMaxPrice: f.primer.maxPrice,

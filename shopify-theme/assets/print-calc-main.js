@@ -4,15 +4,15 @@
 // Files belong to a group. Multiple groups = multiple models.
 // ============================================================
 
-import { getConfig, RELAY_BASE_URL } from './print-calc-config.js?v=4f41ddb1de';
-import { swatchBackground } from './print-calc-pricing-formula.js?v=66cb1e3cf2';
+import { getConfig, RELAY_BASE_URL } from './print-calc-config.js?v=8b83993b5b';
+import { swatchBackground } from './print-calc-pricing-formula.js?v=1f57266a37';
 import { parseSTLFile } from './print-calc-stl-parser.js?v=af51be9c13';
 import { generateThumbnail, STLViewer } from './print-calc-viewer.js?v=2acba5d7ed';
 import { icon, applyStaticIcons } from './print-calc-icons.js?v=ee665e071a';
 import {
   calcItemCost, calcGroupCost, calcOrderTotal, calcOrderMinimumShortfall,
   exceedsCustomQuoteThreshold, fmt, fmtMm,
-} from './print-calc-calculator.js?v=6122ce8df7';
+} from './print-calc-calculator.js?v=82aff8a7b6';
 
 // ---- State -----------------------------------------------------------
 let config      = null;
@@ -102,8 +102,15 @@ function defaultMethod() {
 function materialsFor(method) {
   return (method === 'pla' ? config?.fdmMaterials : config?.materials) || config?.materials || [];
 }
+// Out-of-stock items stay visible (greyed) but are never picked by default.
+const inStock = (item) => item?.stock !== 'out';
 function defaultMaterialId(method) {
-  return materialsFor(method)[0]?.id;
+  const mats = materialsFor(method);
+  return (mats.find(inStock) || mats[0])?.id;
+}
+function defaultPlaColor() {
+  const cols = (config.plaColors || []).filter(inStock);
+  return (cols.find(c => c.id === 'black') || cols[0] || config.plaColors?.[0])?.id;
 }
 
 function defaultGroupSettings() {
@@ -440,10 +447,10 @@ function buildMaterialSettingHTML(group, isPlaModel) {
         `<button class="seg-btn ${current === id ? 'active' : ''}" data-action="print-method" data-val="${id}">${esc(m.label)}</button>`).join('')}</span>`
     : `<span class="mset-value">${esc(methodInfo(current).label)}</span>`;
   const mats = materialsFor(current);
-  const chosen = mats.some(m => m.id === group.settings.materialId) ? group.settings.materialId : mats[0]?.id;
+  const chosen = mats.some(m => m.id === group.settings.materialId) ? group.settings.materialId : defaultMaterialId(current);
   const materialHTML = mats.length > 1 ? `
       <select class="mset-select" data-action="material-select" aria-label="${esc(methodInfo(current).label)} type">
-        ${mats.map(m => `<option value="${esc(m.id)}"${m.id === chosen ? ' selected' : ''}>${esc(m.name)}${m.modifierPct ? ` (${m.modifierPct > 0 ? '+' : ''}${m.modifierPct}%)` : ''}</option>`).join('')}
+        ${mats.map(m => `<option value="${esc(m.id)}"${m.id === chosen ? ' selected' : ''}${inStock(m) ? '' : ' disabled'}>${esc(m.name)}${m.modifierPct ? ` (${m.modifierPct > 0 ? '+' : ''}${m.modifierPct}%)` : ''}${inStock(m) ? '' : ' (out of stock)'}</option>`).join('')}
       </select>` : '';
   return `
       <div class="mset">
@@ -467,9 +474,10 @@ function buildModelSettingsHTML(group, ctx) {
     const active = group.settings.primer === p.id;
     const isNone = p.id === 'unprimed';
     const color  = p.hex || primerColors[p.id] || '#c9a15a';
+    const out    = !inStock(p);
     return `
-      <button type="button" class="primer-swatch-btn" data-action="primer-select" data-primer-id="${esc(p.id)}"
-              title="${esc(p.label)}" aria-label="${esc(p.label)}" aria-pressed="${active}">
+      <button type="button" class="primer-swatch-btn${out ? ' is-out' : ''}" data-action="primer-select" data-primer-id="${esc(p.id)}"
+              title="${esc(p.label)}${out ? ' (out of stock)' : ''}" aria-label="${esc(p.label)}${out ? ', out of stock' : ''}" aria-pressed="${active}"${out ? ' disabled' : ''}>
         <span class="primer-swatch ${active ? 'active' : ''} ${isNone ? 'primer-none' : ''}"
               ${isNone ? '' : `style="background:${color};"`}>
           ${active ? `<span class="primer-check">${icon('check', { size: 14 })}</span>` : ''}
@@ -690,13 +698,14 @@ function buildItemDetailHTML(item, group, ctx) {
           const active = item.settings.plaColor === pc.id;
           const pct = config.plaColorSurchargePct?.[pc.tier] ?? 0;
           const badge = pct > 0 ? `+${pct}%` : '';
+          const out = !inStock(pc);
           return `
-            <button type="button" class="pla-swatch-btn" data-action="pla-color-select" data-id="${item.id}" data-color-id="${esc(pc.id)}"
-                    title="${esc(pc.name)}${badge ? ' (' + badge + ')' : ''}" aria-label="${esc(pc.name)}" aria-pressed="${active}">
+            <button type="button" class="pla-swatch-btn${out ? ' is-out' : ''}" data-action="pla-color-select" data-id="${item.id}" data-color-id="${esc(pc.id)}"
+                    title="${esc(pc.name)}${out ? ' (out of stock)' : badge ? ' (' + badge + ')' : ''}" aria-label="${esc(pc.name)}${out ? ', out of stock' : ''}" aria-pressed="${active}"${out ? ' disabled' : ''}>
               <span class="pla-swatch ${active ? 'active' : ''}" style="background:${esc(swatchBackground(pc.hex, pc.finish))};">
                 ${active ? `<span class="primer-check">${icon('check', { size: 13 })}</span>` : ''}
               </span>
-              <span class="pla-swatch-label">${esc(pc.name)}${badge ? `<span class="pla-swatch-badge">${badge}</span>` : ''}</span>
+              <span class="pla-swatch-label">${esc(pc.name)}${out ? `<span class="pla-swatch-badge">Out of stock</span>` : badge ? `<span class="pla-swatch-badge">${badge}</span>` : ''}</span>
             </button>`;
         }).join('')}
       </div>
@@ -1048,7 +1057,7 @@ async function addFileToGroup(file, targetGroup) {
       scale: 1.0, quantity: 1,
       materialId: targetGroup.settings.materialId ?? defaultMaterialId(targetGroup.settings.printMethod),
       presupported: false,
-      plaColor: config.plaColors?.some(c => c.id === 'black') ? 'black' : config.plaColors?.[0]?.id,
+      plaColor: defaultPlaColor(),
     },
     cost: null, warning: null,
   };

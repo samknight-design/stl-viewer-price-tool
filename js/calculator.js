@@ -8,7 +8,7 @@ import { getMaterial } from './config.js?v=15';
 import {
   formulaPartPrice, quantityLineTotal, labourFee, discountEligible,
   multiPartDiscount as multiPartDiscount_,
-} from './pricing-formula.js?v=3';
+} from './pricing-formula.js?v=4';
 
 // ---- Build plate fit check --------------------------------------------
 

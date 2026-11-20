@@ -5,7 +5,7 @@
 // briefly unreachable — it is not the source of truth.
 // ============================================================
 
-import { applyFormula } from './print-calc-pricing-formula.js?v=66cb1e3cf2';
+import { applyFormula } from './print-calc-pricing-formula.js?v=1f57266a37';
 
 const CONFIG_KEY = 'stl_calc_config_v1';
 export const RELAY_BASE_URL = 'https://aqnpkvzycdjwbapfpvfl.supabase.co/functions/v1/shopify-relay';

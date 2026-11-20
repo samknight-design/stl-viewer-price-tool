@@ -4,11 +4,11 @@
 // unchanged assembly/primer add-ons.
 // ============================================================
 
-import { getMaterial } from './print-calc-config.js?v=4f41ddb1de';
+import { getMaterial } from './print-calc-config.js?v=8b83993b5b';
 import {
   formulaPartPrice, quantityLineTotal, labourFee, discountEligible,
   multiPartDiscount as multiPartDiscount_,
-} from './print-calc-pricing-formula.js?v=66cb1e3cf2';
+} from './print-calc-pricing-formula.js?v=1f57266a37';
 
 // ---- Build plate fit check --------------------------------------------
 

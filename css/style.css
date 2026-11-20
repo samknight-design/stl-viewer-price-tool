@@ -1258,3 +1258,9 @@ input.mat-color { padding: 2px; height: 32px; cursor: pointer; background: trans
   color: var(--text); font-family: var(--body-font); font-size: .8em; padding: 6px 10px; min-height: 32px;
 }
 .mset-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+
+/* Out-of-stock materials and colours: visible, greyed, not clickable. */
+.primer-swatch-btn.is-out, .pla-swatch-btn.is-out { opacity: .4; cursor: not-allowed; }
+.primer-swatch-btn.is-out .primer-swatch, .pla-swatch-btn.is-out .pla-swatch {
+  background-image: linear-gradient(135deg, transparent 46%, rgba(0,0,0,.55) 46%, rgba(0,0,0,.55) 54%, transparent 54%) !important;
+}

@@ -105,14 +105,16 @@
     .rows { display: grid; gap: 8px; }
     .row { display: grid; gap: 8px; align-items: center; }
     .row-head { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
-    .rows-materials .row { grid-template-columns: minmax(140px, 1fr) 110px 190px; }
-    .rows-filaments .row { grid-template-columns: minmax(140px, 1fr) 100px 100px 190px 190px; }
-    .rows-colours .row { grid-template-columns: 40px 40px minmax(120px, 1fr) 150px 100px 90px; }
+    .rows-materials .row { grid-template-columns: minmax(140px, 1fr) 110px 130px 190px; }
+    .rows-filaments .row { grid-template-columns: minmax(140px, 1fr) 100px 100px 170px 130px 190px; }
+    .rows-colours .row { grid-template-columns: 40px 40px minmax(120px, 1fr) 140px 100px 130px 90px; }
     .swatch { width: 36px; height: 30px; border-radius: 6px; border: 1px solid var(--line); display: block; }
     .finish-pick { display: flex; align-items: center; gap: 6px; }
     .finish-pick select { flex: 1; }
     .finish-icon { width: 20px; height: 20px; flex: none; color: var(--accent); }
-    .rows-primer-colours .row { grid-template-columns: 40px minmax(140px, 1fr) 90px; }
+    .rows-primer-colours .row { grid-template-columns: 40px minmax(140px, 1fr) 130px 90px; }
+    .stock-select.stock-out { color: #e0a33a; border-color: #e0a33a; }
+    .stock-select.stock-off { color: var(--muted, #888); border-style: dashed; }
     .rows-tiers .row { grid-template-columns: 120px 120px 90px; }
     .row-actions { justify-content: flex-end; }
     .row input { width: 100%; }

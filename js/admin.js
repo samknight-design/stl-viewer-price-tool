@@ -21,7 +21,7 @@
 import {
   FORMULA_DEFAULTS, mergeFormula, formulaPartPrice, findMaterial, quantityLineTotal, applyFormula,
   labourFee, FINISHES, swatchBackground,
-} from './pricing-formula.js?v=3';
+} from './pricing-formula.js?v=4';
 import { RELAY_BASE_URL, DEFAULT_CONFIG } from './config.js?v=15';
 import { calcItemCost, calcGroupCost, calcOrderTotal } from './calculator.js?v=16';
 
@@ -437,27 +437,36 @@ function finishSelect(finish, withIcon) {
   return withIcon ? `<span class="finish-pick" data-finish-icon>${finishIcon(finish)}${sel}</span>` : sel;
 }
 
+// Availability per material or colour: on sale, out of stock (customers see
+// it greyed out and can't pick it), or hidden from customers entirely.
+const STOCK_LABELS = { in: 'On sale', out: 'Out of stock', off: 'Hidden' };
+function stockSelect(stock) {
+  const cur = STOCK_LABELS[stock] ? stock : 'in';
+  return `<select data-key="stock" class="stock-select stock-${cur}" aria-label="Availability">${Object.entries(STOCK_LABELS).map(([id, label]) =>
+    `<option value="${id}"${id === cur ? ' selected' : ''}>${label}</option>`).join('')}</select>`;
+}
+
 function materialsHTML() {
   return [
     listCard({
       title: 'Resins', cls: 'rows-materials', path: 'resin.materials', defaultFirst: true,
-      intro: 'Each resin changes the price by a percentage. Customers pick one per model when there\'s more than one; the first is the default.',
-      head: ['Name', 'Price change %', ''],
-      row: (m) => cell('name', m.name) + cell('modifierPct', m.modifierPct, 'number', 1),
+      intro: 'Each resin changes the price by a percentage. Customers pick one per model when there\'s more than one; the first one on sale is the default. Out of stock shows it greyed out; Hidden removes it from the calculator.',
+      head: ['Name', 'Price change %', 'Availability', ''],
+      row: (m) => cell('name', m.name) + cell('modifierPct', m.modifierPct, 'number', 1) + stockSelect(m.stock),
       addLabel: 'Add resin', addItem: { id: '', name: 'New resin', modifierPct: 0 },
     }),
     listCard({
       title: 'Filaments', cls: 'rows-filaments', path: 'fdm.materials', defaultFirst: true,
       intro: 'Density turns the estimated filament volume into grams (PLA 1.24, PETG 1.27, ABS 1.04, TPU 1.21 g/ml).',
-      head: ['Name', 'Price change %', 'Density g/ml', 'Type', ''],
-      row: (m) => cell('name', m.name) + cell('modifierPct', m.modifierPct, 'number', 1) + cell('gPerMl', m.gPerMl ?? 1.24, 'number', 0.01) + finishSelect(m.finish, true),
+      head: ['Name', 'Price change %', 'Density g/ml', 'Type', 'Availability', ''],
+      row: (m) => cell('name', m.name) + cell('modifierPct', m.modifierPct, 'number', 1) + cell('gPerMl', m.gPerMl ?? 1.24, 'number', 0.01) + finishSelect(m.finish, true) + stockSelect(m.stock),
       addLabel: 'Add filament', addItem: { id: '', name: 'New filament', modifierPct: 0, gPerMl: 1.24, finish: 'solid' },
     }),
     listCard({
       title: 'Filament colours', cls: 'rows-colours', path: 'fdm.colours',
       intro: 'Customers pick a colour per FDM part. The finish changes how the swatch looks to them (silk, metallic, pearlescent…); the surcharge is a percentage of that part\'s price.',
-      head: ['Pick', 'Swatch', 'Colour', 'Finish', 'Surcharge %', ''],
-      row: (c) => cell('hex', c.hex, 'color') + swatchHTML(c) + cell('name', c.name) + finishSelect(c.finish) + cell('surchargePct', c.surchargePct, 'number', 1),
+      head: ['Pick', 'Swatch', 'Colour', 'Finish', 'Surcharge %', 'Availability', ''],
+      row: (c) => cell('hex', c.hex, 'color') + swatchHTML(c) + cell('name', c.name) + finishSelect(c.finish) + cell('surchargePct', c.surchargePct, 'number', 1) + stockSelect(c.stock),
       addLabel: 'Add colour', addItem: { id: '', name: 'New colour', hex: '#888888', surchargePct: 0, finish: 'solid' },
     }),
   ].join('');
@@ -483,8 +492,8 @@ function primerHTML() {
   }) + listCard({
     title: 'Primer colours', cls: 'rows-primer-colours', path: 'finishes.primer.colours',
     intro: 'The colours customers can choose. "Unprimed" is always offered and free.',
-    head: ['', 'Name', ''],
-    row: (c) => cell('hex', c.hex ?? '#888888', 'color') + cell('label', c.label),
+    head: ['', 'Name', 'Availability', ''],
+    row: (c) => cell('hex', c.hex ?? '#888888', 'color') + cell('label', c.label) + stockSelect(c.stock),
     addLabel: 'Add primer colour', addItem: { id: '', label: 'New Primer', hex: '#888888' },
   });
 }
@@ -693,6 +702,7 @@ $('panel').addEventListener('input', (e) => {
     if (sw) sw.style.background = swatchBackground(item.hex, item.finish);
     const ic = listRow.querySelector('[data-finish-icon] svg');
     if (ic && t.dataset.key === 'finish') ic.outerHTML = finishIcon(item.finish);
+    if (t.dataset.key === 'stock') t.className = `stock-select stock-${t.value}`;
     changed();
   }
 });
