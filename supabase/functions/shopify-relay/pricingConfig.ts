@@ -128,25 +128,35 @@ export function mergePricingConfig(
 
 /**
  * Mirrors applyFormula in js/pricing-formula.js, which getConfig() in
- * js/config.js applies to every config the calculator prices with: resin
- * materials come from the formula, assembly from its finishes, and the primer
- * ladder is scaled by primerAdjustPct (rounded up to 50p).
+ * js/config.js applies to every config the calculator prices with: materials,
+ * colours, primer, assembly, printer sizes and order rules all come from the
+ * formula the owner sets in the pricing admin page.
  */
 export function applyFormula(config: PricingConfig, savedFormula: unknown): PricingConfig {
   const formula = mergeFormula(savedFormula);
   const f = formula.finishes;
-  const scale = 1 + f.primerAdjustPct / 100;
-  const up50 = (v: number) => Math.ceil(v * scale * 2) / 2;
+  const plate = (b: { x: number; y: number; z: number; marginPct: number }) => ({
+    x: b.x,
+    y: b.y,
+    z: b.z,
+    supportMarginPct: b.marginPct,
+  });
   return {
     ...config,
     formula,
-    materials: formula.resin.materials.map(({ id, name }: { id: string; name: string }) => ({ id, name })),
+    materials: formula.resin.materials.map(({ id, name }) => ({ id, name })),
+    plaColors: formula.fdm.colours.map(({ id, name }) => ({ id, name, tier: id })),
+    plaColorSurchargePct: Object.fromEntries(formula.fdm.colours.map((c) => [c.id, c.surchargePct])),
+    primerTiers: f.primer.tiers.map((t) => ({ maxVolumeMl: t.maxMl, price: t.price })),
+    primerMinPrice: 0,
+    primerMaxPrice: f.primer.maxPrice,
     assemblyBase: f.assemblyFirst,
     assemblyPerJoint: f.assemblyPerJoint,
     assemblyMax: f.assemblyMax,
-    primerTiers: (config.primerTiers ?? []).map((t) => ({ ...t, price: up50(t.price) })),
-    primerMinPrice: up50(config.primerMinPrice ?? 0),
-    primerMaxPrice: up50(config.primerMaxPrice ?? 0),
+    buildPlate: plate(formula.resin.buildPlate),
+    fdmBuildPlate: plate(formula.fdm.buildPlate),
+    minimumOrderTotal: formula.order.minimumOrderTotal,
+    customQuoteOrderThreshold: formula.order.customQuoteThreshold,
   };
 }
 

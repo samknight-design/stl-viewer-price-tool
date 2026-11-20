@@ -400,9 +400,13 @@ export async function handleRequest(
       // minimumOrderTotal for small orders — see js/calculator.js's
       // calcOrderTotal) and for the manual-review threshold check below.
       const shopConfig = await deps.getShopConfig();
+      // The order rules come from the pricing settings (the `formula` key)
+      // once folded in — the same figures the browser's getConfig() uses. The
+      // DEFAULT_ constants remain the last-resort fallback.
+      const pricingConfig = mergePricingConfig(shopConfig as Record<string, unknown> | null);
       const configuredMinimum =
-        typeof shopConfig?.minimumOrderTotal === "number"
-          ? shopConfig.minimumOrderTotal
+        typeof pricingConfig.minimumOrderTotal === "number"
+          ? pricingConfig.minimumOrderTotal
           : DEFAULT_MINIMUM_ORDER_TOTAL;
       const expectedTotal = Math.max(computedTotal, configuredMinimum);
 
@@ -435,8 +439,8 @@ export async function handleRequest(
       // cannot skip it — the server also checks the real threshold and
       // OR-combines the two.
       const configThreshold =
-        typeof shopConfig?.customQuoteOrderThreshold === "number"
-          ? shopConfig.customQuoteOrderThreshold
+        typeof pricingConfig.customQuoteOrderThreshold === "number"
+          ? pricingConfig.customQuoteOrderThreshold
           : DEFAULT_CUSTOM_QUOTE_THRESHOLD;
       const thresholdRouted = Boolean(body.thresholdExceeded) ||
         body.grandTotal >= configThreshold;
@@ -453,7 +457,7 @@ export async function handleRequest(
           verification = await verifyOrderPricing(
             body.lineItems,
             body.grandTotal,
-            mergePricingConfig(shopConfig as Record<string, unknown> | null),
+            pricingConfig,
             {
               // Geometry comes from the measurement cache, written when each
               // file was uploaded. downloadObject is only the bounded

@@ -342,9 +342,10 @@ Deno.test("order total is floored at the minimum, but not for an empty cart", ()
 
 // ---- Config merge ------------------------------------------------------
 
-Deno.test("merge: a saved scalar wins, an empty array falls back", () => {
+Deno.test("merge: order rules come from the pricing settings; an empty array falls back", () => {
   const merged = mergePricingConfig({
-    minimumOrderTotal: 7.5,
+    minimumOrderTotal: 9,   // a legacy top-level value: the settings win
+    formula: { order: { minimumOrderTotal: 7.5 } },
     sizeTiers: [],
   });
   assertEquals(merged.minimumOrderTotal, 7.5);

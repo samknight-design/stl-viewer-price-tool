@@ -8,7 +8,7 @@ import { assertEquals } from "jsr:@std/assert@1";
 import * as browserFormula from "../../../js/pricing-formula.js";
 import * as browserCalc from "../../../js/calculator.js";
 import { FORMULA_DEFAULTS, formulaPartPrice, mergeFormula } from "./formula.ts";
-import { calcItemCost } from "./pricing.ts";
+import { calcGroupCost, calcItemCost } from "./pricing.ts";
 import { DEFAULT_PRICING_CONFIG, mergePricingConfig } from "./pricingConfig.ts";
 
 // Real DM Stash parts and the prices approved for them in the trainer.
@@ -103,10 +103,73 @@ Deno.test("formula: an FDM part with no surface area is unpriceable, never cheap
   assertEquals(cost.unreadable, true);
 });
 
-Deno.test("formula: folding in the formula replaces materials and assembly, scales primer", () => {
-  const c = mergePricingConfig({ formula: { finishes: { assemblyFirst: 6, primerAdjustPct: 50 } } });
+Deno.test("formula: folding in replaces materials, colours, primer, assembly, plates and order rules", () => {
+  const c = mergePricingConfig({
+    formula: {
+      finishes: { assemblyFirst: 6, primer: { tiers: [{ maxMl: 10, price: 2 }], maxPrice: 9 } },
+      fdm: { colours: [{ id: "neon", name: "Neon", hex: "#0f0", surchargePct: 15 }] },
+      resin: { buildPlate: { x: 300, y: 200, z: 250, marginPct: 10 } },
+      order: { customQuoteThreshold: 200 },
+    },
+  });
   assertEquals(c.materials, [{ id: "abs-like", name: "ABS-like resin" }]);
   assertEquals(c.assemblyBase, 6);
-  assertEquals(c.primerTiers[0].price, 1);      // 0.50 × 1.5 = 0.75 → up to 1.00
-  assertEquals(c.primerTiers[5].price, 12);     // 8.00 × 1.5 = 12.00
+  assertEquals(c.primerTiers, [{ maxVolumeMl: 10, price: 2 }]);
+  assertEquals(c.primerMaxPrice, 9);
+  assertEquals(c.plaColorSurchargePct, { neon: 15 });
+  assertEquals(c.buildPlate, { x: 300, y: 200, z: 250, supportMarginPct: 10 });
+  assertEquals(c.customQuoteOrderThreshold, 200);
+});
+
+Deno.test("formula: v1 trainer settings migrate to the same prices", () => {
+  const v1 = {
+    version: 1, roundTo: 0.5,
+    resin: { perSqrtMl: 1.486, perLongestMm: 0.069 },
+    fdm: { perSqrtGram: 1.216 },
+  };
+  const a = mergeFormula(v1), b = mergeFormula(undefined);
+  for (const p of APPROVED) assertEquals(formulaPartPrice({ ...p.part }, a)?.price, formulaPartPrice({ ...p.part }, b)?.price);
+});
+
+Deno.test("formula: discounts — quantity copies and multi-part tiers agree on both sides", () => {
+  const saved = { formula: { discounts: { quantityPct: 20, multiPart: [{ minParts: 3, pct: 5 }, { minParts: 6, pct: 12 }] } } };
+  const serverConfig = mergePricingConfig(saved);
+  const browserConfig = browserFormula.applyFormula({ ...DEFAULT_PRICING_CONFIG, ...saved }, saved.formula);
+  const stl = { volumeMl: 6, dimensions: { x: 28, y: 33, z: 49 }, areaMm2: 2000 };
+  for (const quantity of [1, 2, 5]) {
+    const s = calcItemCost(stl, { quantity, presupported: true }, serverConfig, "resin");
+    const b = browserCalc.calcItemCost(stl, { quantity, presupported: true }, browserConfig, "resin");
+    assertEquals(s.totalCost, b.totalCost);
+  }
+  // £5.50 part: one copy 5.50; three copies 5.50 + 2 × 4.40 = 14.30.
+  assertEquals(calcItemCost(stl, { quantity: 3, presupported: true }, serverConfig, "resin").totalCost, 14.3);
+  for (const parts of [1, 3, 6]) {
+    const items = Array.from({ length: parts }, () => ({
+      status: "ready",
+      settings: { quantity: 1, presupported: true },
+      cost: calcItemCost(stl, { quantity: 1, presupported: true }, serverConfig, "resin"),
+    }));
+    const bItems = Array.from({ length: parts }, () => ({
+      status: "ready",
+      settings: { quantity: 1, presupported: true },
+      cost: browserCalc.calcItemCost(stl, { quantity: 1, presupported: true }, browserConfig, "resin"),
+    }));
+    const s = calcGroupCost(items, { assembly: true, primer: "black" }, serverConfig);
+    const b = browserCalc.calcGroupCost(bItems, { assembly: true, primer: "black" }, browserConfig);
+    assertEquals(s.groupTotal, b.groupTotal);
+    assertEquals(s.multiPartPct, parts >= 6 ? 12 : parts >= 3 ? 5 : 0);
+  }
+});
+
+Deno.test("formula: a new filament prices on its own density and modifier", () => {
+  const f = mergeFormula({ fdm: { materials: [
+    { id: "matte-pla", name: "Matte PLA", modifierPct: 0, gPerMl: 1.24 },
+    { id: "petg", name: "PETG", modifierPct: 10, gPerMl: 1.27 },
+  ] } });
+  const part = { volumeMl: 500, dimensions: { x: 100, y: 100, z: 100 }, areaMm2: 60000, method: "pla" };
+  const pla = formulaPartPrice({ ...part, materialId: "matte-pla" }, f)!;
+  const petg = formulaPartPrice({ ...part, materialId: "petg" }, f)!;
+  assertEquals(Math.round(petg.grams! / pla.grams! * 1000) / 1000, Math.round(1.27 / 1.24 * 1000) / 1000);
+  assertEquals(petg.materialName, "PETG");
+  assertEquals(petg.price > pla.price, true);
 });

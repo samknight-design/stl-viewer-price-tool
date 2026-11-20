@@ -15,7 +15,13 @@
 // What is NOT ported: the display formatters (fmt/fmtMl/fmtMm/fmtHours) and
 // calcOrderMinimumShortfall, which only exist to drive UI copy.
 
-import { type Formula, type FormulaPrice, formulaPartPrice } from "./formula.ts";
+import {
+  type Formula,
+  type FormulaPrice,
+  formulaPartPrice,
+  multiPartDiscountPct,
+  quantityLineTotal,
+} from "./formula.ts";
 
 export interface Dimensions {
   x: number;
@@ -108,6 +114,8 @@ export interface ItemCost {
   supportHandlingFee: number;
   /** Set when the formula priced the part. */
   formula?: FormulaPrice;
+  /** What the quantity discount took off this line. */
+  quantityDiscount?: number;
   unitCost: number;
   totalCost: number;
 }
@@ -411,7 +419,7 @@ function formulaItemCost(
     areaMm2: scaledAreaMm2,
     presupported,
     method: isPla ? "pla" : "resin",
-    materialId: isPla ? undefined : materialId,
+    materialId,
   }, f);
   if (!r) return unpriced({ materialName: "PLA", unreadable: true, fitsBuildPlate: true });
 
@@ -425,6 +433,7 @@ function formulaItemCost(
     if (colorInfo) materialName = `${r.materialName} (${colorInfo.name})`;
   }
   const unitCost = r.price + colorSurchargeAmount;
+  const totalCost = quantityLineTotal(unitCost, quantity, f);
   return {
     ...base,
     materialName,
@@ -436,7 +445,8 @@ function formulaItemCost(
     colorSurchargeAmount,
     minApplied: r.minApplied,
     unitCost,
-    totalCost: unitCost * quantity,
+    quantityDiscount: Math.round((unitCost * quantity - totalCost) * 100) / 100,
+    totalCost,
   };
 }
 
@@ -491,6 +501,8 @@ export interface GroupCost {
   fileSubtotal: number;
   totalVolumeMl: number;
   totalPartCount: number;
+  multiPartPct: number;
+  multiPartDiscount: number;
   oversizedCount: number;
   extrasCost: number;
   assemblyCost: number;
@@ -544,12 +556,19 @@ export function calcGroupCost(
     0,
   );
 
-  const groupTotal = fileSubtotal + extrasCost + assemblyCost + primerResult.total;
+  // Mirrors js/calculator.js: a model with enough parts takes a % off its
+  // parts, never off assembly or primer.
+  const multiPartPct = config.formula ? multiPartDiscountPct(totalPartCount, config.formula) : 0;
+  const multiPartDiscount = Math.round(fileSubtotal * multiPartPct) / 100;
+
+  const groupTotal = fileSubtotal - multiPartDiscount + extrasCost + assemblyCost + primerResult.total;
 
   return {
     fileSubtotal,
     totalVolumeMl,
     totalPartCount,
+    multiPartPct,
+    multiPartDiscount,
     oversizedCount,
     extrasCost,
     assemblyCost,
