@@ -21,6 +21,13 @@ still documents uploading STLs to Shopify Files, which was **abandoned** (a hard
   (only import paths and one spinner class should differ). The same applies to
   the other `js/*.js` ↔ `shopify-theme/assets/print-calc-*.js` pairs, and to
   `index.html` ↔ `shopify-theme/snippets/print-calculator-markup.liquid`.
+- **Regenerate the theme copies with `node scripts/sync-theme-copies.mjs`**
+  (add `--live` for the build that gets published — it keeps the live relay
+  URL), then `node scripts/theme-build.mjs shopify-theme/assets` for the hashes.
+- **Prices come from the pricing settings (`formula` in the metafield),
+  edited in `admin.html`.** `js/pricing-formula.js` defines every setting;
+  `supabase/functions/shopify-relay/formula.ts` is its literal port, pinned by
+  `formula.test.ts`. A new setting is a change to both, plus the admin page.
 - **Theme import specifiers must carry `?v=<content hash>`.** A module's own
   relative imports never pass through Liquid's `asset_url`, so they request a
   bare CDN URL that is cached with a long TTL — and Shopify strips unknown

@@ -5,13 +5,14 @@
 // briefly unreachable — it is not the source of truth.
 // ============================================================
 
-import { applyFormula } from './print-calc-pricing-formula.js?v=7f51bf9104';
+import { applyFormula } from './print-calc-pricing-formula.js?v=d245c23ed4';
 
 const CONFIG_KEY = 'stl_calc_config_v1';
 // STAGING BUILD — points at shopify-relay-staging, not the live relay.
 // This is the ONE deliberate divergence from js/config.js. It exists so a
 // draft theme can exercise server-side price verification without the live
-// relay being touched. REVERT THIS TO THE LIVE URL BEFORE PUBLISHING.
+// relay being touched. REVERT THIS TO THE LIVE URL BEFORE PUBLISHING
+// (node scripts/sync-theme-copies.mjs --live).
 export const RELAY_BASE_URL = 'https://aqnpkvzycdjwbapfpvfl.supabase.co/functions/v1/shopify-relay-staging';
 
 export const DEFAULT_CONFIG = {

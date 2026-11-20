@@ -183,16 +183,18 @@ Precedence at runtime: **shop metafield > `DEFAULT_CONFIG` in `js/config.js`**.
 The metafield was seeded from `DEFAULT_CONFIG` on 2026-08-19, so it now wins —
 **editing `js/config.js` alone no longer changes live prices.**
 
-- Change prices → update the metafield (`metafieldsSet` via Admin API), or use
-  the admin page for the handful of fields it still supports.
-- `admin.html` is **stale**: its inputs belong to the pre-2026-07-30 per-mL
-  model and it cannot edit `sizeTiers`, `maxPlatePrice`, `primerTiers`,
-  `extras`, `plaColors`, `customQuoteOrderThreshold` or `materialSurcharges`.
-  It is safe to use — `collectForm()` mutates the loaded config rather than
-  replacing it, so the tiers survive a save — but it cannot change print prices.
-- Logging into the admin page **performs a save** (`js/admin.js` calls
-  `saveConfig` to verify the password server-side). Check the values look right
-  before logging in.
+- Change prices → the **pricing admin page** (`admin.html`, rebuilt Nov 2026).
+  It edits every pricing setting — curves, minimums, materials and filaments
+  (with densities), colours, discounts, assembly, primer ladder and colours,
+  printer sizes, rounding, order minimum and quote threshold — with a live
+  preview, and writes **only** the `formula` key (plus `formula_history`, the
+  last ten versions). Every other key in the metafield is left as stored.
+- Signing in checks the password by writing the stored config back unchanged
+  (the relay has no separate password check). "Explore without signing in"
+  loads the settings read-only; saving asks for the password.
+- The legacy keys (`sizeTiers`, `primerTiers`, `materials`, `plaColors`,
+  `minimumOrderTotal`, …) are only read by code from before the formula. Once
+  this branch is live, the formula overrides all of them.
 
 **The relay's fallbacks must mirror the browser's.** `DEFAULT_MINIMUM_ORDER_TOTAL`
 and `DEFAULT_CUSTOM_QUOTE_THRESHOLD` in the relay exist because a shop with no

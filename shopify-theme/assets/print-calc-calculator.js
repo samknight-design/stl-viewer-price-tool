@@ -4,8 +4,8 @@
 // unchanged assembly/primer add-ons.
 // ============================================================
 
-import { getMaterial } from './print-calc-config.js?v=d007575fb7';
-import { formulaPartPrice } from './print-calc-pricing-formula.js?v=7f51bf9104';
+import { getMaterial } from './print-calc-config.js?v=84f26171c4';
+import { formulaPartPrice, quantityLineTotal, multiPartDiscountPct } from './print-calc-pricing-formula.js?v=d245c23ed4';
 
 // ---- Build plate fit check --------------------------------------------
 
@@ -241,9 +241,10 @@ export function calcItemCost(stlData, settings, config, printMethod = 'resin') {
  * One part priced by the formula. Same result shape as the tier path, with
  * `formula` holding the breakdown (see formulaPartPrice). The support
  * allowance and any support fee are inside the formula price, so
- * supportHandlingFee is always 0 here. PLA has no material picker: it uses
- * the formula's default FDM material, and the colour surcharge still applies
- * on top as a % of the part's price.
+ * supportHandlingFee is always 0 here. settings.materialId picks from the
+ * print method's own material list (a resin id on an FDM model falls back to
+ * the FDM default), and an FDM colour surcharge applies on top as a % of the
+ * part's price. Copies after the first get the quantity discount.
  */
 function formulaItemCost(stlData, settings, config, printMethod, scaledDims, scaledVolumeMl) {
   const { scale = 1.0, quantity = 1, materialId, presupported = false, plaColor } = settings;
@@ -276,7 +277,7 @@ function formulaItemCost(stlData, settings, config, printMethod, scaledDims, sca
     areaMm2: scaledAreaMm2,
     presupported,
     method: isPla ? 'pla' : 'resin',
-    materialId: isPla ? undefined : materialId,
+    materialId,
   }, f);
   if (!r) return unpriced({ materialName: 'PLA', unreadable: true, fitsBuildPlate: true });
 
@@ -290,6 +291,8 @@ function formulaItemCost(stlData, settings, config, printMethod, scaledDims, sca
     if (colorInfo) materialName = `${r.materialName} (${colorInfo.name})`;
   }
   const unitCost = r.price + colorSurchargeAmount;
+  // Copies after the first get the quantity discount (pricing-formula.js).
+  const totalCost = quantityLineTotal(unitCost, quantity, f);
   return {
     ...base,
     materialName,
@@ -301,7 +304,8 @@ function formulaItemCost(stlData, settings, config, printMethod, scaledDims, sca
     colorSurchargeAmount,
     minApplied: r.minApplied,
     unitCost,
-    totalCost: unitCost * quantity,
+    quantityDiscount: Math.round((unitCost * quantity - totalCost) * 100) / 100,
+    totalCost,
   };
 }
 
@@ -370,12 +374,19 @@ export function calcGroupCost(items, groupSettings, config) {
     (s, i) => s + (i.cost.colorSurchargeAmount ?? 0) * i.settings.quantity, 0
   );
 
-  const groupTotal = fileSubtotal + extrasCost + assemblyCost + primerResult.total;
+  // Multi-part discount: a model with enough parts takes a % off its parts
+  // (never off assembly or primer). Only the formula has tiers.
+  const multiPartPct = config.formula ? multiPartDiscountPct(totalPartCount, config.formula) : 0;
+  const multiPartDiscount = Math.round(fileSubtotal * multiPartPct) / 100;
+
+  const groupTotal = fileSubtotal - multiPartDiscount + extrasCost + assemblyCost + primerResult.total;
 
   return {
     fileSubtotal,
     totalVolumeMl,
     totalPartCount,
+    multiPartPct,
+    multiPartDiscount,
     oversizedCount,
     extrasCost,
     assemblyCost,

@@ -65,32 +65,32 @@
       "md5": "a6d4e977e7cc437ecbb6a6284aec2bac"
     },
     "print-calc-calculator.js": {
-      "sha256_10": "b287239fd3",
-      "md5": "8ca353de83c02d11498064e5aa5835a3"
+      "sha256_10": "4451af1208",
+      "md5": "9a654bc66af5c51df8871a70fabee680"
     },
     "print-calc-config.js": {
-      "sha256_10": "d007575fb7",
-      "md5": "4d9d499345995a989cab25807ca6d7fe"
+      "sha256_10": "84f26171c4",
+      "md5": "87bf29d71632d3f71d1c435e17567773"
     },
     "print-calc-icons.js": {
       "sha256_10": "ee665e071a",
       "md5": "7646a12fc83bc1f362dce7d7e1ce853c"
     },
     "print-calc-main.js": {
-      "sha256_10": "b3054cb180",
-      "md5": "add78b084871335b0ebd0dfbe1f32c38"
+      "sha256_10": "6685efa402",
+      "md5": "6aaae7c924ad25d24cdbfd6d811e5b81"
     },
     "print-calc-pricing-formula.js": {
-      "sha256_10": "7f51bf9104",
-      "md5": "3b8d8447fb2d86b55a2054b96c0b84d2"
+      "sha256_10": "d245c23ed4",
+      "md5": "2e71a7153d33bc40477d2b1e2b460cfe"
     },
     "print-calc-stl-parser.js": {
       "sha256_10": "af51be9c13",
       "md5": "2061738fc11184e19d2212e9e128b24d"
     },
     "print-calc-style.css": {
-      "sha256_10": "169ee2c996",
-      "md5": "de49831068947af4ff4857930a916880"
+      "sha256_10": "7532709e88",
+      "md5": "6ec87df8a35d8def3777aa706ab2a2a1"
     },
     "print-calc-viewer.js": {
       "sha256_10": "2acba5d7ed",
@@ -105,6 +105,6 @@
       "md5": "2d6adc3c423e8f4e0e207dbbcc39d0a9"
     }
   },
-  "rewrites": 4,
-  "generatedAt": "2026-11-04T19:57:23.446Z"
+  "rewrites": 3,
+  "generatedAt": "2026-11-20T11:55:13.476Z"
 }
